@@ -185,7 +185,7 @@ defmodule Http2.Connection do
   end
 
   defp parse_frames(_, state), do: {%{state | buffer: <<>>}, []}
-  
+
   defp decode_headers(%Frame{stream_id: id, type: :headers,
   flags: %Headers.Flags{end_headers: false}, payload: payload} = frame,
   %{streams: streams} = state) do
