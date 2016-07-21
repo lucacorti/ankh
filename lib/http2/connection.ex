@@ -13,26 +13,29 @@ defmodule Http2.Connection do
   @frame_header_size 9
   @max_stream_id 2_147_483_648
 
-  def start_link(host, port \\ 443, options \\ []) do
-    GenServer.start(__MODULE__, [host: host, port: port, options: options])
+  def start_link(%URI{} = uri, options \\ []) do
+    GenServer.start_link(__MODULE__, uri, options)
   end
 
-  def init(args) do
+  def init(uri) do
     with {:ok, recv_ctx} = HPack.Table.start_link(4_096),
          {:ok, send_ctx} = HPack.Table.start_link(4_096) do
-      {:ok, Enum.into(args, %{socket: nil, streams: %{}, last_stream_id: 0,
-      buffer: <<>>, recv_hpack_ctx: recv_ctx, send_hpack_ctx: send_ctx})}
+      {:ok, %{uri: uri, socket: nil, streams: %{}, last_stream_id: 0,
+      buffer: <<>>, recv_hpack_ctx: recv_ctx, send_hpack_ctx: send_ctx}}
     end
   end
 
-  def send(pid, %Frame{} = frame), do: GenServer.call(pid, {:send, frame})
+  def send(connection, %Frame{} = frame) do
+    GenServer.call(connection, {:send, frame})
+  end
 
   def close(pid), do: GenServer.call(pid, {:close})
 
-  def handle_call({:send, frame}, from, state = %{socket: nil}) do
-    host = String.to_charlist(state.host)
-    options = Keyword.merge(state.options, @ssl_opts)
-    with {:ok, socket} <- :ssl.connect(host, state.port, options),
+  def handle_call({:send, frame}, from, %{socket: nil, uri: %URI{host: host,
+  port: port}} = state) do
+    hostname = String.to_charlist(host)
+    ssl_options = @ssl_opts
+    with {:ok, socket} <- :ssl.connect(hostname, port, ssl_options),
          :ok <- :ssl.send(socket, @preface) do
       handle_call({:send, frame}, from, %{state | socket: socket})
     else
@@ -136,7 +139,7 @@ defmodule Http2.Connection do
     {:ok, state} = send_frame(state, %Frame{
                               type: :goaway,
                               payload: %GoAway.Payload{
-                                last_stream_id: frame.stream_id,
+                                last_stream_id: state.last_stream_id,
                                 error_code: %Error{code: :protocol_error}}})
     state
   end
