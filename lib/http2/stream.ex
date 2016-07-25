@@ -2,7 +2,7 @@ defmodule Http2.Stream do
   alias Http2.Frame
   alias Http2.Frame.{Data, Headers}
 
-  defstruct [id: 0, state: :idle, hbf: <<>>]
+  defstruct [id: 0, state: :idle, hbf: <<>>, data: <<>>]
 
   def new(id), do: %__MODULE__{id: id}
 
