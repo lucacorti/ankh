@@ -9,16 +9,6 @@ defmodule Http2.Connection.Supervisor do
 
   def init([]) do
     [worker(Connection, [])]
-    |> supervise(strategy: :simple_one_for_one)
-  end
-
-  def get_connection(uri) do
-    case Connection.Registry.whereis_name(uri) do
-      :undefined ->
-        options = [name: {:via, Connection.Registry, uri}]
-        Supervisor.start_child(__MODULE__, [uri, options])
-      pid ->
-        {:ok, pid}
-    end
+    |> supervise(strategy: :simple_one_for_one, restart: :transient)
   end
 end
