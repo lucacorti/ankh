@@ -2,7 +2,7 @@ defmodule Http2.Client do
   use GenServer
 
   alias Http2.{Client, Connection, Frame}
-  alias Http2.Frame.{Headers}
+  alias Http2.Frame.{Data, Headers}
 
   def start_link(%URI{} = uri, options \\ []) do
     GenServer.start_link(__MODULE__, uri, options)
@@ -30,18 +30,28 @@ defmodule Http2.Client do
 
   def request(method, address, headers \\ []) do
     uri = parse_address(address)
-    with {:ok, client} <- Client.Supervisor.get_client(uri) do
-      full_headers = [{":method", method} | headers_for_uri(uri)] ++ headers
-      GenServer.call(client, {:request, method, uri, full_headers})
+    via = {:via, Client.Registry, uri}
+
+    with :undefined <- Client.Registry.whereis_name(uri) do
+      options = [name: via]
+      {:ok, pid} = Supervisor.start_child(Client.Supervisor, [uri, options])
     end
+
+    full_headers = [{":method", method} | headers_for_uri(uri)] ++ headers
+    GenServer.call(via, {:request, method, uri, full_headers})
   end
 
   def handle_call({:request, method, uri, headers}, _from,
   %{last_stream_id: last_stream_id} = state) do
     stream_id = last_stream_id + 1
+    via = {:via, Connection.Registry, uri}
 
-    with {:ok, connection} <- Connection.Supervisor.get_connection(uri),
-      :ok <- do_request(connection, stream_id, method, headers) do
+    with :undefined <- Connection.Registry.whereis_name(uri) do
+      options = [name: via]
+      Supervisor.start_child(Connection.Supervisor, [uri, options])
+    end
+
+    with :ok <- do_request(via, stream_id, method, headers) do
       {:reply, :ok, %{state | last_stream_id: stream_id}}
     else
       error ->
