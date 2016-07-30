@@ -70,6 +70,7 @@ defmodule Http2.Connection do
 
     state = frames
     |> Enum.reduce(state, fn frame, state -> receive_frame(state, frame) end)
+
     {:noreply, state}
   end
 
@@ -196,10 +197,7 @@ defmodule Http2.Connection do
 
     {state, frame} = %Frame{}
     |> Encoder.decode!(frame_data, [])
-    |> decode_headers(state)
-
-    {state, frame} = frame
-    |> decode_data(state)
+    |> decode_frame(state)
 
     {state, frames} = parse_frames(rest_data, state)
     {state, [frame | frames]}
@@ -207,7 +205,9 @@ defmodule Http2.Connection do
 
   defp parse_frames(_, state), do: {%{state | buffer: <<>>}, []}
 
-  defp decode_headers(%Frame{stream_id: id, type: :headers,
+  defp decode_frame(%Frame{stream_id: 0} = frame, state), do: {state, frame}
+
+  defp decode_frame(%Frame{stream_id: id, type: :headers,
   flags: %Headers.Flags{end_headers: false}, payload: payload} = frame,
   %{streams: streams} = state) do
     stream = Map.get(streams, id)
@@ -216,7 +216,7 @@ defmodule Http2.Connection do
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
 
-  defp decode_headers(%Frame{stream_id: id, type: :push_promise,
+  defp decode_frame(%Frame{stream_id: id, type: :push_promise,
   flags: %PushPromise.Flags{end_headers: false}, payload: payload} = frame,
   %{streams: streams} = state) do
     stream = Map.get(streams, id)
@@ -225,7 +225,7 @@ defmodule Http2.Connection do
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
 
-  defp decode_headers(%Frame{stream_id: id, type: :continuation,
+  defp decode_frame(%Frame{stream_id: id, type: :continuation,
   flags: %Continuation.Flags{end_headers: false}, payload: payload} = frame,
   %{streams: streams} = state) do
     stream = Map.get(streams, id)
@@ -234,7 +234,7 @@ defmodule Http2.Connection do
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
 
-  defp decode_headers(%Frame{stream_id: id, type: :headers,
+  defp decode_frame(%Frame{stream_id: id, type: :headers,
   flags: %Headers.Flags{end_headers: true}, payload: payload} = frame,
   %{streams: streams, recv_hpack_ctx: hpack} = state) do
     stream = Map.get(streams, id)
@@ -244,7 +244,7 @@ defmodule Http2.Connection do
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
 
-  defp decode_headers(%Frame{stream_id: id, type: :push_promise,
+  defp decode_frame(%Frame{stream_id: id, type: :push_promise,
   flags: %PushPromise.Flags{end_headers: true}, payload: payload} = frame,
   %{streams: streams, recv_hpack_ctx: hpack} = state) do
     stream = Map.get(streams, id)
@@ -254,7 +254,7 @@ defmodule Http2.Connection do
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
 
-  defp decode_headers(%Frame{stream_id: id, type: :continuation,
+  defp decode_frame(%Frame{stream_id: id, type: :continuation,
   flags: %Continuation.Flags{end_headers: true}, payload: payload} = frame,
   %{streams: streams, recv_hpack_ctx: hpack} = state) do
     stream = Map.get(streams, id)
@@ -264,9 +264,7 @@ defmodule Http2.Connection do
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
 
-  defp decode_headers(frame, state), do: {state, frame}
-
-  defp decode_data(%Frame{stream_id: id, type: :data,
+  defp decode_frame(%Frame{stream_id: id, type: :data,
   flags: %Data.Flags{end_stream: false}, payload: payload} = frame,
   %{streams: streams} = state) do
     stream = Map.get(streams, id)
@@ -275,7 +273,7 @@ defmodule Http2.Connection do
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
 
-  defp decode_data(%Frame{stream_id: id, type: :data,
+  defp decode_frame(%Frame{stream_id: id, type: :data,
   flags: %Data.Flags{end_stream: true}, payload: payload} = frame,
   %{streams: streams} = state) do
     stream = Map.get(streams, id)
@@ -284,5 +282,5 @@ defmodule Http2.Connection do
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
 
-  defp decode_data(frame, state), do: {state, frame}
+  defp decode_frame(frame, state), do: {state, frame}
 end
