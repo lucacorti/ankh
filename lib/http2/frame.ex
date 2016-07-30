@@ -1,5 +1,5 @@
 defmodule Http2.Frame do
-  defstruct [length: 0, type: nil, flags: nil, stream_id: nil, payload: nil]
+  defstruct [length: 0, type: nil, flags: nil, stream_id: 0, payload: nil]
 end
 
 defimpl Http2.Frame.Encoder, for: Http2.Frame do

@@ -2,9 +2,7 @@ defmodule Http2.Connection do
   use GenServer
 
   alias Http2.Frame
-  alias Http2.Frame.{Encoder, Error}
-  alias Http2.Frame.{Continuation, Data, GoAway, Headers, Ping, PushPromise,
-  Settings}
+  alias Http2.Frame.{Encoder, Error, GoAway, Ping, Settings}
 
   require Logger
 
@@ -24,7 +22,7 @@ defmodule Http2.Connection do
          {:ok, send_ctx} = HPack.Table.start_link(settings.header_table_size) do
       {:ok, %{uri: uri, socket: nil, streams: %{}, last_stream_id: 0,
       buffer: <<>>, recv_hpack_ctx: recv_ctx, send_hpack_ctx: send_ctx,
-      recv_settings: settings, send_settings: settings}}
+      recv_settings: settings, send_settings: settings, window_size: 0}}
     end
   end
 
@@ -126,7 +124,7 @@ defmodule Http2.Connection do
   end
 
   defp receive_frame(state, %Frame{stream_id: 0, type: :ping, length: 8,
-  flags: %Ping.Flags{ack: false}, payload: %Ping.Payload{}} = frame) do
+  flags: %{ack: false}, payload: %{}} = frame) do
     Logger.debug "STREAM 0 RECV #{inspect frame}"
     {:ok, state} = send_frame(state, %Frame{frame |
       flags: %Ping.Flags{ack: true}
@@ -135,7 +133,7 @@ defmodule Http2.Connection do
   end
 
   defp receive_frame(%{last_stream_id: id} = state, %Frame{stream_id: 0,
-  type: :ping,flags: %Ping.Flags{ack: false}} = frame) do
+  type: :ping,flags: %{ack: false}} = frame) do
     Logger.debug "STREAM 0 RECV #{inspect frame}"
     {:ok, state} = send_frame(state, %Frame{
       type: :goaway, payload: %GoAway.Payload{
@@ -146,7 +144,7 @@ defmodule Http2.Connection do
   end
 
   defp receive_frame(%{last_stream_id: id} = state,
-  %Frame{length: 8, type: :ping, flags: %Ping.Flags{ack: false}} = frame) do
+  %Frame{length: 8, type: :ping, flags: %{ack: false}} = frame) do
     Logger.debug "STREAM 0 RECV #{inspect frame}"
     {:ok, state} = send_frame(state, %Frame{
       type: :goaway, payload: %GoAway.Payload{
@@ -157,8 +155,8 @@ defmodule Http2.Connection do
   end
 
   defp receive_frame(%{hpack_send_ctx: table} = state,
-  %Frame{stream_id: 0, type: :settings, flags: %Settings.Flags{ack: false},
-  payload: %Settings.Payload{header_table_size: table_size} = payload} = frame)
+  %Frame{stream_id: 0, type: :settings, flags: %{ack: false},
+  payload: %{header_table_size: table_size} = payload} = frame)
   do
     Logger.debug "STREAM 0 RECV #{inspect frame}"
     {:ok, state} = send_frame(state, %Frame{frame|
@@ -166,6 +164,32 @@ defmodule Http2.Connection do
     })
     :ok = HPack.Table.resize(table_size, table)
     %{state | send_settings: payload}
+  end
+
+  defp receive_frame(state, %Frame{stream_id: id, type: :window_update,
+  payload: %{window_size_increment: increment}})
+  when not is_integer(increment) or increment <= 0 do
+    Logger.debug "STREAM #{id} ERROR window_size_increment #{increment}"
+    {:ok, state} = send_frame(state, %Frame{
+      type: :goaway, payload: %GoAway.Payload{
+        last_stream_id: id, error_code: %Error{code: :protocol_error}
+      }
+    })
+    state
+  end
+
+  defp receive_frame(state, %Frame{stream_id: 0, type: :window_update,
+  payload: %{window_size_increment: increment}}) do
+    Logger.debug "STREAM 0 window_size_increment #{increment}"
+    %{state | window_size: state.window_size + increment}
+  end
+
+  defp receive_frame(state, %Frame{stream_id: id, type: :window_update,
+  payload: %{window_size_increment: increment}}) do
+    Logger.debug "STREAM #{id} window_size_increment #{increment}"
+    stream = Map.get(state.streams, id)
+    stream = %{stream | window_size: stream.window_size + increment}
+    %{state | streams: Map.put(state.streams, id, stream)}
   end
 
   defp receive_frame(state, %Frame{stream_id: 0} = frame) do
@@ -208,7 +232,7 @@ defmodule Http2.Connection do
   defp decode_frame(%Frame{stream_id: 0} = frame, state), do: {state, frame}
 
   defp decode_frame(%Frame{stream_id: id, type: :headers,
-  flags: %Headers.Flags{end_headers: false}, payload: payload} = frame,
+  flags: %{end_headers: false}, payload: payload} = frame,
   %{streams: streams} = state) do
     stream = Map.get(streams, id)
     stream = %{stream | hbf: stream.hbf <> payload.hbf}
@@ -217,7 +241,7 @@ defmodule Http2.Connection do
   end
 
   defp decode_frame(%Frame{stream_id: id, type: :push_promise,
-  flags: %PushPromise.Flags{end_headers: false}, payload: payload} = frame,
+  flags: %{end_headers: false}, payload: payload} = frame,
   %{streams: streams} = state) do
     stream = Map.get(streams, id)
     stream = %{stream | hbf: stream.hbf <> payload.hbf}
@@ -226,7 +250,7 @@ defmodule Http2.Connection do
   end
 
   defp decode_frame(%Frame{stream_id: id, type: :continuation,
-  flags: %Continuation.Flags{end_headers: false}, payload: payload} = frame,
+  flags: %{end_headers: false}, payload: payload} = frame,
   %{streams: streams} = state) do
     stream = Map.get(streams, id)
     stream = %{stream | hbf: stream.hbf <> payload.hbf}
@@ -235,7 +259,7 @@ defmodule Http2.Connection do
   end
 
   defp decode_frame(%Frame{stream_id: id, type: :headers,
-  flags: %Headers.Flags{end_headers: true}, payload: payload} = frame,
+  flags: %{end_headers: true}, payload: payload} = frame,
   %{streams: streams, recv_hpack_ctx: hpack} = state) do
     stream = Map.get(streams, id)
     hbf = HPack.decode(stream.hbf <> payload.header_block_fragment, hpack)
@@ -245,7 +269,7 @@ defmodule Http2.Connection do
   end
 
   defp decode_frame(%Frame{stream_id: id, type: :push_promise,
-  flags: %PushPromise.Flags{end_headers: true}, payload: payload} = frame,
+  flags: %{end_headers: true}, payload: payload} = frame,
   %{streams: streams, recv_hpack_ctx: hpack} = state) do
     stream = Map.get(streams, id)
     hbf = HPack.decode(stream.hbf <> payload.header_block_fragment, hpack)
@@ -255,7 +279,7 @@ defmodule Http2.Connection do
   end
 
   defp decode_frame(%Frame{stream_id: id, type: :continuation,
-  flags: %Continuation.Flags{end_headers: true}, payload: payload} = frame,
+  flags: %{end_headers: true}, payload: payload} = frame,
   %{streams: streams, recv_hpack_ctx: hpack} = state) do
     stream = Map.get(streams, id)
     hbf = HPack.decode(stream.hbf <> payload.header_block_fragment, hpack)
@@ -265,7 +289,7 @@ defmodule Http2.Connection do
   end
 
   defp decode_frame(%Frame{stream_id: id, type: :data,
-  flags: %Data.Flags{end_stream: false}, payload: payload} = frame,
+  flags: %{end_stream: false}, payload: payload} = frame,
   %{streams: streams} = state) do
     stream = Map.get(streams, id)
     stream = %{stream | data: stream.data <> payload.data}
@@ -274,7 +298,7 @@ defmodule Http2.Connection do
   end
 
   defp decode_frame(%Frame{stream_id: id, type: :data,
-  flags: %Data.Flags{end_stream: true}, payload: payload} = frame,
+  flags: %{end_stream: true}, payload: payload} = frame,
   %{streams: streams} = state) do
     stream = Map.get(streams, id)
     frame = %{frame | payload: %{payload | data: stream.data <> payload.data}}

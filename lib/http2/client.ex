@@ -2,7 +2,7 @@ defmodule Http2.Client do
   use GenServer
 
   alias Http2.{Client, Connection, Frame}
-  alias Http2.Frame.{Data, Headers}
+  alias Http2.Frame.{Headers}
 
   def start_link(%URI{} = uri, options \\ []) do
     GenServer.start_link(__MODULE__, uri, options)

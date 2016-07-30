@@ -1,8 +1,8 @@
 defmodule Http2.Stream do
   alias Http2.Frame
-  alias Http2.Frame.{Data, Headers}
+  alias Http2.Frame
 
-  defstruct [id: 0, state: :idle, hbf: <<>>, data: <<>>]
+  defstruct [id: 0, state: :idle, hbf: <<>>, data: <<>>, window_size: 0]
 
   def new(id), do: %__MODULE__{id: id}
 
@@ -59,12 +59,12 @@ defmodule Http2.Stream do
   # OPEN
 
   def received_frame(%__MODULE__{state: :open} = stream,
-  %Frame{type: :headers, flags: %Headers.Flags{end_stream: true}}) do
+  %Frame{type: :headers, flags: %{end_stream: true}}) do
     {:ok, %__MODULE__{stream | state: :half_closed_remote}}
   end
 
   def received_frame(%__MODULE__{state: :open} = stream,
-  %Frame{type: :data, flags: %Data.Flags{end_stream: true}}) do
+  %Frame{type: :data, flags: %{end_stream: true}}) do
     {:ok, %__MODULE__{stream | state: :half_closed_remote}}
   end
 
@@ -80,12 +80,12 @@ defmodule Http2.Stream do
   # HALF CLOSED LOCAL
 
   def received_frame(%__MODULE__{state: :half_closed_local} = stream,
-  %Frame{type: :headers, flags: %Headers.Flags{end_stream: true}}) do
+  %Frame{type: :headers, flags: %{end_stream: true}}) do
     {:ok, %__MODULE__{stream | state: :closed}}
   end
 
   def received_frame(%__MODULE__{state: :half_closed_local} = stream,
-  %Frame{type: :data, flags: %Data.Flags{end_stream: true}}) do
+  %Frame{type: :data, flags: %{end_stream: true}}) do
     {:ok, %__MODULE__{stream | state: :closed}}
   end
 
@@ -201,12 +201,12 @@ defmodule Http2.Stream do
   # OPEN
 
   def send_frame(%__MODULE__{state: :open} = stream,
-  %Frame{type: :headers, flags: %Headers.Flags{end_stream: true}}) do
+  %Frame{type: :headers, flags: %{end_stream: true}}) do
     {:ok, %__MODULE__{stream | state: :half_closed_local}}
   end
 
   def send_frame(%__MODULE__{state: :open} = stream,
-  %Frame{type: :data, flags: %Data.Flags{end_stream: true}}) do
+  %Frame{type: :data, flags: %{end_stream: true}}) do
     {:ok, %__MODULE__{stream | state: :half_closed_local}}
   end
 
@@ -239,12 +239,12 @@ defmodule Http2.Stream do
   # HALF CLOSED REMOTE
 
   def send_frame(%__MODULE__{state: :half_closed_remote} = stream,
-  %Frame{type: :headers, flags: %Headers.Flags{end_stream: true}}) do
+  %Frame{type: :headers, flags: %{end_stream: true}}) do
     {:ok, %__MODULE__{stream | state: :closed}}
   end
 
   def send_frame(%__MODULE__{state: :half_closed_remote} = stream,
-  %Frame{type: :data, flags: %Data.Flags{end_stream: true}}) do
+  %Frame{type: :data, flags: %{end_stream: true}}) do
     {:ok, %__MODULE__{stream | state: :closed}}
   end
 
