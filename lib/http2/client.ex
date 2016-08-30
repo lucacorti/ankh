@@ -9,7 +9,7 @@ defmodule Http2.Client do
   end
 
   def init(uri) do
-    {:ok, %{uri: uri, last_stream_id: 0}}
+    {:ok, %{uri: uri, last_stream_id: -1}}
   end
 
   def delete(address, headers \\ []) do
@@ -43,7 +43,7 @@ defmodule Http2.Client do
 
   def handle_call({:request, method, uri, headers}, _from,
   %{last_stream_id: last_stream_id} = state) do
-    stream_id = last_stream_id + 1
+    stream_id = last_stream_id + 2
     via = {:via, Connection.Registry, uri}
 
     with :undefined <- Connection.Registry.whereis_name(uri) do
