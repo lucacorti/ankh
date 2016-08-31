@@ -1,5 +1,5 @@
 defmodule Http2.Frame.PushPromise.Payload do
-  defstruct [pad_length: 0, promised_stream_id: 0, header_block_fragment: nil]
+  defstruct [pad_length: 0, promised_stream_id: 0, header_block_fragment: <<>>]
 end
 
 defimpl Http2.Frame.Encoder, for: Http2.Frame.PushPromise.Payload do

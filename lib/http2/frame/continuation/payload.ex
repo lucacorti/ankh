@@ -1,5 +1,5 @@
 defmodule Http2.Frame.Continuation.Payload do
-  defstruct [header_block_fragment: nil]
+  defstruct [header_block_fragment: <<>>]
 end
 
 defimpl Http2.Frame.Encoder, for: Http2.Frame.Continuation.Payload do

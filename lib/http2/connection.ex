@@ -125,7 +125,7 @@ defmodule Http2.Connection do
 
   defp receive_frame(state, %Frame{stream_id: 0, type: :ping, length: 8,
   flags: %{ack: false}, payload: %{}} = frame) do
-    Logger.debug "STREAM 0 RECV #{inspect frame}"
+    Logger.debug "STREAM 0 RECEIVED #{inspect frame}"
     {:ok, state} = send_frame(state, %Frame{frame |
       flags: %Ping.Flags{ack: true}
     })
@@ -134,7 +134,7 @@ defmodule Http2.Connection do
 
   defp receive_frame(%{last_stream_id: id} = state, %Frame{stream_id: 0,
   type: :ping,flags: %{ack: false}} = frame) do
-    Logger.debug "STREAM 0 RECV #{inspect frame}"
+    Logger.debug "STREAM 0 RECEIVED #{inspect frame}"
     {:ok, state} = send_frame(state, %Frame{
       type: :goaway, payload: %GoAway.Payload{
         last_stream_id: id, error_code: %Error{code: :frame_size_error}
@@ -145,7 +145,7 @@ defmodule Http2.Connection do
 
   defp receive_frame(%{last_stream_id: id} = state,
   %Frame{length: 8, type: :ping, flags: %{ack: false}} = frame) do
-    Logger.debug "STREAM 0 RECV #{inspect frame}"
+    Logger.debug "STREAM 0 RECEIVED #{inspect frame}"
     {:ok, state} = send_frame(state, %Frame{
       type: :goaway, payload: %GoAway.Payload{
         last_stream_id: id, error_code: %Error{code: :protocol_error}
@@ -158,7 +158,7 @@ defmodule Http2.Connection do
   %Frame{stream_id: 0, type: :settings, flags: %{ack: false},
   payload: %{header_table_size: table_size} = payload} = frame)
   do
-    Logger.debug "STREAM 0 RECV #{inspect frame}"
+    Logger.debug "STREAM 0 RECEIVED #{inspect frame}"
     {:ok, state} = send_frame(state, %Frame{frame|
       flags: %Settings.Flags{ack: true}, payload: nil
     })
@@ -193,14 +193,14 @@ defmodule Http2.Connection do
   end
 
   defp receive_frame(state, %Frame{stream_id: 0} = frame) do
-    Logger.debug "STREAM 0 RECV #{inspect frame}"
+    Logger.debug "STREAM 0 RECEIVED #{inspect frame}"
     state
   end
 
   defp receive_frame(%{streams: streams} = state, %Frame{stream_id: id} = frame)
   do
     stream = Map.get(streams, id)
-    Logger.debug "STREAM #{id} RECV #{inspect frame}"
+    Logger.debug "STREAM #{id} RECEIVED #{inspect frame}"
     {:ok, stream} = Http2.Stream.received_frame(stream, frame)
     Logger.debug "STREAM #{id} IS #{inspect stream}"
     %{state | streams: Map.put(streams, id, stream), last_stream_id: id}
@@ -235,8 +235,8 @@ defmodule Http2.Connection do
   flags: %{end_headers: false}, payload: payload} = frame,
   %{streams: streams} = state) do
     stream = Map.get(streams, id)
-    stream = %{stream | hbf: stream.hbf <> payload.hbf}
-    frame = %{frame | payload: %{payload | header_block_fragment: nil}}
+    stream = %{stream | hbf: stream.hbf <> payload.header_block_fragment}
+    Logger.debug("STREAM #{id} RECEIVED PARTIAL HBF #{inspect payload.header_block_fragment}")
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
 
@@ -244,8 +244,7 @@ defmodule Http2.Connection do
   flags: %{end_headers: false}, payload: payload} = frame,
   %{streams: streams} = state) do
     stream = Map.get(streams, id)
-    stream = %{stream | hbf: stream.hbf <> payload.hbf}
-    frame = %{frame | payload: %{payload | header_block_fragment: nil}}
+    stream = %{stream | hbf: stream.hbf <> payload.header_block_fragment}
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
 
@@ -253,8 +252,7 @@ defmodule Http2.Connection do
   flags: %{end_headers: false}, payload: payload} = frame,
   %{streams: streams} = state) do
     stream = Map.get(streams, id)
-    stream = %{stream | hbf: stream.hbf <> payload.hbf}
-    frame = %{frame | payload: %{payload | header_block_fragment: nil}}
+    stream = %{stream | hbf: stream.hbf <> payload.header_block_fragment}
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
 
@@ -263,7 +261,7 @@ defmodule Http2.Connection do
   %{streams: streams, recv_hpack_ctx: hpack} = state) do
     stream = Map.get(streams, id)
     hbf = HPack.decode(stream.hbf <> payload.header_block_fragment, hpack)
-    frame = %{frame | payload: %{payload | header_block_fragment: hbf}}
+    Logger.debug("STREAM #{id} RECEIVED HBF #{inspect hbf}")
     stream = %{stream | hbf: <<>>}
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
@@ -273,7 +271,7 @@ defmodule Http2.Connection do
   %{streams: streams, recv_hpack_ctx: hpack} = state) do
     stream = Map.get(streams, id)
     hbf = HPack.decode(stream.hbf <> payload.header_block_fragment, hpack)
-    frame = %{frame | payload: %{payload | header_block_fragment: hbf}}
+    Logger.debug("STREAM #{id} RECEIVED HBF #{inspect hbf}")
     stream = %{stream | hbf: <<>>}
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
@@ -283,7 +281,7 @@ defmodule Http2.Connection do
   %{streams: streams, recv_hpack_ctx: hpack} = state) do
     stream = Map.get(streams, id)
     hbf = HPack.decode(stream.hbf <> payload.header_block_fragment, hpack)
-    frame = %{frame | payload: %{payload | header_block_fragment: hbf}}
+    Logger.debug("STREAM #{id} RECEIVED HBF #{inspect hbf}")
     stream = %{stream | hbf: <<>>}
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
@@ -293,7 +291,6 @@ defmodule Http2.Connection do
   %{streams: streams} = state) do
     stream = Map.get(streams, id)
     stream = %{stream | data: stream.data <> payload.data}
-    frame = %{frame | payload: %{payload | data: <<>>}}
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
 
@@ -301,7 +298,8 @@ defmodule Http2.Connection do
   flags: %{end_stream: true}, payload: payload} = frame,
   %{streams: streams} = state) do
     stream = Map.get(streams, id)
-    frame = %{frame | payload: %{payload | data: stream.data <> payload.data}}
+    data = stream.data <> payload.data
+    Logger.debug("STREAM #{id} RECEIVED DATA #{data} #{byte_size data}")
     stream = %{stream | data: <<>>}
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
