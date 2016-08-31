@@ -1,6 +1,6 @@
 defmodule Http2.Frame.Headers.Payload do
   defstruct [pad_length: 0, exclusive: false, stream_dependency: 0, weight: 0,
-  header_block_fragment: nil]
+  header_block_fragment: <<>>]
 end
 
 defimpl Http2.Frame.Encoder, for: Http2.Frame.Headers.Payload do

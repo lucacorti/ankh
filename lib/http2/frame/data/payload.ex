@@ -1,5 +1,5 @@
 defmodule Http2.Frame.Data.Payload do
-  defstruct [pad_length: 0, data: nil]
+  defstruct [pad_length: 0, data: <<>>]
 end
 
 defimpl Http2.Frame.Encoder, for: Http2.Frame.Data.Payload do

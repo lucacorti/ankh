@@ -1,5 +1,5 @@
 defmodule Http2.Frame.Ping.Payload do
-  defstruct [data: nil]
+  defstruct [data: <<>>]
 end
 
 defimpl Http2.Frame.Encoder, for: Http2.Frame.Ping.Payload do
