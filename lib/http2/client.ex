@@ -77,7 +77,7 @@ defmodule Http2.Client do
   end
 
   defp parse_address(%URI{scheme: nil}) do
-    raise "No hostname present in address"
+    raise "No scheme present in address"
   end
 
   defp parse_address(%URI{host: nil}) do
