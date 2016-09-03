@@ -28,6 +28,6 @@ defmodule Http2.Mixfile do
   #
   # Type "mix help deps" for more examples and options
   defp deps do
-    [{:hpack, "~> 1.0.0"}]
+    [{:hpack, "~> 1.0.2"}]
   end
 end

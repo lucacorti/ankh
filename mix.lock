@@ -1,1 +1,1 @@
-%{"hpack": {:hex, :hpack, "1.0.0", "1e2167e7ac7f41e9491782aec81b79671290d06f982409b008bfe43bf52be317", [:mix], []}}
+%{"hpack": {:hex, :hpack, "1.0.2", "94f6e7214e3184d2ab9670a22c80c80b46651a17e35fd02e5c3c4d2ce2466d02", [:mix], []}}
