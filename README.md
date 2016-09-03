@@ -1,6 +1,6 @@
 # Http2
 
-**TODO: Add description**
+**Pure Elixir HTTP/2 implementation**
 
 ## Installation
 
