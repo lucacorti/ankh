@@ -268,6 +268,7 @@ defmodule Ankh.Connection do
     stream = Map.get(streams, id)
     hbf = HPack.decode(stream.hbf <> payload.header_block_fragment, hpack)
     Logger.debug("STREAM #{id} RECEIVED HBF #{inspect hbf}")
+    Process.send(target, {:headers, hbf}, [])
     stream = %{stream | hbf: <<>>}
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
@@ -278,6 +279,7 @@ defmodule Ankh.Connection do
     stream = Map.get(streams, id)
     hbf = HPack.decode(stream.hbf <> payload.header_block_fragment, hpack)
     Logger.debug("STREAM #{id} RECEIVED HBF #{inspect hbf}")
+    Process.send(target, {:headers, hbf}, [])
     stream = %{stream | hbf: <<>>}
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
