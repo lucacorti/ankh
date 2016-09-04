@@ -10,11 +10,11 @@ use Mix.Config
 
 # You can configure for your application as:
 #
-#     config :http2, key: :value
+#     config :ankh, key: :value
 #
 # And access this configuration in your application as:
 #
-#     Application.get_env(:http2, :key)
+#     Application.get_env(:ankh, :key)
 #
 # Or configure a 3rd-party app:
 #

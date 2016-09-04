@@ -1,4 +1,4 @@
-# Http2
+# Ankh
 
 **Pure Elixir HTTP/2 implementation**
 
@@ -6,15 +6,14 @@
 
 If [available in Hex](https://hex.pm/docs/publish), the package can be installed as:
 
-  1. Add http2 to your list of dependencies in `mix.exs`:
+  1. Add ankh to your list of dependencies in `mix.exs`:
 
         def deps do
-          [{:http2, "~> 0.0.1"}]
+          [{:ankh, "~> 0.0.1"}]
         end
 
-  2. Ensure http2 is started before your application:
+  2. Ensure ankh is started before your application:
 
         def application do
-          [applications: [:http2]]
+          [applications: [:ankh]]
         end
-
