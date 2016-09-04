@@ -12,17 +12,23 @@ defmodule Ankh.Connection do
   @frame_header_size 9
   @max_stream_id 2_147_483_648
 
-  def start_link(%URI{} = uri, options \\ []) do
-    GenServer.start_link(__MODULE__, uri, options)
+  def start_link(%URI{} = uri, receiver \\ nil, options \\ []) do
+    target = if is_pid(receiver) do
+      receiver
+    else
+      self()
+    end
+    GenServer.start_link(__MODULE__, [uri: uri, target: target], options)
   end
 
-  def init(uri) do
-    settings = %Settings.Payload{}
-    with {:ok, recv_ctx} = HPack.Table.start_link(settings.header_table_size),
+  def init([uri: uri, target: target]) do
+    with settings <-  %Settings.Payload{},
+         {:ok, recv_ctx} = HPack.Table.start_link(settings.header_table_size),
          {:ok, send_ctx} = HPack.Table.start_link(settings.header_table_size) do
       {:ok, %{uri: uri, socket: nil, streams: %{}, last_stream_id: 0,
       buffer: <<>>, recv_hpack_ctx: recv_ctx, send_hpack_ctx: send_ctx,
-      recv_settings: settings, send_settings: settings, window_size: 0}}
+      recv_settings: settings, send_settings: settings, window_size: 0,
+      target: target}}
     end
   end
 
@@ -278,10 +284,11 @@ defmodule Ankh.Connection do
 
   defp decode_frame(%Frame{stream_id: id, type: :continuation,
   flags: %{end_headers: true}, payload: payload} = frame,
-  %{streams: streams, recv_hpack_ctx: hpack} = state) do
+  %{streams: streams, recv_hpack_ctx: hpack, target: target} = state) do
     stream = Map.get(streams, id)
     hbf = HPack.decode(stream.hbf <> payload.header_block_fragment, hpack)
     Logger.debug("STREAM #{id} RECEIVED HBF #{inspect hbf}")
+    Process.send(target, {:headers, hbf}, [])
     stream = %{stream | hbf: <<>>}
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
@@ -296,10 +303,11 @@ defmodule Ankh.Connection do
 
   defp decode_frame(%Frame{stream_id: id, type: :data,
   flags: %{end_stream: true}, payload: payload} = frame,
-  %{streams: streams} = state) do
+  %{streams: streams, target: target} = state) do
     stream = Map.get(streams, id)
     data = stream.data <> payload.data
     Logger.debug("STREAM #{id} RECEIVED DATA #{data} #{byte_size data}")
+    Process.send(target, {:data, data}, [])
     stream = %{stream | data: <<>>}
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
