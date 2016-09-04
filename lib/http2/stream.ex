@@ -12,7 +12,7 @@ defmodule Http2.Stream do
 
   def received_frame(%__MODULE__{id: id}, %Frame{stream_id: stream_id})
   when stream_id !== id do
-    raise "FATAL on stream #{id}: this frame was received on #{stream_id}!"
+    raise "FATAL on stream #{id}: this frame has stream id #{stream_id}!"
   end
 
   # IDLE
