@@ -12,23 +12,29 @@ defmodule Ankh.Connection do
   @frame_header_size 9
   @max_stream_id 2_147_483_648
 
-  def start_link(%URI{} = uri, receiver \\ nil, options \\ []) do
+  def start_link(%URI{} = uri, stream \\ false, receiver \\ nil, options \\ [])
+  do
     target = if is_pid(receiver) do
       receiver
     else
       self()
     end
-    GenServer.start_link(__MODULE__, [uri: uri, target: target], options)
+    mode = if is_boolean(stream) && stream do
+      :stream
+    else
+      :full
+    end
+    GenServer.start_link(__MODULE__, [uri: uri, target: target, mode: mode],
+    options)
   end
 
-  def init([uri: uri, target: target]) do
+  def init([uri: uri, target: target, mode: mode]) do
     with settings <-  %Settings.Payload{},
          {:ok, recv_ctx} = HPack.Table.start_link(settings.header_table_size),
          {:ok, send_ctx} = HPack.Table.start_link(settings.header_table_size) do
-      {:ok, %{uri: uri, socket: nil, streams: %{}, last_stream_id: 0,
-      buffer: <<>>, recv_hpack_ctx: recv_ctx, send_hpack_ctx: send_ctx,
-      recv_settings: settings, send_settings: settings, window_size: 0,
-      target: target}}
+      {:ok, %{uri: uri, target: target, mode: mode, socket: nil, streams: %{},
+      last_stream_id: 0, buffer: <<>>, recv_ctx: recv_ctx, send_ctx: send_ctx,
+      recv_settings: settings, send_settings: settings, window_size: 0}}
     end
   end
 
@@ -101,7 +107,7 @@ defmodule Ankh.Connection do
     end
   end
 
-  defp send_frame(%{socket: socket, streams: streams, send_hpack_ctx: hpack}
+  defp send_frame(%{socket: socket, streams: streams, send_ctx: hpack}
   = state, %Frame{stream_id: id} = frame) do
     stream = Map.get(streams, id, Ankh.Stream.new(id))
     Logger.debug "STREAM #{id} SEND #{inspect frame}"
@@ -251,6 +257,7 @@ defmodule Ankh.Connection do
   %{streams: streams} = state) do
     stream = Map.get(streams, id)
     stream = %{stream | hbf: stream.hbf <> payload.header_block_fragment}
+    Logger.debug("STREAM #{id} RECEIVED PARTIAL HBF #{inspect payload.header_block_fragment}")
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
 
@@ -259,57 +266,69 @@ defmodule Ankh.Connection do
   %{streams: streams} = state) do
     stream = Map.get(streams, id)
     stream = %{stream | hbf: stream.hbf <> payload.header_block_fragment}
+    Logger.debug("STREAM #{id} RECEIVED PARTIAL HBF #{inspect payload.header_block_fragment}")
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
 
   defp decode_frame(%Frame{stream_id: id, type: :headers,
   flags: %{end_headers: true}, payload: payload} = frame,
-  %{streams: streams, recv_hpack_ctx: hpack} = state) do
+  %{streams: streams, recv_ctx: hpack, target: target} = state) do
     stream = Map.get(streams, id)
-    hbf = HPack.decode(stream.hbf <> payload.header_block_fragment, hpack)
-    Logger.debug("STREAM #{id} RECEIVED HBF #{inspect hbf}")
-    Process.send(target, {:headers, hbf}, [])
+    headers = HPack.decode(stream.hbf <> payload.header_block_fragment, hpack)
+    Logger.debug("STREAM #{id} RECEIVED HEADERS #{inspect headers}")
+    Process.send(target, {:ankh, :headers, id, headers}, [])
     stream = %{stream | hbf: <<>>}
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
 
   defp decode_frame(%Frame{stream_id: id, type: :push_promise,
   flags: %{end_headers: true}, payload: payload} = frame,
-  %{streams: streams, recv_hpack_ctx: hpack} = state) do
+  %{streams: streams, recv_ctx: hpack, target: target} = state) do
     stream = Map.get(streams, id)
-    hbf = HPack.decode(stream.hbf <> payload.header_block_fragment, hpack)
-    Logger.debug("STREAM #{id} RECEIVED HBF #{inspect hbf}")
-    Process.send(target, {:headers, hbf}, [])
+    headers = HPack.decode(stream.hbf <> payload.header_block_fragment, hpack)
+    Logger.debug("STREAM #{id} RECEIVED HEADERS #{inspect headers}")
+    Process.send(target, {:ankh, :headers, id, headers}, [])
     stream = %{stream | hbf: <<>>}
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
 
   defp decode_frame(%Frame{stream_id: id, type: :continuation,
   flags: %{end_headers: true}, payload: payload} = frame,
-  %{streams: streams, recv_hpack_ctx: hpack, target: target} = state) do
+  %{streams: streams, recv_ctx: hpack, target: target} = state) do
     stream = Map.get(streams, id)
-    hbf = HPack.decode(stream.hbf <> payload.header_block_fragment, hpack)
-    Logger.debug("STREAM #{id} RECEIVED HBF #{inspect hbf}")
-    Process.send(target, {:headers, hbf}, [])
+    headers = HPack.decode(stream.hbf <> payload.header_block_fragment, hpack)
+    Logger.debug("STREAM #{id} RECEIVED HEADERS #{inspect headers}")
+    Process.send(target, {:ankh, :headers, id, headers}, [])
     stream = %{stream | hbf: <<>>}
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
 
   defp decode_frame(%Frame{stream_id: id, type: :data,
   flags: %{end_stream: false}, payload: payload} = frame,
-  %{streams: streams} = state) do
+  %{streams: streams, target: target, mode: mode} = state) do
     stream = Map.get(streams, id)
     stream = %{stream | data: stream.data <> payload.data}
+    case mode do
+      :stream ->
+        Process.send(target, {:ankh, :stream_data, id, payload.data}, [])
+      _ ->
+      Logger.debug("Full mode, not sending partial data")
+    end
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
 
   defp decode_frame(%Frame{stream_id: id, type: :data,
   flags: %{end_stream: true}, payload: payload} = frame,
-  %{streams: streams, target: target} = state) do
+  %{streams: streams, target: target, mode: mode} = state) do
     stream = Map.get(streams, id)
     data = stream.data <> payload.data
     Logger.debug("STREAM #{id} RECEIVED DATA #{data} #{byte_size data}")
-    Process.send(target, {:data, data}, [])
+    case mode do
+      :full ->
+        Process.send(target, {:ankh, :data, id, data}, [])
+      _ ->
+        Logger.debug("Streaming mode, not sending reassembled hbf")
+    end
     stream = %{stream | data: <<>>}
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
