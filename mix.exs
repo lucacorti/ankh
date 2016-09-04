@@ -14,8 +14,7 @@ defmodule Ankh.Mixfile do
   #
   # Type "mix help compile.app" for more information
   def application do
-    [applications: [:logger, :ssl],
-     mod: {Ankh, []}]
+    [applications: [:logger, :ssl]]
   end
 
   # Dependencies can be Hex packages:
