@@ -39,6 +39,9 @@ defmodule Ankh.Mixfile do
   #
   # Type "mix help deps" for more examples and options
   defp deps do
-    [{:hpack, "~> 1.0.2"}]
+    [
+      {:ex_doc, ">= 0.0.0", only: :dev},
+      {:hpack, "~> 1.0.2"}
+    ]
   end
 end
