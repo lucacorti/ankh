@@ -2,9 +2,6 @@
 
 **Pure Elixir HTTP/2 implementation**
 
-## Installation
-Add ankh to your list of dependencies in `mix.exs`:
+Get the package from hex.pm at https://hex.pm/packages/ankh
 
-    def deps do
-      [{:ankh, "~> 0.0.1"}]
-    end
+See the documentation at https://hexdocs.pm/ankh
