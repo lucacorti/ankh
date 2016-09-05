@@ -2,12 +2,23 @@ defmodule Ankh.Mixfile do
   use Mix.Project
 
   def project do
-    [app: :ankh,
-     version: "0.0.1",
-     elixir: "~> 1.3",
-     build_embedded: Mix.env == :prod,
-     start_permanent: Mix.env == :prod,
-     deps: deps]
+    [
+      app: :ankh,
+      version: "0.0.1",
+      elixir: "~> 1.3",
+      build_embedded: Mix.env == :prod,
+      start_permanent: Mix.env == :prod,
+      package: package,
+      deps: deps
+    ]
+  end
+
+  defp package do
+    [
+      maintainers: ["Luca Corti"],
+      licenses: ["MIT"],
+      links: %{ "GitHub": "https://github.com/lucacorti/ankh" }
+    ]
   end
 
   # Configuration for the OTP application
