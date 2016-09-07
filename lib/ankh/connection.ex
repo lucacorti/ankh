@@ -92,11 +92,6 @@ defmodule Ankh.Connection do
     {:stop, reason, state}
   end
 
-  def handle_info(msg, state) do
-    Logger.error "UNKNOWN MESSAGE: #{inspect msg}"
-    {:noreply, state}
-  end
-
   defp send_frame(%{socket: socket} = state, %Frame{stream_id: 0} = frame) do
     Logger.debug "STREAM 0 SEND #{inspect frame}"
     case :ssl.send(socket, Encoder.encode!(frame, [])) do
@@ -312,7 +307,7 @@ defmodule Ankh.Connection do
       :stream ->
         Process.send(target, {:ankh, :stream_data, id, payload.data}, [])
       _ ->
-      Logger.debug("Full mode, not sending partial data")
+        Logger.debug("Full mode, not sending partial data")
     end
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
@@ -323,11 +318,13 @@ defmodule Ankh.Connection do
     stream = Map.get(streams, id)
     data = stream.data <> payload.data
     Logger.debug("STREAM #{id} RECEIVED DATA #{data} #{byte_size data}")
-    case mode do
-      :full ->
+    case {mode, stream.data} do
+      {:full, _} ->
         Process.send(target, {:ankh, :data, id, data}, [])
+      {:stream, <<>>} ->
+        Process.send(target, {:ankh, :stream_data, id, data}, [])
       _ ->
-        Logger.debug("Streaming mode, not sending reassembled hbf")
+        Logger.debug("Streaming mode, not sending reassembled data")
     end
     stream = %{stream | data: <<>>}
     {%{state | streams: Map.put(streams, id, stream)}, frame}
