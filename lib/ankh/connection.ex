@@ -200,7 +200,7 @@ defmodule Ankh.Connection do
   end
 
   defp receive_frame(state, %Frame{stream_id: 0} = frame) do
-    Logger.debug "STREAM 0 RECEIVED #{inspect frame}"
+    Logger.error "STREAM 0 RECEIVED UNHANDLED FRAME #{inspect frame}"
     state
   end
 
