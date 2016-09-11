@@ -30,12 +30,12 @@ defmodule Ankh.Connection do
   end
 
   def init([uri: uri, target: target, mode: mode]) do
-    with settings <-  %Settings.Payload{},
+    with settings <- %Settings.Payload{},
          {:ok, recv_ctx} = HPack.Table.start_link(settings.header_table_size),
          {:ok, send_ctx} = HPack.Table.start_link(settings.header_table_size) do
       {:ok, %{uri: uri, target: target, mode: mode, socket: nil, streams: %{},
       last_stream_id: 0, buffer: <<>>, recv_ctx: recv_ctx, send_ctx: send_ctx,
-      recv_settings: settings, send_settings: settings, window_size: 0}}
+      recv_settings: settings, send_settings: nil, window_size: 0}}
     end
   end
 
@@ -123,7 +123,7 @@ defmodule Ankh.Connection do
         frame
     end
 
-    case :ssl.send(socket,  Encoder.encode!(frame, [])) do
+    case :ssl.send(socket, Encoder.encode!(frame, [])) do
       :ok ->
         {:ok, %{state | streams: Map.put(streams, id, stream)}}
       error ->
@@ -250,73 +250,70 @@ defmodule Ankh.Connection do
   defp decode_frame(%Frame{stream_id: 0} = frame, state), do: {state, frame}
 
   defp decode_frame(%Frame{stream_id: id, type: :headers,
-  flags: %{end_headers: false}, payload: payload} = frame,
+  flags: %{end_headers: false}, payload: %{header_block_fragment: hbf}} = frame,
   %{streams: streams} = state) do
+    Logger.debug("STREAM #{id} RECEIVED PARTIAL HBF #{inspect hbf}")
     stream = Map.get(streams, id)
-    stream = %{stream | hbf: stream.hbf <> payload.header_block_fragment}
-    Logger.debug("STREAM #{id} RECEIVED PARTIAL HBF #{inspect payload.header_block_fragment}")
+    stream = %{stream | hbf: stream.hbf <> hbf}
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
 
   defp decode_frame(%Frame{stream_id: id, type: :push_promise,
-  flags: %{end_headers: false}, payload: payload} = frame,
+  flags: %{end_headers: false}, payload: %{header_block_fragment: hbf}} = frame,
   %{streams: streams} = state) do
+    Logger.debug("STREAM #{id} RECEIVED PARTIAL HBF #{inspect hbf}")
     stream = Map.get(streams, id)
-    stream = %{stream | hbf: stream.hbf <> payload.header_block_fragment}
-    Logger.debug("STREAM #{id} RECEIVED PARTIAL HBF #{inspect payload.header_block_fragment}")
+    stream = %{stream | hbf: stream.hbf <> hbf}
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
 
   defp decode_frame(%Frame{stream_id: id, type: :continuation,
-  flags: %{end_headers: false}, payload: payload} = frame,
+  flags: %{end_headers: false}, payload: %{header_block_fragment: hbf}} = frame,
   %{streams: streams} = state) do
+    Logger.debug("STREAM #{id} RECEIVED PARTIAL HBF #{inspect hbf}")
     stream = Map.get(streams, id)
-    stream = %{stream | hbf: stream.hbf <> payload.header_block_fragment}
-    Logger.debug("STREAM #{id} RECEIVED PARTIAL HBF #{inspect payload.header_block_fragment}")
+    stream = %{stream | hbf: stream.hbf <> hbf}
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
 
   defp decode_frame(%Frame{stream_id: id, type: :headers,
-  flags: %{end_headers: true}, payload: payload} = frame,
-  %{streams: streams, recv_ctx: hpack, target: target} = state) do
+  flags: %{end_headers: true}, payload: %{header_block_fragment: hbf}} = frame,
+  %{streams: streams, recv_ctx: table, target: target} = state) do
     stream = Map.get(streams, id)
-    headers = HPack.decode(stream.hbf <> payload.header_block_fragment, hpack)
+    headers = HPack.decode(stream.hbf <> hbf, table)
     Logger.debug("STREAM #{id} RECEIVED HEADERS #{inspect headers}")
     Process.send(target, {:ankh, :headers, id, headers}, [])
-    stream = %{stream | hbf: <<>>}
-    {%{state | streams: Map.put(streams, id, stream)}, frame}
+    {%{state | streams: Map.put(streams, id, %{stream | hbf: <<>>})}, frame}
   end
 
   defp decode_frame(%Frame{stream_id: id, type: :push_promise,
-  flags: %{end_headers: true}, payload: payload} = frame,
-  %{streams: streams, recv_ctx: hpack, target: target} = state) do
+  flags: %{end_headers: true}, payload: %{header_block_fragment: hbf}} = frame,
+  %{streams: streams, recv_ctx: table, target: target} = state) do
     stream = Map.get(streams, id)
-    headers = HPack.decode(stream.hbf <> payload.header_block_fragment, hpack)
+    headers = HPack.decode(stream.hbf <> hbf, table)
     Logger.debug("STREAM #{id} RECEIVED HEADERS #{inspect headers}")
     Process.send(target, {:ankh, :headers, id, headers}, [])
-    stream = %{stream | hbf: <<>>}
-    {%{state | streams: Map.put(streams, id, stream)}, frame}
+    {%{state | streams: Map.put(streams, id, %{stream | hbf: <<>>})}, frame}
   end
 
   defp decode_frame(%Frame{stream_id: id, type: :continuation,
-  flags: %{end_headers: true}, payload: payload} = frame,
-  %{streams: streams, recv_ctx: hpack, target: target} = state) do
+  flags: %{end_headers: true}, payload: %{header_block_fragment: hbf}} = frame,
+  %{streams: streams, recv_ctx: table, target: target} = state) do
     stream = Map.get(streams, id)
-    headers = HPack.decode(stream.hbf <> payload.header_block_fragment, hpack)
+    headers = HPack.decode(stream.hbf <> hbf, table)
     Logger.debug("STREAM #{id} RECEIVED HEADERS #{inspect headers}")
     Process.send(target, {:ankh, :headers, id, headers}, [])
-    stream = %{stream | hbf: <<>>}
-    {%{state | streams: Map.put(streams, id, stream)}, frame}
+    {%{state | streams: Map.put(streams, id, %{stream | hbf: <<>>})}, frame}
   end
 
   defp decode_frame(%Frame{stream_id: id, type: :data,
-  flags: %{end_stream: false}, payload: payload} = frame,
+  flags: %{end_stream: false}, payload: %{data: data}} = frame,
   %{streams: streams, target: target, mode: mode} = state) do
     stream = Map.get(streams, id)
-    stream = %{stream | data: stream.data <> payload.data}
+    stream = %{stream | data: stream.data <> data}
     case mode do
       :stream ->
-        Process.send(target, {:ankh, :stream_data, id, payload.data}, [])
+        Process.send(target, {:ankh, :stream_data, id, data}, [])
       _ ->
         Logger.debug("Full mode, not sending partial data")
     end
@@ -324,10 +321,10 @@ defmodule Ankh.Connection do
   end
 
   defp decode_frame(%Frame{stream_id: id, type: :data,
-  flags: %{end_stream: true}, payload: payload} = frame,
+  flags: %{end_stream: true}, payload: %{data: data}} = frame,
   %{streams: streams, target: target, mode: mode} = state) do
     stream = Map.get(streams, id)
-    data = stream.data <> payload.data
+    data = stream.data <> data
     Logger.debug("STREAM #{id} RECEIVED DATA #{data} SIZE #{byte_size data}")
     case {mode, stream.data} do
       {:full, _} ->
@@ -337,8 +334,7 @@ defmodule Ankh.Connection do
       _ ->
         Logger.debug("Streaming mode, not sending reassembled data")
     end
-    stream = %{stream | data: <<>>}
-    {%{state | streams: Map.put(streams, id, stream)}, frame}
+    {%{state | streams: Map.put(streams, id, %{stream | data: <<>>})}, frame}
   end
 
   defp decode_frame(frame, state), do: {state, frame}
