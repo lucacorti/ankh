@@ -50,10 +50,10 @@ defmodule Ankh.Connection do
     ssl_options = @ssl_opts
     with {:ok, socket} <- :ssl.connect(hostname, port, ssl_options),
          :ok <- :ssl.send(socket, @preface) do
+      state = %{state | socket: socket}
       handle_call({:send, %Frame{type: :settings, stream_id: 0,
-      flags: %Settings.Flags{}, payload: %Settings.Payload{}}}, from,
-      %{state | socket: socket})
-      handle_call({:send, frame}, from, %{state | socket: socket})
+      flags: %Settings.Flags{}, payload: %Settings.Payload{}}}, from, state)
+      handle_call({:send, frame}, from, state)
     else
       error ->
         {:stop, :ssl.format_error(error), state}
@@ -161,7 +161,7 @@ defmodule Ankh.Connection do
     state
   end
 
-  defp receive_frame(%{hpack_send_ctx: table} = state,
+  defp receive_frame(%{send_ctx: table} = state,
   %Frame{stream_id: 0, type: :settings, flags: %{ack: false},
   payload: %{header_table_size: table_size} = payload} = frame)
   do
@@ -171,6 +171,12 @@ defmodule Ankh.Connection do
     })
     :ok = HPack.Table.resize(table_size, table)
     %{state | send_settings: payload}
+  end
+
+  defp receive_frame(state, %Frame{stream_id: 0, type: :settings,
+  flags: %{ack: true}, length: 0} = frame) do
+    Logger.debug "STREAM 0 RECEIVED #{inspect frame}"
+    state
   end
 
   defp receive_frame(state, %Frame{stream_id: id, type: :window_update,
@@ -212,8 +218,6 @@ defmodule Ankh.Connection do
     Logger.debug "STREAM #{id} IS #{inspect stream}"
     %{state | streams: Map.put(streams, id, stream), last_stream_id: id}
   end
-
-  defp receive_frame(state, _), do: state
 
   defp parse_frames(<<payload_length::24, _::binary>> = data, state)
   when @frame_header_size + payload_length > byte_size(data) do
