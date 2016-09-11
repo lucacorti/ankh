@@ -333,7 +333,7 @@ defmodule Ankh.Connection do
   %{streams: streams, target: target, mode: mode} = state) do
     stream = Map.get(streams, id)
     data = stream.data <> data
-    Logger.debug("STREAM #{id} RECEIVED DATA #{data} SIZE #{byte_size data}")
+    Logger.debug("STREAM #{id} RECEIVED #{byte_size data} BYTES DATA:\n#{data}")
     case {mode, stream.data} do
       {:full, _} ->
         Process.send(target, {:ankh, :data, id, data}, [])
