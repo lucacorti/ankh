@@ -6,8 +6,9 @@ defmodule Ankh.Connection do
 
   require Logger
 
-  @ssl_opts binary: true, versions: [:"tlsv1.2"],
-            alpn_advertised_protocols: ["h2"]
+  @ssl_opts binary: true, versions: [:"tlsv1.2"], secure_renegotiate: true,
+            alpn_advertised_protocols: ["h2"], client_renegotiation: false,
+            ciphers: ["ECDHE-ECDSA-AES128-SHA256", "ECDHE-ECDSA-AES128-SHA"]
   @preface "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
   @frame_header_size 9
   @max_stream_id 2_147_483_648
