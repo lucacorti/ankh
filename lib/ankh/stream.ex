@@ -1,6 +1,5 @@
 defmodule Ankh.Stream do
   alias Ankh.Frame
-  alias Ankh.Frame
 
   defstruct [id: 0, state: :idle, hbf: <<>>, data: <<>>, window_size: 0]
 
