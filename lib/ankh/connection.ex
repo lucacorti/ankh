@@ -1,7 +1,7 @@
 defmodule Ankh.Connection do
   use GenServer
 
-  alias Ankh.Frame
+  alias Ankh.{Frame, Stream}
   alias Ankh.Frame.{Encoder, Error, GoAway, Ping, Settings}
 
   require Logger
@@ -97,7 +97,7 @@ defmodule Ankh.Connection do
 
   defp send_frame(%{socket: socket, streams: streams, send_ctx: hpack}
   = state, %Frame{stream_id: id} = frame) do
-    stream = Map.get(streams, id, Ankh.Stream.new(id))
+    stream = Map.get(streams, id, Stream.new(id))
     Logger.debug "STREAM #{id} SEND #{inspect frame}"
     {:ok, stream} = Ankh.Stream.send_frame(stream, frame)
     Logger.debug "STREAM #{id} IS #{inspect stream}"
@@ -251,11 +251,14 @@ defmodule Ankh.Connection do
   end
 
   defp decode_frame(%Frame{stream_id: id, type: :push_promise,
-  flags: %{end_headers: false}, payload: %{header_block_fragment: hbf}} = frame,
+  flags: %{end_headers: false}, payload: %{promised_stream_id: promised_id,
+  header_block_fragment: hbf}} = frame,
   %{streams: streams} = state) do
     Logger.debug("STREAM #{id} RECEIVED PARTIAL HBF #{inspect hbf}")
     stream = Map.get(streams, id)
-    stream = %{stream | hbf: stream.hbf <> hbf}
+
+    stream = %{stream | promised_id: promised_id, hbf_type: :push_promise,
+    hbf: stream.hbf <> hbf}
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
 
@@ -279,13 +282,17 @@ defmodule Ankh.Connection do
   end
 
   defp decode_frame(%Frame{stream_id: id, type: :push_promise,
-  flags: %{end_headers: true}, payload: %{header_block_fragment: hbf}} = frame,
+  flags: %{end_headers: true}, payload: %{promised_stream_id: promised_id,
+  header_block_fragment: hbf}} = frame,
   %{streams: streams, recv_ctx: table, target: target} = state) do
     stream = Map.get(streams, id)
     headers = HPack.decode(stream.hbf <> hbf, table)
     Logger.debug("STREAM #{id} RECEIVED HEADERS #{inspect headers}")
-    Process.send(target, {:ankh, :headers, id, headers}, [])
-    {%{state | streams: Map.put(streams, id, %{stream | hbf: <<>>})}, frame}
+    Process.send(target, {:ankh, :push_promise, id, headers}, [])
+    streams = streams
+    |> Map.put(id, %{stream | hbf: <<>>})
+    |> Map.put(promised_id, %{Stream.new(promised_id) | state: :reserved})
+    {%{state | streams: streams}, frame}
   end
 
   defp decode_frame(%Frame{stream_id: id, type: :continuation,
@@ -294,8 +301,17 @@ defmodule Ankh.Connection do
     stream = Map.get(streams, id)
     headers = HPack.decode(stream.hbf <> hbf, table)
     Logger.debug("STREAM #{id} RECEIVED HEADERS #{inspect headers}")
-    Process.send(target, {:ankh, :headers, id, headers}, [])
-    {%{state | streams: Map.put(streams, id, %{stream | hbf: <<>>})}, frame}
+    Process.send(target, {:ankh, stream.hbf_type, id, headers}, [])
+    streams = case stream.hbf_type do
+      :push_promise ->
+        %{promised_id: promised_id} = stream
+        streams
+        |> Map.put(id, %{stream | hbf: <<>>})
+        |> Map.put(promised_id, %{Stream.new(promised_id) | state: :reserved})
+      _ ->
+        Map.put(streams, id, %{stream | hbf: <<>>})
+    end
+    {%{state | streams: streams}, frame}
   end
 
   defp decode_frame(%Frame{stream_id: id, type: :data,
