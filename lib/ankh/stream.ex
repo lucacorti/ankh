@@ -2,7 +2,7 @@ defmodule Ankh.Stream do
   alias Ankh.Frame
 
   defstruct [id: 0, state: :idle, hbf_type: :headers, hbf: <<>>, data: <<>>,
-  window_size: 0]
+  window_size: 65_535]
 
   def new(id), do: %__MODULE__{id: id}
 

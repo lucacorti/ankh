@@ -27,7 +27,7 @@ defmodule Ankh.Connection do
          {:ok, send_ctx} = HPack.Table.start_link(settings.header_table_size) do
       {:ok, %{uri: uri, target: target, mode: mode, socket: nil, streams: %{},
       last_stream_id: 0, buffer: <<>>, recv_ctx: recv_ctx, send_ctx: send_ctx,
-      recv_settings: settings, send_settings: nil, window_size: 0}}
+      recv_settings: settings, send_settings: nil, window_size: 65_535}}
     end
   end
 
