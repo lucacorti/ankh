@@ -205,6 +205,12 @@ defmodule Ankh.Connection do
     %{state | streams: Map.put(state.streams, id, stream)}
   end
 
+  defp receive_frame(state, %Frame{stream_id: 0, type: :goaway,
+  payload: %{error_code: %{code: code}}} = frame) do
+    Logger.debug "STREAM 0 RECEIVED FRAME #{inspect frame}"
+    {:stop, code, state}
+  end
+
   defp receive_frame(state, %Frame{stream_id: 0} = frame) do
     Logger.error "STREAM 0 RECEIVED UNHANDLED FRAME #{inspect frame}"
     state
@@ -321,7 +327,7 @@ defmodule Ankh.Connection do
   %{streams: streams, target: target, mode: mode} = state) do
     stream = Map.get(streams, id)
     data = stream.data <> payload.data
-    Logger.debug("STREAM #{id} RECEIVED DATA #{data} #{byte_size data}")
+    Logger.debug("STREAM #{id} RECEIVED DATA #{data} SIZE #{byte_size data}")
     case {mode, stream.data} do
       {:full, _} ->
         Process.send(target, {:ankh, :data, id, data}, [])
