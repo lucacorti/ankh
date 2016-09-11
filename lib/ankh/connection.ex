@@ -15,16 +15,8 @@ defmodule Ankh.Connection do
 
   def start_link(%URI{} = uri, stream \\ false, receiver \\ nil, options \\ [])
   do
-    target = if is_pid(receiver) do
-      receiver
-    else
-      self()
-    end
-    mode = if is_boolean(stream) && stream do
-      :stream
-    else
-      :full
-    end
+    target = if is_pid(receiver), do: receiver, else: self()
+    mode = if is_boolean(stream) && stream, do: :stream, else: :full
     GenServer.start_link(__MODULE__, [uri: uri, target: target, mode: mode],
     options)
   end
