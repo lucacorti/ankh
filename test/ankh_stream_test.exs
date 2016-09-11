@@ -228,7 +228,7 @@ defmodule AnkhTest.Stream do
     assert stream === {:ok, %Stream{id: @stream_id, state: :half_closed_remote}}
   end
 
-  test "stream half_closed_remote to closed on sendinf rst_stream" do
+  test "stream half_closed_remote to closed on sending rst_stream" do
     stream = %Stream{id: @stream_id, state: :half_closed_remote}
     |> Stream.send_frame(%Frame{stream_id: @stream_id, type: :rst_stream})
 
