@@ -6,7 +6,7 @@ defmodule Ankh do
   facilities. The aim is to provide a solid foundation upon which clients and
   eventually servers can be implemented providing higher layer features.
 
-  This library only supports HTTP/2 via TLS. Support for HTTP/2 over plaintext
-  TCP is intentionally left out.
+  Ankh only supports HTTP/2 over TLS. Support for HTTP/2 over plaintext
+  TCP was intentionally left out.
   """
 end
