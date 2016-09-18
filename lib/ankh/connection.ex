@@ -6,28 +6,30 @@ defmodule Ankh.Connection do
 
   require Logger
 
-  @ssl_opts binary: true, versions: [:"tlsv1.2"], secure_renegotiate: true,
-            alpn_advertised_protocols: ["h2"], client_renegotiation: false,
-            ciphers: ["ECDHE-ECDSA-AES128-SHA256", "ECDHE-ECDSA-AES128-SHA"]
+  @default_ssl_opts binary: true, versions: [:"tlsv1.2"],
+  secure_renegotiate: true, alpn_advertised_protocols: ["h2"],
+  client_renegotiation: false,
+  ciphers: ["ECDHE-ECDSA-AES128-SHA256", "ECDHE-ECDSA-AES128-SHA"]
   @preface "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
   @frame_header_size 9
   @max_stream_id 2_147_483_648
 
-  def start_link(%URI{} = uri, stream \\ false, receiver \\ nil, options \\ [])
-  do
+  def start_link([uri: uri, receiver: receiver, stream: stream,
+  ssl_options: ssl_options], options \\ []) do
     target = if is_pid(receiver), do: receiver, else: self()
     mode = if is_boolean(stream) && stream, do: :stream, else: :full
-    GenServer.start_link(__MODULE__, [uri: uri, target: target, mode: mode],
-    options)
+    GenServer.start_link(__MODULE__, [uri: uri, target: target, mode: mode,
+    ssl_options: ssl_options], options)
   end
 
-  def init([uri: uri, target: target, mode: mode]) do
+  def init([uri: uri, target: target, mode: mode, ssl_options: ssl_opts]) do
     with settings <- %Settings.Payload{},
          {:ok, recv_ctx} = HPack.Table.start_link(settings.header_table_size),
          {:ok, send_ctx} = HPack.Table.start_link(settings.header_table_size) do
-      {:ok, %{uri: uri, target: target, mode: mode, socket: nil, streams: %{},
-      last_stream_id: 0, buffer: <<>>, recv_ctx: recv_ctx, send_ctx: send_ctx,
-      recv_settings: settings, send_settings: nil, window_size: 65_535}}
+      {:ok, %{uri: uri, target: target, mode: mode, ssl_opts: ssl_opts,
+      socket: nil, streams: %{}, last_stream_id: 0, buffer: <<>>,
+      recv_ctx: recv_ctx, send_ctx: send_ctx, recv_settings: settings,
+      send_settings: nil, window_size: 65_535}}
     end
   end
 
@@ -38,9 +40,9 @@ defmodule Ankh.Connection do
   def close(pid), do: GenServer.call(pid, {:close})
 
   def handle_call({:send, frame}, from, %{socket: nil, uri: %URI{host: host,
-  port: port}} = state) do
+  port: port}, ssl_opts: ssl_opts} = state) do
     hostname = String.to_charlist(host)
-    ssl_options = @ssl_opts
+    ssl_options = Keyword.merge(ssl_opts, @default_ssl_opts)
     with {:ok, socket} <- :ssl.connect(hostname, port, ssl_options),
          :ok <- :ssl.send(socket, @preface) do
       state = %{state | socket: socket}
