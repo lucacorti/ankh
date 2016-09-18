@@ -24,6 +24,7 @@ defmodule Ankh.Stream do
   Parameters:
     - id: stream id
   """
+  @spec new(Integer.t) :: t
   def new(id), do: %__MODULE__{id: id}
 
   @doc """
