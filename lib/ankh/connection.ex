@@ -1,4 +1,12 @@
 defmodule Ankh.Connection do
+  @moduledoc """
+  Genserver implementing HTTP/2 connection management
+
+  `Ankh.Connection` establishes the TLS underlying connection and provides
+  connection and stream management, it also does frame (de)serialization and
+  reassembly as needed.
+  """
+
   use GenServer
 
   alias Ankh.{Frame, Stream}
@@ -14,6 +22,21 @@ defmodule Ankh.Connection do
   @frame_header_size 9
   @max_stream_id 2_147_483_648
 
+  @doc """
+  Start the connection process for the specified `URI`.
+
+  Parameters:
+    - args
+      - uri: at least scheme and authority must be present.
+      - receiver: pid of the process to send response messages to.
+Messages are shipped to the calling process if nil.
+      - stream: if true, stream received data frames back to the
+receiver, else reassemble and send complete responses.
+      - ssl_options: SSL connection options, for the Erlang `:ssl` module
+    - options: GenServer startup options
+  """
+  @spec start_link([uri: URI, receiver: pid | nil, stream: boolean,
+  ssl_options: Keyword.t], GenServer.option) :: GenServer.on_start
   def start_link([uri: uri, receiver: receiver, stream: stream,
   ssl_options: ssl_options], options \\ []) do
     target = if is_pid(receiver), do: receiver, else: self()
@@ -33,10 +56,27 @@ defmodule Ankh.Connection do
     end
   end
 
+  @doc """
+  Sends a frame over the connection
+
+  Parameters:
+    - connection: pid or global name for the `Ankh.Connection` process
+    - frame: `Ankh.Frame` structure
+  """
+  @spec send(pid() | :atom, Frame.t) :: :ok | {:error, atom}
   def send(connection, %Frame{} = frame) do
     GenServer.call(connection, {:send, frame})
   end
 
+  @doc """
+  Closes the connection
+
+  Before closing the TLS connection a GOAWAY frame is sent to the peer.
+
+  Parameters:
+    - pid: pid of the `Ankh.Connection` process
+  """
+  @spec close(pid()) :: :closed
   def close(pid), do: GenServer.call(pid, {:close})
 
   def handle_call({:send, frame}, from, %{socket: nil, uri: %URI{host: host,
@@ -64,7 +104,11 @@ defmodule Ankh.Connection do
     end
   end
 
-  def handle_call({:close}, _from, %{socket: socket} = state) do
+  def handle_call({:close}, _from, %{socket: socket,
+  last_stream_id: last_stream_id} = state) do
+    __MODULE__.send(self(), %Frame{stream_id: 0, type: :goaway,
+    payload: %GoAway.Payload{last_stream_id: last_stream_id,
+    error_code: %Error{code: :no_error}}})
     :ok = :ssl.close(socket)
     {:stop, :closed, state}
   end

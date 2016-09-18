@@ -1,14 +1,35 @@
 defmodule Ankh.Stream do
+  @moduledoc """
+  HTTP/2 Stream strucure
+  """
+
   alias Ankh.Frame
 
+  @typedoc """
+  - id: stream id
+  - state: stream state
+  - hbf_type: type of HBF being accumulated
+  - hbf: HBF accumulator, for reassembly
+  - data: DATA accumulator, for reassembly
+  """
+  @type t :: %__MODULE__{id: Integer.t, state: atom,
+  hbf_type: :headers | :push_promise, hbf: binary, data: binary,
+  window_size: Integer.t}
   defstruct [id: 0, state: :idle, hbf_type: :headers, hbf: <<>>, data: <<>>,
   window_size: 65_535]
 
+  @doc """
+  Creates a new Stream
+
+  Parameters:
+    - id: stream id
+  """
   def new(id), do: %__MODULE__{id: id}
 
-  #
-  # RECEIVING FRAMES
-  #
+  @doc """
+  Process the reception of a frame through the Stream state machine
+  """
+  @spec received_frame(t, Frame.t) :: t
 
   def received_frame(%__MODULE__{id: id}, %Frame{stream_id: stream_id})
   when stream_id !== id do
@@ -147,9 +168,10 @@ defmodule Ankh.Stream do
     {:error, :protocol_error}
   end
 
-  #
-  # SENDING FRAMES
-  #
+  @doc """
+  Process sending a frame through the Stream state machine
+  """
+  @spec send_frame(t, Frame.t) :: t
 
   def send_frame(%__MODULE__{id: id}, %Frame{stream_id: stream_id})
   when stream_id !== id do

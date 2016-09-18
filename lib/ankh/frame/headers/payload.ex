@@ -12,7 +12,7 @@ defimpl Ankh.Frame.Encoder, for: Ankh.Frame.Headers.Payload do
   weight: wh, header_block_fragment: hbf}, flags: %Flags{padded: true,
   priority: true})
   do
-    <<pl::8, bool_to_int(ex)::1, sd::31, wh::8>> <> hbf <> padding(pl)
+    <<pl::8, bool_to_int!(ex)::1, sd::31, wh::8>> <> hbf <> padding(pl)
   end
 
   def encode!(%Payload{pad_length: pl, header_block_fragment: hbf},
@@ -22,7 +22,7 @@ defimpl Ankh.Frame.Encoder, for: Ankh.Frame.Headers.Payload do
 
   def encode!(%Payload{exclusive: ex, stream_dependency: sd, weight: wh,
   header_block_fragment: hbf}, flags: %Flags{padded: false, priority: true}) do
-    <<bool_to_int(ex)::1, sd::31, wh::8, hbf::binary>>
+    <<bool_to_int!(ex)::1, sd::31, wh::8, hbf::binary>>
   end
 
   def encode!(%Payload{header_block_fragment: hbf}, flags: %Flags{padded: false,
@@ -33,7 +33,7 @@ defimpl Ankh.Frame.Encoder, for: Ankh.Frame.Headers.Payload do
   def decode!(struct, <<pl::8, ex::1, sd::31, wh::8, data::binary>>,
   flags: %Flags{padded: true, priority: true}) do
     hbf = binary_part(data, 0, byte_size(data) - pl)
-    %{struct | pad_length: pl, exclusive: int_to_bool(ex), weight: wh,
+    %{struct | pad_length: pl, exclusive: int_to_bool!(ex), weight: wh,
       stream_dependency: sd, header_block_fragment: hbf}
   end
 
@@ -45,7 +45,7 @@ defimpl Ankh.Frame.Encoder, for: Ankh.Frame.Headers.Payload do
 
   def decode!(struct, <<ex::1, sd::31, wh::8, hbf::binary>>,
     flags: %Flags{padded: false, priority: true}) do
-      %{struct | exclusive: int_to_bool(ex), weight: wh,
+      %{struct | exclusive: int_to_bool!(ex), weight: wh,
         stream_dependency: sd, header_block_fragment: hbf}
   end
 

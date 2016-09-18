@@ -1,4 +1,18 @@
 defmodule Ankh.Frame do
+  @moduledoc """
+  HTTP/2 frame structure
+  """
+  alias Ankh.Frame.Encoder
+
+  @typedoc """
+  - length: payload length in bytes
+  - type: frame type
+  - flags: `Ankh.Frame.Encoder` structure for flags
+  - stream_id: Stream ID of the frame
+  - payload:   - flags: `Ankh.Frame.Encoder` structure for the payload
+  """
+  @type t :: %__MODULE__{length: Integer.t, type: atom(), flags: Encoder.t,
+  stream_id: Integer.t,  payload: Encoder.t}
   defstruct [length: 0, type: nil, flags: nil, stream_id: 0, payload: nil]
 end
 
