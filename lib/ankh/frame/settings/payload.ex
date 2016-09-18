@@ -26,7 +26,7 @@ defimpl Ankh.Frame.Encoder, for: Ankh.Frame.Settings.Payload do
   max_concurrent_streams: mcs, initial_window_size: iws, max_frame_size: mfs,
   max_header_list_size: mhls}, _) do
     <<@header_table_size::16, hts::32,
-      @enable_push::16, bool_to_int(ep)::32,
+      @enable_push::16, bool_to_int!(ep)::32,
       @max_concurrent_streams::16, mcs::32,
       @initial_window_size::16, iws::32,
       @max_frame_size::16, mfs::32,

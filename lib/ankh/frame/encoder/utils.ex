@@ -1,11 +1,33 @@
 defmodule Ankh.Frame.Encoder.Utils do
-  def bool_to_int(true), do: 1
-  def bool_to_int(false), do: 0
-  def bool_to_int(_), do: raise ArgumentError
+  @moduledoc """
+  Utility functions for encoding/decoding values
+  """
 
-  def int_to_bool(1), do: true
-  def int_to_bool(0), do: false
-  def int_to_bool(_), do: raise ArgumentError
+  @doc """
+  Converts a boolean into the corresponding 0/1 integer values
 
-  def padding(n) when is_integer(n) and n > 0, do: :binary.copy(<<0>>, n)
+  Raises on wrong arguments
+  """
+  @spec bool_to_int!(boolean) :: 0 | 1
+  def bool_to_int!(false), do: 0
+  def bool_to_int!(true), do: 1
+  def bool_to_int!(_), do: raise ArgumentError
+
+  @doc """
+  Converts 0/1 integers into the corresponding boolean values
+
+  Raises on wrong arguments
+  """
+  @spec int_to_bool!(0 | 1) :: boolean
+  def int_to_bool!(0), do: false
+  def int_to_bool!(1), do: true
+  def int_to_bool!(_), do: raise ArgumentError
+
+  @doc """
+  Generates an 0 padding binary of the specified size
+  """
+  @spec padding(Integer.t) :: binary
+  def padding(size) when is_integer(size) and size > 0 do
+    :binary.copy(<<0>>, size)
+  end
 end

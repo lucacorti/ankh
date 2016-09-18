@@ -1,6 +1,18 @@
 defmodule Ankh.Frame.Error do
+  @moduledoc """
+  HTTP/2 Error structure
+  """
+
+  @typedoc """
+  - code: error code atom
+  """
+  @type t :: %__MODULE__{code: atom}
   defstruct [code: :no_error]
 
+  @doc """
+  Returns a human readable string for the passed error code atom
+  """
+  @spec format(atom) :: String.t
   def format(:no_error), do: "Graceful shutdown"
   def format(:protocol_error), do: "Protocol error detected"
   def format(:internal_error), do: "Implementation fault"
