@@ -1,6 +1,4 @@
 defmodule Ankh.Frame.GoAway.Payload do
-  @type t :: %__MODULE__{last_stream_id: Integer.t, error_code: :atom | nil,
-  data: binary | nil}
   defstruct [last_stream_id: nil, error_code: nil, data: nil]
 end
 
