@@ -1,4 +1,9 @@
 defmodule Ankh.Frame.Continuation.Flags do
+  @moduledoc """
+  CONTINUATION frame flags
+  """
+
+  @type t :: %__MODULE__{end_headers: boolean}
   defstruct [end_headers: false]
 end
 

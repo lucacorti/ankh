@@ -1,4 +1,9 @@
 defmodule Ankh.Frame.Settings.Flags do
+  @moduledoc """
+  SETTINGS frame flags
+  """
+
+  @type t :: %__MODULE__{ack: boolean}
   defstruct [ack: false]
 end
 

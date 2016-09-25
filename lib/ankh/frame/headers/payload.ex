@@ -1,4 +1,11 @@
 defmodule Ankh.Frame.Headers.Payload do
+  @moduledoc """
+  HEADERS frame payload
+  """
+
+  @type t :: %__MODULE__{pad_length: Integer.t, exclusive: boolean,
+  stream_dependency: Integer.t, weight: Integer.t,
+  header_block_fragment: binary}
   defstruct [pad_length: 0, exclusive: false, stream_dependency: 0, weight: 0,
   header_block_fragment: <<>>]
 end

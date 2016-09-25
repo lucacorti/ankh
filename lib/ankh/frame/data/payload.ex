@@ -1,4 +1,9 @@
 defmodule Ankh.Frame.Data.Payload do
+  @moduledoc """
+  DATA frame payload
+  """
+
+  @type t :: %__MODULE__{pad_length: Integer.t, data: binary}
   defstruct [pad_length: 0, data: <<>>]
 end
 

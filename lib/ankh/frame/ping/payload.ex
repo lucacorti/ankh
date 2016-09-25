@@ -1,4 +1,9 @@
 defmodule Ankh.Frame.Ping.Payload do
+  @moduledoc """
+  PING frame payload
+  """
+
+  @type t :: %__MODULE__{data: binary}
   defstruct [data: <<>>]
 end
 

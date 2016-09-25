@@ -1,4 +1,9 @@
 defmodule Ankh.Frame.Continuation.Payload do
+  @moduledoc """
+  CONTINUATION frame payload
+  """
+
+  @type t :: %__MODULE__{header_block_fragment: binary}
   defstruct [header_block_fragment: <<>>]
 end
 

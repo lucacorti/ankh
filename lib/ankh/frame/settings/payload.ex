@@ -1,4 +1,11 @@
 defmodule Ankh.Frame.Settings.Payload do
+  @moduledoc """
+  SETTINGS frame payload
+  """
+
+  @type t :: %__MODULE__{header_table_size: Integer.t, enable_push: boolean,
+  max_concurrent_streams: Integer.t, initial_window_size: Intger.t,
+  max_frame_size: Integer.t, max_header_list_size: Integer.t}
   defstruct [header_table_size: 4_096, enable_push: true,
              max_concurrent_streams: 128, initial_window_size: 65_535,
              max_frame_size: 16_384, max_header_list_size: 128]

@@ -41,6 +41,8 @@ defmodule Ankh.Mixfile do
   defp deps do
     [
       {:ex_doc, ">= 0.0.0", only: :dev},
+      {:credo, ">= 0.0.0", only: :dev},
+      {:dialyxir, ">= 0.0.0", only: :dev},
       {:hpack, "~> 1.0.2"}
     ]
   end

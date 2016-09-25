@@ -1,4 +1,9 @@
 defmodule Ankh.Frame.Data.Flags do
+  @moduledoc """
+  DATA frame flags
+  """
+
+  @type t :: %__MODULE__{end_stream: boolean, padded: boolean}
   defstruct [end_stream: false, padded: false]
 end
 
