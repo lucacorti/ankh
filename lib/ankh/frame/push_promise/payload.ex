@@ -1,4 +1,10 @@
 defmodule Ankh.Frame.PushPromise.Payload do
+  @moduledoc """
+  PUSH_PROMISE frame payload
+  """
+
+  @type t :: %__MODULE__{pad_length: Integer.t, promised_stream_id: Integer.t,
+  header_block_fragment: binary}
   defstruct [pad_length: 0, promised_stream_id: 0, header_block_fragment: <<>>]
 end
 

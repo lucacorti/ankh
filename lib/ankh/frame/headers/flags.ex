@@ -1,4 +1,10 @@
 defmodule Ankh.Frame.Headers.Flags do
+  @moduledoc """
+  HEADERS frame flags
+  """
+
+  @type t :: %__MODULE__{end_stream: boolean, end_headers: boolean,
+  padded: boolean, priority: boolean}
   defstruct [end_stream: false, end_headers: false, padded: false,
              priority: false]
 end

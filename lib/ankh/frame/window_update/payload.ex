@@ -1,5 +1,10 @@
 defmodule Ankh.Frame.WindowUpdate.Payload do
-  defstruct [window_size_increment: nil]
+  @moduledoc """
+  WINDOW_UPDATE frame payload
+  """
+
+  @type t :: %__MODULE__{window_size_increment: Integer.t}
+  defstruct [window_size_increment: 0]
 end
 
 defimpl Ankh.Frame.Encoder, for: Ankh.Frame.WindowUpdate.Payload do
