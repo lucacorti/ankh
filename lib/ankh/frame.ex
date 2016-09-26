@@ -11,8 +11,10 @@ defmodule Ankh.Frame do
   - stream_id: Stream ID of the frame
   - payload:   - flags: `Ankh.Frame.Encoder` structure for the payload
   """
-  @type t :: %__MODULE__{length: Integer.t, type: atom(), flags: Encoder.t,
-  stream_id: Integer.t,  payload: Encoder.t}
+  @type t :: %__MODULE__{length: Integer.t, type: :data | :headers | :priority |
+  :rst_stream | :settings | :push_primise | :ping | :goaway | :window_update |
+  :continuation | atom, flags: Encoder.t, stream_id: Integer.t,
+  payload: Encoder.t}
   defstruct [length: 0, type: nil, flags: nil, stream_id: 0, payload: nil]
 end
 

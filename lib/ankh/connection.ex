@@ -141,25 +141,15 @@ receiver, else reassemble and send complete responses.
     end
   end
 
-  defp send_frame(%{socket: socket, streams: streams, send_ctx: hpack}
-  = state, %Frame{stream_id: id} = frame) do
-    stream = Map.get(streams, id, Stream.new(id))
+  defp send_frame(%{socket: socket, streams: streams} = state,
+  %Frame{stream_id: id} = frame) do
+    stream = Map.get(streams, id, Stream.new(id, :idle))
     Logger.debug "STREAM #{id} SEND #{inspect frame}"
     {:ok, stream} = Ankh.Stream.send_frame(stream, frame)
     Logger.debug "STREAM #{id} IS #{inspect stream}"
 
-    frame = case frame do
-      %Frame{type: :headers, payload: %{header_block_fragment: headers}
-      = payload} ->
-        hbf = HPack.encode(headers, hpack)
-        %{frame | payload: %{payload | header_block_fragment: hbf}}
-      %Frame{type: :push_promise, payload: %{header_block_fragment: headers}
-      = payload} ->
-        hbf = HPack.encode(headers, hpack)
-        %{frame | payload: %{payload | header_block_fragment: hbf}}
-      _ ->
-        frame
-    end
+    {state, stream, frame} = frame
+    |> encode_frame(stream, state)
 
     case :ssl.send(socket, Encoder.encode!(frame, [])) do
       :ok ->
@@ -167,6 +157,27 @@ receiver, else reassemble and send complete responses.
       error ->
         :ssl.format_error(error)
     end
+  end
+
+  def encode_frame(%Frame{type: :headers, payload:
+  %{header_block_fragment: headers} = payload} = frame,
+  stream,
+  %{send_ctx: hpack} = state) do
+    hbf = HPack.encode(headers, hpack)
+    {state, stream, %{frame | payload: %{payload | header_block_fragment: hbf}}}
+  end
+
+  def encode_frame(%Frame{type: :push_promise, payload:
+  %{header_block_fragment: headers} = payload} = frame,
+  stream,
+  %{send_ctx: hpack} = state) do
+    hbf = HPack.encode(headers, hpack)
+    {state, %{stream| state: :reserved_local},
+    %{frame | payload: %{payload | header_block_fragment: hbf}}}
+  end
+
+  def encode_frame(frame, stream, state) do
+    {state, stream, frame}
   end
 
   defp receive_frame(state, %Frame{stream_id: 0, type: :ping, length: 8,
@@ -337,7 +348,7 @@ receiver, else reassemble and send complete responses.
     Process.send(target, {:ankh, :push_promise, id, headers}, [])
     streams = streams
     |> Map.put(id, %{stream | hbf: <<>>})
-    |> Map.put(promised_id, %{Stream.new(promised_id) | state: :reserved})
+    |> Map.put(promised_id, Stream.new(promised_id, :reserved_remote))
     {%{state | streams: streams}, frame}
   end
 
@@ -353,7 +364,7 @@ receiver, else reassemble and send complete responses.
         %{promised_id: promised_id} = stream
         streams
         |> Map.put(id, %{stream | hbf: <<>>})
-        |> Map.put(promised_id, %{Stream.new(promised_id) | state: :reserved})
+        |> Map.put(promised_id, Stream.new(promised_id, :reserved_remote))
       _ ->
         Map.put(streams, id, %{stream | hbf: <<>>})
     end
