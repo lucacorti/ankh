@@ -159,7 +159,7 @@ receiver, else reassemble and send complete responses.
     end
   end
 
-  def encode_frame(%Frame{type: :headers, payload:
+  defp encode_frame(%Frame{type: :headers, payload:
   %{header_block_fragment: headers} = payload} = frame,
   stream,
   %{send_ctx: hpack} = state) do
@@ -167,7 +167,7 @@ receiver, else reassemble and send complete responses.
     {state, stream, %{frame | payload: %{payload | header_block_fragment: hbf}}}
   end
 
-  def encode_frame(%Frame{type: :push_promise, payload:
+  defp encode_frame(%Frame{type: :push_promise, payload:
   %{header_block_fragment: headers} = payload} = frame,
   stream,
   %{send_ctx: hpack} = state) do
@@ -176,7 +176,7 @@ receiver, else reassemble and send complete responses.
     %{frame | payload: %{payload | header_block_fragment: hbf}}}
   end
 
-  def encode_frame(frame, stream, state) do
+  defp encode_frame(frame, stream, state) do
     {state, stream, frame}
   end
 
