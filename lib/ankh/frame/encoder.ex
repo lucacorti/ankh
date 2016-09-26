@@ -17,7 +17,7 @@ defprotocol Ankh.Frame.Encoder do
     - binary: data to decode into the struct
     - options: options to pass as context to the decoding function
   """
-  @spec decode!(t, binary, Any) :: Encoder.t
+  @spec decode!(t, binary, Any) :: t
   def decode!(struct, binary, options)
 
   @doc """
