@@ -12,8 +12,9 @@ defmodule Ankh.Stream do
   - hbf: HBF accumulator, for reassembly
   - data: DATA accumulator, for reassembly
   """
-  @type t :: %__MODULE__{id: Integer.t, state: atom,
-  hbf_type: :headers | :push_promise, hbf: binary, data: binary,
+  @type t :: %__MODULE__{id: Integer.t, state: :idle | :open | :closed |
+  :half_closed_local | :half_closed_remote | :reserved_remote | :reserved_local
+  | atom, hbf_type: :headers | :push_promise, hbf: binary, data: binary,
   window_size: Integer.t}
   defstruct [id: 0, state: :idle, hbf_type: :headers, hbf: <<>>, data: <<>>,
   window_size: 65_535]
@@ -23,15 +24,16 @@ defmodule Ankh.Stream do
 
   Parameters:
     - id: stream id
+    - state: stream state
   """
-  @spec new(Integer.t) :: t
-  def new(id), do: %__MODULE__{id: id}
+  @spec new(Integer.t, :idle | :open | :closed | :half_closed_local |
+  :half_closed_remote | :reserved_remote | :reserved_local) :: t
+  def new(id, state), do: %__MODULE__{id: id, state: state}
 
   @doc """
   Process the reception of a frame through the Stream state machine
   """
   @spec received_frame(t, Frame.t) :: t
-
   def received_frame(%__MODULE__{id: id}, %Frame{stream_id: stream_id})
   when stream_id !== id do
     raise "FATAL on stream #{id}: this frame has stream id #{stream_id}!"
@@ -173,7 +175,6 @@ defmodule Ankh.Stream do
   Process sending a frame through the Stream state machine
   """
   @spec send_frame(t, Frame.t) :: t
-
   def send_frame(%__MODULE__{id: id}, %Frame{stream_id: stream_id})
   when stream_id !== id do
     raise "FATAL on stream #{id}: this frame was sent on #{stream_id}!"

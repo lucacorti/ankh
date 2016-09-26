@@ -6,7 +6,10 @@ defmodule Ankh.Frame.Error do
   @typedoc """
   - code: error code atom
   """
-  @type t :: %__MODULE__{code: atom}
+  @type t :: %__MODULE__{code: :no_error | :protocol_error | :internal_error |
+  :flow_control_error | :settings_timeout | :stream_closed | :frame_size_error |
+  :refused_stream | :cancel | :compression_error | :connect_error |
+  :enache_your_calm | :inadequate_security | :http_1_1_required | atom}
   defstruct [code: :no_error]
 
   @doc """
