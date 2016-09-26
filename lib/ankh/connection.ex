@@ -145,7 +145,7 @@ receiver, else reassemble and send complete responses.
   %Frame{stream_id: id} = frame) do
     stream = Map.get(streams, id, Stream.new(id, :idle))
     Logger.debug "STREAM #{id} SEND #{inspect frame}"
-    {:ok, stream} = Ankh.Stream.send_frame(stream, frame)
+    {:ok, stream} = Stream.send_frame(stream, frame)
     Logger.debug "STREAM #{id} IS #{inspect stream}"
 
     {state, stream, frame} = frame
@@ -270,7 +270,7 @@ receiver, else reassemble and send complete responses.
   do
     stream = Map.get(streams, id)
     Logger.debug "STREAM #{id} RECEIVED #{inspect frame}"
-    {:ok, stream} = Ankh.Stream.received_frame(stream, frame)
+    {:ok, stream} = Stream.received_frame(stream, frame)
     Logger.debug "STREAM #{id} IS #{inspect stream}"
     %{state | streams: Map.put(streams, id, stream), last_stream_id: id}
   end
