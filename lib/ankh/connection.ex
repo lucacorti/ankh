@@ -118,7 +118,10 @@ receiver, else reassemble and send complete responses.
     |> parse_frames(state)
 
     state = frames
-    |> Enum.reduce(state, fn frame, state -> receive_frame(state, frame) end)
+    |> Enum.reduce(state, fn
+      %{stream_id: id} = frame, %{streams: streams} = state ->
+        receive_frame(state, Map.get(streams, id), frame)
+    end)
 
     {:noreply, state}
   end
@@ -159,6 +162,27 @@ receiver, else reassemble and send complete responses.
     end
   end
 
+  defp parse_frames(<<payload_length::24, _::binary>> = data, state)
+  when @frame_header_size + payload_length > byte_size(data) do
+    {%{state | buffer: data}, []}
+  end
+
+  defp parse_frames(<<payload_length::24, _::binary>> = data, state) do
+    frame_size = @frame_header_size + payload_length
+    frame_data = binary_part(data, 0, frame_size)
+    rest_size = byte_size(data) - frame_size
+    rest_data = binary_part(data, frame_size, rest_size)
+
+    {state, frame} = %Frame{}
+    |> Encoder.decode!(frame_data, [])
+    |> decode_frame(state)
+
+    {state, frames} = parse_frames(rest_data, state)
+    {state, [frame | frames]}
+  end
+
+  defp parse_frames(_, state), do: {%{state | buffer: <<>>}, []}
+
   defp encode_frame(%Frame{type: :headers, payload:
   %{header_block_fragment: headers} = payload} = frame,
   stream,
@@ -180,8 +204,8 @@ receiver, else reassemble and send complete responses.
     {state, stream, frame}
   end
 
-  defp receive_frame(state, %Frame{stream_id: 0, type: :ping, length: 8,
-  flags: %{ack: false}, payload: %{}} = frame) do
+  defp receive_frame(state, _stream,
+  %Frame{stream_id: 0, type: :ping, length: 8, flags: %{ack: false}} = frame) do
     Logger.debug "STREAM 0 RECEIVED #{inspect frame}"
     {:ok, state} = send_frame(state, %Frame{frame |
       flags: %Ping.Flags{ack: true}
@@ -189,8 +213,8 @@ receiver, else reassemble and send complete responses.
     state
   end
 
-  defp receive_frame(%{last_stream_id: id} = state, %Frame{stream_id: 0,
-  type: :ping,flags: %{ack: false}} = frame) do
+  defp receive_frame(%{last_stream_id: id} = state, _stream,
+  %Frame{stream_id: 0, type: :ping,flags: %{ack: false}} = frame) do
     Logger.debug "STREAM 0 RECEIVED #{inspect frame}"
     {:ok, state} = send_frame(state, %Frame{
       type: :goaway, payload: %GoAway.Payload{
@@ -200,7 +224,7 @@ receiver, else reassemble and send complete responses.
     state
   end
 
-  defp receive_frame(%{last_stream_id: id} = state,
+  defp receive_frame(%{last_stream_id: id} = state, _stream,
   %Frame{length: 8, type: :ping, flags: %{ack: false}} = frame) do
     Logger.debug "STREAM 0 RECEIVED #{inspect frame}"
     {:ok, state} = send_frame(state, %Frame{
@@ -211,7 +235,7 @@ receiver, else reassemble and send complete responses.
     state
   end
 
-  defp receive_frame(%{send_ctx: table} = state,
+  defp receive_frame(%{send_ctx: table} = state, _stream,
   %Frame{stream_id: 0, type: :settings, flags: %{ack: false},
   payload: %{header_table_size: table_size} = payload} = frame)
   do
@@ -223,13 +247,14 @@ receiver, else reassemble and send complete responses.
     %{state | send_settings: payload}
   end
 
-  defp receive_frame(state, %Frame{stream_id: 0, type: :settings,
-  flags: %{ack: true}, length: 0} = frame) do
+  defp receive_frame(state, _stream,
+  %Frame{stream_id: 0, type: :settings, flags: %{ack: true}, length: 0} = frame)
+  do
     Logger.debug "STREAM 0 RECEIVED #{inspect frame}"
     state
   end
 
-  defp receive_frame(state, %Frame{stream_id: id, type: :window_update,
+  defp receive_frame(state, _stream, %Frame{stream_id: id, type: :window_update,
   payload: %{window_size_increment: increment}})
   when not is_integer(increment) or increment <= 0 do
     Logger.debug "STREAM #{id} ERROR window_size_increment #{increment}"
@@ -241,60 +266,37 @@ receiver, else reassemble and send complete responses.
     state
   end
 
-  defp receive_frame(state, %Frame{stream_id: 0, type: :window_update,
+  defp receive_frame(state, _stream, %Frame{stream_id: 0, type: :window_update,
   payload: %{window_size_increment: increment}}) do
     Logger.debug "STREAM 0 window_size_increment #{increment}"
     %{state | window_size: state.window_size + increment}
   end
 
-  defp receive_frame(state, %Frame{stream_id: id, type: :window_update,
-  payload: %{window_size_increment: increment}}) do
+  defp receive_frame(%{streams: streams} = state, stream, %Frame{stream_id: id,
+  type: :window_update, payload: %{window_size_increment: increment}}) do
     Logger.debug "STREAM #{id} window_size_increment #{increment}"
-    stream = Map.get(state.streams, id)
     stream = %{stream | window_size: stream.window_size + increment}
-    %{state | streams: Map.put(state.streams, id, stream)}
+    %{state | streams: Map.put(streams, id, stream)}
   end
 
-  defp receive_frame(state, %Frame{stream_id: 0, type: :goaway,
+  defp receive_frame(state, _stream, %Frame{stream_id: 0, type: :goaway,
   payload: %{error_code: %{code: code}}} = frame) do
     Logger.debug "STREAM 0 RECEIVED FRAME #{inspect frame}"
     {:stop, code, state}
   end
 
-  defp receive_frame(state, %Frame{stream_id: 0} = frame) do
+  defp receive_frame(state, _stream, %Frame{stream_id: 0} = frame) do
     Logger.error "STREAM 0 RECEIVED UNHANDLED FRAME #{inspect frame}"
     state
   end
 
-  defp receive_frame(%{streams: streams} = state, %Frame{stream_id: id} = frame)
-  do
-    stream = Map.get(streams, id)
+  defp receive_frame(%{streams: streams} = state, stream,
+  %Frame{stream_id: id} = frame) do
     Logger.debug "STREAM #{id} RECEIVED #{inspect frame}"
     {:ok, stream} = Stream.received_frame(stream, frame)
     Logger.debug "STREAM #{id} IS #{inspect stream}"
     %{state | streams: Map.put(streams, id, stream), last_stream_id: id}
   end
-
-  defp parse_frames(<<payload_length::24, _::binary>> = data, state)
-  when @frame_header_size + payload_length > byte_size(data) do
-    {%{state | buffer: data}, []}
-  end
-
-  defp parse_frames(<<payload_length::24, _::binary>> = data, state) do
-    frame_size = @frame_header_size + payload_length
-    frame_data = binary_part(data, 0, frame_size)
-    rest_size = byte_size(data) - frame_size
-    rest_data = binary_part(data, frame_size, rest_size)
-
-    {state, frame} = %Frame{}
-    |> Encoder.decode!(frame_data, [])
-    |> decode_frame(state)
-
-    {state, frames} = parse_frames(rest_data, state)
-    {state, [frame | frames]}
-  end
-
-  defp parse_frames(_, state), do: {%{state | buffer: <<>>}, []}
 
   defp decode_frame(%Frame{stream_id: 0} = frame, state), do: {state, frame}
 
