@@ -30,16 +30,16 @@ defmodule Ankh.Frame do
 
       def decode!(frame, <<0::24, @type_code::8, flags::binary-size(1),
       0x0::1, id::31>>, options) do
-        flags = Encoder.decode!(%unquote(flags){}, flags, options)
+        flags = Encoder.decode!(unquote(flags), flags, options)
         %{frame | stream_id: id, flags: flags}
       end
 
       def decode!(frame, <<length::24, @type_code::8, flags::binary-size(1),
       0x0::1, id::31, payload::binary>>, options) do
-        flags = Encoder.decode!(%unquote(flags){}, flags, options)
+        flags = Encoder.decode!(unquote(flags), flags, options)
         payload_opts = [flags: flags] ++ options
         %{frame | length: length stream_id: id, flags: flags,
-        payload: Encoder.decode!(%unquote(payload){}, payload, payload_opts)}
+        payload: Encoder.decode!(unquote(payload), payload, payload_opts)}
       end
 
       def encode!(%{flags: flags, stream_id: id, payload: nil}, options) do
