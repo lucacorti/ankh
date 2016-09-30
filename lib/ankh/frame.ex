@@ -61,15 +61,4 @@ defmodule Ankh.Frame do
       end
     end
   end
-
-  defp struct_for_type(0x0), do: %Data{}
-  defp struct_for_type(0x1), do: %Headers{}
-  defp struct_for_type(0x2), do: %Priority{}
-  defp struct_for_type(0x3), do: %RstStream{}
-  defp struct_for_type(0x4), do: %Settings{}
-  defp struct_for_type(0x5), do: %PushPromise{}
-  defp struct_for_type(0x6), do: %Ping{}
-  defp struct_for_type(0x7), do: %Goaway{}
-  defp struct_for_type(0x8), do: %WindowUpdate{}
-  defp struct_for_type(0x9), do: %Continuation{}
 end
