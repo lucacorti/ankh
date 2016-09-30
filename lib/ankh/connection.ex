@@ -10,7 +10,8 @@ defmodule Ankh.Connection do
   use GenServer
 
   alias Ankh.{Frame, Stream}
-  alias Ankh.Frame.{Encoder, Error, GoAway, Ping, Settings}
+  alias Frame.{Encoder, Continuation, Data, Goaway, Headers, Ping, Priority,
+  PushPromise, RstStream, Settings, WindowUpdate}
 
   require Logger
 
@@ -64,7 +65,7 @@ receiver, else reassemble and send complete responses.
     - frame: `Ankh.Frame` structure
   """
   @spec send(pid() | :atom, Frame.t) :: :ok | {:error, atom}
-  def send(connection, %Frame{} = frame) do
+  def send(connection, frame) do
     GenServer.call(connection, {:send, frame})
   end
 
@@ -86,7 +87,7 @@ receiver, else reassemble and send complete responses.
     with {:ok, socket} <- :ssl.connect(hostname, port, ssl_options),
          :ok <- :ssl.send(socket, @preface) do
       state = %{state | socket: socket}
-      handle_call({:send, %Frame{type: :settings, stream_id: 0,
+      handle_call({:send, %Settings{stream_id: 0,
       flags: %Settings.Flags{}, payload: %Settings.Payload{}}}, from, state)
       handle_call({:send, frame}, from, state)
     else
@@ -104,11 +105,10 @@ receiver, else reassemble and send complete responses.
     end
   end
 
-  def handle_call({:close}, _from, %{socket: socket,
-  last_stream_id: last_stream_id} = state) do
-    __MODULE__.send(self(), %Frame{stream_id: 0, type: :goaway,
-    payload: %GoAway.Payload{last_stream_id: last_stream_id,
-    error_code: %Error{code: :no_error}}})
+  def handle_call({:close}, _from, %{socket: socket, last_stream_id: lsid}
+  = state) do
+    __MODULE__.send(self(), %Goaway{stream_id: 0,
+    payload: %Goaway.Payload{last_stream_id: lsid, error_code: :no_error}})
     :ok = :ssl.close(socket)
     {:stop, :closed, state}
   end
@@ -134,7 +134,7 @@ receiver, else reassemble and send complete responses.
     {:stop, reason, state}
   end
 
-  defp send_frame(%{socket: socket} = state, %Frame{stream_id: 0} = frame) do
+  defp send_frame(%{socket: socket} = state, %{stream_id: 0} = frame) do
     Logger.debug "STREAM 0 SEND #{inspect frame}"
     case :ssl.send(socket, Encoder.encode!(frame, [])) do
       :ok ->
@@ -145,7 +145,7 @@ receiver, else reassemble and send complete responses.
   end
 
   defp send_frame(%{socket: socket, streams: streams} = state,
-  %Frame{stream_id: id} = frame) do
+  %{stream_id: id} = frame) do
     stream = Map.get(streams, id, Stream.new(id, :idle))
     Logger.debug "STREAM #{id} SEND #{inspect frame}"
     {:ok, stream} = Stream.send_frame(stream, frame)
@@ -167,13 +167,13 @@ receiver, else reassemble and send complete responses.
     {%{state | buffer: data}, []}
   end
 
-  defp parse_frames(<<payload_length::24, _::binary>> = data, state) do
+  defp parse_frames(<<payload_length::24, type::8, _::binary>> = data, state) do
     frame_size = @frame_header_size + payload_length
     frame_data = binary_part(data, 0, frame_size)
     rest_size = byte_size(data) - frame_size
     rest_data = binary_part(data, frame_size, rest_size)
 
-    {state, frame} = %Frame{}
+    {state, frame} = Frame.struct_for_type(type)
     |> Encoder.decode!(frame_data, [])
     |> decode_frame(state)
 
@@ -183,7 +183,7 @@ receiver, else reassemble and send complete responses.
 
   defp parse_frames(_, state), do: {%{state | buffer: <<>>}, []}
 
-  defp encode_frame(%Frame{type: :headers, payload:
+  defp encode_frame(%Headers{payload:
   %{header_block_fragment: headers} = payload} = frame,
   stream,
   %{send_ctx: hpack} = state) do
@@ -191,7 +191,7 @@ receiver, else reassemble and send complete responses.
     {state, stream, %{frame | payload: %{payload | header_block_fragment: hbf}}}
   end
 
-  defp encode_frame(%Frame{type: :push_promise, payload:
+  defp encode_frame(%PushPromise{payload:
   %{header_block_fragment: headers} = payload} = frame,
   stream,
   %{send_ctx: hpack} = state) do
@@ -205,42 +205,41 @@ receiver, else reassemble and send complete responses.
   end
 
   defp receive_frame(state, _stream,
-  %Frame{stream_id: 0, type: :ping, length: 8, flags: %{ack: false}} = frame) do
+  %Ping{stream_id: 0, length: 8, flags: %{ack: false}} = frame) do
     Logger.debug "STREAM 0 RECEIVED #{inspect frame}"
-    {:ok, state} = send_frame(state, %Frame{frame |
+    {:ok, state} = send_frame(state, %Ping{frame |
       flags: %Ping.Flags{ack: true}
     })
     state
   end
 
   defp receive_frame(%{last_stream_id: id} = state, _stream,
-  %Frame{stream_id: 0, type: :ping,flags: %{ack: false}} = frame) do
+  %Ping{stream_id: 0,flags: %{ack: false}} = frame) do
     Logger.debug "STREAM 0 RECEIVED #{inspect frame}"
-    {:ok, state} = send_frame(state, %Frame{
-      type: :goaway, payload: %GoAway.Payload{
-        last_stream_id: id, error_code: %Error{code: :frame_size_error}
+    {:ok, state} = send_frame(state, %Goaway{
+      payload: %Goaway.Payload{
+        last_stream_id: id, error_code: :frame_size_error
       }
     })
     state
   end
 
   defp receive_frame(%{last_stream_id: id} = state, _stream,
-  %Frame{length: 8, type: :ping, flags: %{ack: false}} = frame) do
+  %Ping{length: 8, flags: %{ack: false}} = frame) do
     Logger.debug "STREAM 0 RECEIVED #{inspect frame}"
-    {:ok, state} = send_frame(state, %Frame{
-      type: :goaway, payload: %GoAway.Payload{
-        last_stream_id: id, error_code: %Error{code: :protocol_error}
+    {:ok, state} = send_frame(state, %Goaway{payload: %Goaway.Payload{
+        last_stream_id: id, error_code: :protocol_error
       }
     })
     state
   end
 
   defp receive_frame(%{send_ctx: table} = state, _stream,
-  %Frame{stream_id: 0, type: :settings, flags: %{ack: false},
+  %Settings{stream_id: 0, flags: %{ack: false},
   payload: %{header_table_size: table_size} = payload} = frame)
   do
     Logger.debug "STREAM 0 RECEIVED #{inspect frame}"
-    {:ok, state} = send_frame(state, %Frame{frame|
+    {:ok, state} = send_frame(state, %Settings{frame|
       flags: %Settings.Flags{ack: true}, payload: nil
     })
     :ok = HPack.Table.resize(table_size, table)
@@ -248,71 +247,69 @@ receiver, else reassemble and send complete responses.
   end
 
   defp receive_frame(state, _stream,
-  %Frame{stream_id: 0, type: :settings, flags: %{ack: true}, length: 0} = frame)
+  %Settings{stream_id: 0, flags: %{ack: true}, length: 0} = frame)
   do
     Logger.debug "STREAM 0 RECEIVED #{inspect frame}"
     state
   end
 
-  defp receive_frame(state, _stream, %Frame{stream_id: id, type: :window_update,
+  defp receive_frame(state, _stream, %WindowUpdate{stream_id: id,
   payload: %{window_size_increment: increment}})
   when not is_integer(increment) or increment <= 0 do
     Logger.debug "STREAM #{id} ERROR window_size_increment #{increment}"
-    {:ok, state} = send_frame(state, %Frame{
-      type: :goaway, payload: %GoAway.Payload{
-        last_stream_id: id, error_code: %Error{code: :protocol_error}
+    {:ok, state} = send_frame(state, %Goaway{payload: %Goaway.Payload{
+        last_stream_id: id, error_code: :protocol_error
       }
     })
     state
   end
 
-  defp receive_frame(state, _stream, %Frame{stream_id: 0, type: :window_update,
+  defp receive_frame(state, _stream, %WindowUpdate{stream_id: 0,
   payload: %{window_size_increment: increment}}) do
     Logger.debug "STREAM 0 window_size_increment #{increment}"
     %{state | window_size: state.window_size + increment}
   end
 
-  defp receive_frame(%{streams: streams} = state, stream, %Frame{stream_id: id,
-  type: :window_update, payload: %{window_size_increment: increment}}) do
+  defp receive_frame(%{streams: streams} = state, stream, %WindowUpdate{
+  stream_id: id, payload: %{window_size_increment: increment}}) do
     Logger.debug "STREAM #{id} window_size_increment #{increment}"
     stream = %{stream | window_size: stream.window_size + increment}
     %{state | streams: Map.put(streams, id, stream)}
   end
 
-  defp receive_frame(state, _stream, %Frame{stream_id: 0, type: :goaway,
+  defp receive_frame(state, _stream, %Goaway{stream_id: 0,
   payload: %{error_code: %{code: code}}} = frame) do
     Logger.debug "STREAM 0 RECEIVED FRAME #{inspect frame}"
     {:stop, code, state}
   end
 
-  defp receive_frame(state, _stream, %Frame{stream_id: 0} = frame) do
+  defp receive_frame(state, _stream, %{stream_id: 0} = frame) do
     Logger.error "STREAM 0 RECEIVED UNHANDLED FRAME #{inspect frame}"
     state
   end
 
   defp receive_frame(%{streams: streams} = state, stream,
-  %Frame{stream_id: id} = frame) do
+  %{stream_id: id} = frame) do
     Logger.debug "STREAM #{id} RECEIVED #{inspect frame}"
     {:ok, stream} = Stream.received_frame(stream, frame)
     Logger.debug "STREAM #{id} IS #{inspect stream}"
     %{state | streams: Map.put(streams, id, stream), last_stream_id: id}
   end
 
-  defp decode_frame(%Frame{stream_id: 0} = frame, state), do: {state, frame}
+  defp decode_frame(%{stream_id: 0} = frame, state), do: {state, frame}
 
-  defp decode_frame(%Frame{stream_id: id, type: :headers,
-  flags: %{end_headers: false}, payload: %{header_block_fragment: hbf}} = frame,
-  %{streams: streams} = state) do
+  defp decode_frame(%Headers{stream_id: id, flags: %{end_headers: false},
+  payload: %{header_block_fragment: hbf}} = frame, %{streams: streams} = state)
+  do
     Logger.debug("STREAM #{id} RECEIVED PARTIAL HBF #{inspect hbf}")
     stream = Map.get(streams, id)
     stream = %{stream | hbf: stream.hbf <> hbf}
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
 
-  defp decode_frame(%Frame{stream_id: id, type: :push_promise,
-  flags: %{end_headers: false}, payload: %{promised_stream_id: promised_id,
-  header_block_fragment: hbf}} = frame,
-  %{streams: streams} = state) do
+  defp decode_frame(%PushPromise{stream_id: id, flags: %{end_headers: false},
+  payload: %{promised_stream_id: promised_id,
+  header_block_fragment: hbf}} = frame, %{streams: streams} = state) do
     Logger.debug("STREAM #{id} RECEIVED PARTIAL HBF #{inspect hbf}")
     stream = Map.get(streams, id)
 
@@ -321,17 +318,17 @@ receiver, else reassemble and send complete responses.
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
 
-  defp decode_frame(%Frame{stream_id: id, type: :continuation,
-  flags: %{end_headers: false}, payload: %{header_block_fragment: hbf}} = frame,
-  %{streams: streams} = state) do
+  defp decode_frame(%Continuation{stream_id: id, flags: %{end_headers: false},
+  payload: %{header_block_fragment: hbf}} = frame, %{streams: streams} = state)
+  do
     Logger.debug("STREAM #{id} RECEIVED PARTIAL HBF #{inspect hbf}")
     stream = Map.get(streams, id)
     stream = %{stream | hbf: stream.hbf <> hbf}
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
 
-  defp decode_frame(%Frame{stream_id: id, type: :headers,
-  flags: %{end_headers: true}, payload: %{header_block_fragment: hbf}} = frame,
+  defp decode_frame(%Headers{stream_id: id, flags: %{end_headers: true},
+  payload: %{header_block_fragment: hbf}} = frame,
   %{streams: streams, recv_ctx: table, target: target} = state) do
     stream = Map.get(streams, id)
     headers = HPack.decode(stream.hbf <> hbf, table)
@@ -340,8 +337,8 @@ receiver, else reassemble and send complete responses.
     {%{state | streams: Map.put(streams, id, %{stream | hbf: <<>>})}, frame}
   end
 
-  defp decode_frame(%Frame{stream_id: id, type: :push_promise,
-  flags: %{end_headers: true}, payload: %{promised_stream_id: promised_id,
+  defp decode_frame(%PushPromise{stream_id: id, flags: %{end_headers: true},
+  payload: %{promised_stream_id: promised_id,
   header_block_fragment: hbf}} = frame,
   %{streams: streams, recv_ctx: table, target: target} = state) do
     stream = Map.get(streams, id)
@@ -354,8 +351,8 @@ receiver, else reassemble and send complete responses.
     {%{state | streams: streams}, frame}
   end
 
-  defp decode_frame(%Frame{stream_id: id, type: :continuation,
-  flags: %{end_headers: true}, payload: %{header_block_fragment: hbf}} = frame,
+  defp decode_frame(%Continuation{stream_id: id, flags: %{end_headers: true},
+  payload: %{header_block_fragment: hbf}} = frame,
   %{streams: streams, recv_ctx: table, target: target} = state) do
     stream = Map.get(streams, id)
     headers = HPack.decode(stream.hbf <> hbf, table)
@@ -373,8 +370,8 @@ receiver, else reassemble and send complete responses.
     {%{state | streams: streams}, frame}
   end
 
-  defp decode_frame(%Frame{stream_id: id, type: :data,
-  flags: %{end_stream: false}, payload: %{data: data}} = frame,
+  defp decode_frame(%Data{stream_id: id, flags: %{end_stream: false},
+  payload: %{data: data}} = frame,
   %{streams: streams, target: target, mode: mode} = state) do
     stream = Map.get(streams, id)
     stream = %{stream | data: stream.data <> data}
@@ -387,8 +384,8 @@ receiver, else reassemble and send complete responses.
     {%{state | streams: Map.put(streams, id, stream)}, frame}
   end
 
-  defp decode_frame(%Frame{stream_id: id, type: :data,
-  flags: %{end_stream: true}, payload: %{data: data}} = frame,
+  defp decode_frame(%Data{stream_id: id, flags: %{end_stream: true},
+  payload: %{data: data}} = frame,
   %{streams: streams, target: target, mode: mode} = state) do
     stream = Map.get(streams, id)
     data = stream.data <> data

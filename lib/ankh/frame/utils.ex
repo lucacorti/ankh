@@ -1,4 +1,4 @@
-defmodule Ankh.Frame.Encoder.Utils do
+defmodule Ankh.Frame.Utils do
   @moduledoc """
   Utility functions for encoding/decoding values
   """
