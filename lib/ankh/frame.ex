@@ -5,16 +5,20 @@ defmodule Ankh.Frame do
   alias Ankh.Frame.Encoder
 
   @typedoc """
+  HTTP/2 Frame types
+  """
+  @type frame :: :data | :headers | :priority | :rst_stream | :settings |
+  :push_primise | :ping | :goaway | :window_update | :continuation | atom
+
+  @typedoc """
   - length: payload length in bytes
   - type: frame type
-  - flags: `Ankh.Frame.Encoder` structure for flags
+  - flags: `Ankh.Frame.Encoder` conforming structure
   - stream_id: Stream ID of the frame
-  - payload:   - flags: `Ankh.Frame.Encoder` structure for the payload
+  - payload: `Ankh.Frame.Encoder` conforming
   """
-  @type t :: %__MODULE__{length: Integer.t, type: :data | :headers | :priority |
-  :rst_stream | :settings | :push_primise | :ping | :goaway | :window_update |
-  :continuation | atom, flags: Encoder.t, stream_id: Integer.t,
-  payload: Encoder.t}
+  @type t :: %__MODULE__{length: Integer.t, type: frame, stream_id: Integer.t,
+  flags: Encoder.t, payload: Encoder.t}
   defstruct [length: 0, type: nil, flags: nil, stream_id: 0, payload: nil]
 end
 
