@@ -28,17 +28,6 @@ defimpl Ankh.Frame.Encoder, for: Ankh.Frame do
 
   @reserved      0x0
 
-  @data          0x0
-  @headers       0x1
-  @priority      0x2
-  @rst_stream    0x3
-  @settings      0x4
-  @push_promise  0x5
-  @ping          0x6
-  @goaway        0x7
-  @window_update 0x8
-  @continuation  0x9
-
   def decode!(frame, <<0::24, type::8, flags::binary-size(1), 0x0::1, id::31>>,
   options) do
     type = decode_type!(type)
@@ -77,6 +66,17 @@ defimpl Ankh.Frame.Encoder, for: Ankh.Frame do
     flags = Encoder.encode!(flags, options)
     <<length::24, type::8>> <> flags <> <<@reserved::1, id::31>> <> payload
   end
+
+  @data          0x0
+  @headers       0x1
+  @priority      0x2
+  @rst_stream    0x3
+  @settings      0x4
+  @push_promise  0x5
+  @ping          0x6
+  @goaway        0x7
+  @window_update 0x8
+  @continuation  0x9
 
   defp encode_type!(:data), do:               @data
   defp encode_type!(:headers), do:            @headers
