@@ -6,15 +6,20 @@ defmodule Ankh.Stream do
   alias Ankh.Frame
 
   @typedoc """
+  HTTP/2 Stream states
+  """
+  @type state :: :idle | :open | :closed | :half_closed_local |
+  :half_closed_remote | :reserved_remote | :reserved_local | atom
+
+  @typedoc """
   - id: stream id
   - state: stream state
   - hbf_type: type of HBF being accumulated
   - hbf: HBF accumulator, for reassembly
   - data: DATA accumulator, for reassembly
   """
-  @type t :: %__MODULE__{id: Integer.t, state: :idle | :open | :closed |
-  :half_closed_local | :half_closed_remote | :reserved_remote | :reserved_local
-  | atom, hbf_type: :headers | :push_promise, hbf: binary, data: binary,
+  @type t :: %__MODULE__{id: Integer.t, state: state, hbf_type: :headers
+  | :push_promise, hbf: binary, data: binary,
   window_size: Integer.t}
   defstruct [id: 0, state: :idle, hbf_type: :headers, hbf: <<>>, data: <<>>,
   window_size: 65_535]
@@ -26,8 +31,7 @@ defmodule Ankh.Stream do
     - id: stream id
     - state: stream state
   """
-  @spec new(Integer.t, :idle | :open | :closed | :half_closed_local |
-  :half_closed_remote | :reserved_remote | :reserved_local) :: t
+  @spec new(Integer.t, state) :: t
   def new(id, state), do: %__MODULE__{id: id, state: state}
 
   @doc """
