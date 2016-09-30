@@ -12,9 +12,7 @@ defmodule Ankh.Frame.Settings.Payload do
 end
 
 defimpl Ankh.Frame.Encoder, for: Ankh.Frame.Settings.Payload do
-  alias Ankh.Frame.Settings.Payload
-
-  import Ankh.Frame.Encoder.Utils
+  import Ankh.Frame.Utils
 
   @header_table_size      0x1
   @enable_push            0x2
@@ -29,7 +27,7 @@ defimpl Ankh.Frame.Encoder, for: Ankh.Frame.Settings.Payload do
     |> Enum.reduce(struct, fn {key, value}, acc -> Map.put(acc, key, value) end)
   end
 
-  def encode!(%Payload{header_table_size: hts, enable_push: ep,
+  def encode!(%{header_table_size: hts, enable_push: ep,
   max_concurrent_streams: mcs, initial_window_size: iws, max_frame_size: mfs,
   max_header_list_size: mhls}, _) do
     <<@header_table_size::16, hts::32,

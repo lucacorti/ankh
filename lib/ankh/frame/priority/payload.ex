@@ -9,11 +9,9 @@ defmodule Ankh.Frame.Priority.Payload do
 end
 
 defimpl Ankh.Frame.Encoder, for: Ankh.Frame.Priority.Payload do
-  alias Ankh.Frame.Priority.Payload
+  import Ankh.Frame.Utils
 
-  import Ankh.Frame.Encoder.Utils
-
-  def encode!(%Payload{exclusive: ex, stream_dependency: sd, weight: wh}, _) do
+  def encode!(%{exclusive: ex, stream_dependency: sd, weight: wh}, _) do
     <<bool_to_int!(ex)::1, sd::31, wh::8>>
   end
 
