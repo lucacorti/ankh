@@ -8,6 +8,17 @@ defmodule Ankh.Connection do
 
   After starting the connection, received frames are sent back to the caller,
   or the process specified in the `receiver` startup option, as messages.
+  Separate messages are sent for HEADERS, PUSH_PROMISE and DATA frames.
+
+  Headers are always reassembled and sent back in one message to the receiver.
+  For data frames, the `stream` startup otion toggles streaming mode:
+
+  If `true` (streaming mode) a `stream_data` msg is sent for each received DATA
+  frame, and it is the receiver responsibility to reassemble incoming data.
+
+  If `false` (full mode), DATA frames are accumulated until a complete response
+  is received and then the complete data is sent to the receiver as `data` msg.
+
   See typespecs below for message types and formats.
   """
 
