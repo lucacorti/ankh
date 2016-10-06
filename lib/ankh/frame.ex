@@ -14,7 +14,6 @@ defmodule Ankh.Frame do
 
     quote do
       alias Ankh.Frame.Encoder
-      require Logger
 
       @type_code unquote(type)
 
