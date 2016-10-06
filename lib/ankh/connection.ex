@@ -2,7 +2,7 @@ defmodule Ankh.Connection do
   @moduledoc """
   Genserver implementing HTTP/2 connection management
 
-  `Ankh.Connection` establishes the TLS underlying connection and provides
+  `Ankh.Connection` establishes the underlying TLS connection and provides
   connection and stream management, it also does frame (de)serialization and
   reassembly as needed.
 
