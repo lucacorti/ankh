@@ -7,7 +7,6 @@ defmodule Ankh.Frame do
   Frame struct
   """
   @type t :: struct
-
   defmacro __using__(type: type, flags: flags, payload: payload) do
     unless is_integer(type) do
       raise CompileError, "Frame type must be Integer.t"
@@ -15,6 +14,7 @@ defmodule Ankh.Frame do
 
     quote do
       alias Ankh.Frame.Encoder
+      require Logger
 
       @type_code unquote(type)
 
@@ -38,8 +38,8 @@ defmodule Ankh.Frame do
       0x0::1, id::31, payload::binary>>, options) do
         flags = Encoder.decode!(unquote(flags), flags, options)
         payload_opts = [flags: flags] ++ options
-        %{frame | length: length stream_id: id, flags: flags,
-        payload: Encoder.decode!(unquote(payload), payload, payload_opts)}
+        payload = Encoder.decode!(unquote(payload), payload, payload_opts)
+        %{frame | length: length, stream_id: id, flags: flags, payload: payload}
       end
 
       def encode!(%{flags: flags, stream_id: id, payload: nil}, options) do
