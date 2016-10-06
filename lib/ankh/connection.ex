@@ -5,6 +5,21 @@ defmodule Ankh.Connection do
   `Ankh.Connection` establishes the TLS underlying connection and provides
   connection and stream management, it also does frame (de)serialization and
   reassembly as needed.
+
+  After starting the connection, received frames are sent back to the caller,
+  or the process specified in the `receiver` startup option, as messages.
+  Separate messages are sent for HEADERS, PUSH_PROMISE and DATA frames.
+
+  Headers are always reassembled and sent back in one message to the receiver.
+  For data frames, the `stream` startup otion toggles streaming mode:
+
+  If `true` (streaming mode) a `stream_data` msg is sent for each received DATA
+  frame, and it is the receiver responsibility to reassemble incoming data.
+
+  If `false` (full mode), DATA frames are accumulated until a complete response
+  is received and then the complete data is sent to the receiver as `data` msg.
+
+  See typespecs below for message types and formats.
   """
 
   use GenServer
@@ -23,17 +38,51 @@ defmodule Ankh.Connection do
   @frame_header_size 9
   @max_stream_id 2_147_483_648
 
+  @typedoc """
+  Ankh DATA message (full mode)
+
+  `{:ankh, :data, stream_id, data}`
+  """
+  @type data_msg :: {:ankh, :data, Integer.t, binary}
+
+  @typedoc """
+  Ankh DATA frame (streaming mode)
+
+  `{:ankh, :stream_data, stream_id, data}`
+  """
+  @type streaming_data_msg :: {:ankh, :stream_data, Integer.t, binary}
+
+  @typedoc """
+  Ankh HEADERS message
+
+  `{:ankh, :headers, stream_id, headers}`
+  """
+  @type headers_msg :: {:ankh, :headers, Integer.t, Keyword.t}
+
+  @typedoc """
+  Ankh PUSH_PROMISE message
+
+  `{:ankh, :headers, stream_id, promised_stream_id, headers}`
+  """
+  @type push_promise_msg :: {:ankh, :push_promise, Integer.t, Integer.t, Keyword.t}
+
+  @typedoc """
+  Startup options:
+    - uri: at least scheme and authority must be present.
+    - receiver: pid of the process to send response messages to.
+    Messages are shipped to the calling process if nil.
+    - stream: if true, stream received data frames back to the
+    receiver, else reassemble and send complete responses.
+    - ssl_options: SSL connection options, for the Erlang `:ssl` module
+  """
+  @type options :: [uri: URI.t, receiver: pid | nil, stream: boolean,
+  ssl_options: Keyword.t]
+
   @doc """
   Start the connection process for the specified `URI`.
 
   Parameters:
-    - args
-      - uri: at least scheme and authority must be present.
-      - receiver: pid of the process to send response messages to.
-Messages are shipped to the calling process if nil.
-      - stream: if true, stream received data frames back to the
-receiver, else reassemble and send complete responses.
-      - ssl_options: SSL connection options, for the Erlang `:ssl` module
+    - args: startup options
     - options: GenServer startup options
   """
   @spec start_link([uri: URI, receiver: pid | nil, stream: boolean,
@@ -61,7 +110,7 @@ receiver, else reassemble and send complete responses.
   Sends a frame over the connection
 
   Parameters:
-    - connection: pid or global name for the `Ankh.Connection` process
+    - connection: pid or process name of the `Ankh.Connection` process
     - frame: `Ankh.Frame` structure
   """
   @spec send(pid() | :atom, Frame.t) :: :ok | {:error, atom}
@@ -75,10 +124,10 @@ receiver, else reassemble and send complete responses.
   Before closing the TLS connection a GOAWAY frame is sent to the peer.
 
   Parameters:
-    - pid: pid of the `Ankh.Connection` process
+    - connection: pid or process name of the `Ankh.Connection` process
   """
-  @spec close(pid()) :: :closed
-  def close(pid), do: GenServer.call(pid, {:close})
+  @spec close(pid() | :atom) :: :closed
+  def close(connection), do: GenServer.call(connection, {:close})
 
   def handle_call({:send, frame}, from, %{socket: nil, uri: %URI{host: host,
   port: port}, ssl_opts: ssl_opts} = state) do
@@ -344,7 +393,7 @@ receiver, else reassemble and send complete responses.
     stream = Map.get(streams, id)
     headers = HPack.decode(stream.hbf <> hbf, table)
     Logger.debug("STREAM #{id} RECEIVED HEADERS #{inspect headers}")
-    Process.send(target, {:ankh, :push_promise, id, headers}, [])
+    Process.send(target, {:ankh, :push_promise, id, promised_id, headers}, [])
     streams = streams
     |> Map.put(id, %{stream | hbf: <<>>})
     |> Map.put(promised_id, Stream.new(promised_id, :reserved_remote))
