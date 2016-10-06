@@ -22,6 +22,7 @@ defmodule Ankh.Stream do
   @type t :: %__MODULE__{id: Integer.t, state: stream_state,
   hbf_type: :headers | :push_promise, hbf: binary, data: binary,
   window_size: Integer.t}
+
   defstruct [id: 0, state: :idle, hbf_type: :headers, hbf: <<>>, data: <<>>,
   window_size: 65_535]
 
