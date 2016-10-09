@@ -1,6 +1,6 @@
 defmodule Ankh.Frame.PushPromise do
   @moduledoc """
-  HTTP/2 PUSH_PROMISE frame struct
+  PUSH_PROMISE frame struct
   """
 
   alias __MODULE__.{Flags, Payload}

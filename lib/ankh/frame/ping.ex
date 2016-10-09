@@ -1,6 +1,6 @@
 defmodule Ankh.Frame.Ping do
   @moduledoc """
-  HTTP/2 PING frame struct
+  PING frame struct
   """
 
   alias __MODULE__.{Flags, Payload}
