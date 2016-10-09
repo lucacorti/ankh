@@ -1,4 +1,8 @@
 defprotocol Ankh.Frame.Payload do
+  @moduledoc """
+  Protocol for enoding/decoding payload structs
+  """
+
   @fallback_to_any true
 
   @typedoc """

@@ -1,6 +1,6 @@
 defprotocol Ankh.Frame.Encoder do
   @moduledoc """
-  Protocol for encoding/decoding frame structs from/to binary.
+  Protocol for encoding/decoding frame structs
 
   Expects a struct with the format injected by the `Ankh.Frame.__using__` macro.
   """

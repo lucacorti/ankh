@@ -1,4 +1,8 @@
 defprotocol Ankh.Frame.Flags do
+  @moduledoc """
+  Protocol for enoding/decoding flags structs
+  """
+
   @fallback_to_any true
 
   @typedoc """

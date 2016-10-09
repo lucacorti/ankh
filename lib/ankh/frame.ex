@@ -6,6 +6,14 @@ defmodule Ankh.Frame do
   `Ankh.Frame.Encoder` protocol.
   """
 
+  @doc """
+  Injects the frame struct in a module.
+
+  - type: HTTP/2 frame type code
+  - flags: frame flags struct
+  - payload: frame payload struct
+  """
+  @spec __using__([type: Integer.t, flags: struct, payload: struct]) :: nil
   defmacro __using__(type: type, flags: flags, payload: payload) do
     unless is_integer(type) do
       raise CompileError, "Frame type must be Integer.t"
