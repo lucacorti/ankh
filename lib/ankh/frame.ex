@@ -10,8 +10,8 @@ defmodule Ankh.Frame do
   Injects the frame struct in a module.
 
   - type: HTTP/2 frame type code
-  - flags: frame flags struct
-  - payload: frame payload struct
+  - flags: frame flags struct or nil for no flags
+  - payload: frame payload struct or nil for no payload
   """
   @spec __using__([type: Integer.t, flags: struct, payload: struct]) :: nil
   defmacro __using__(type: type, flags: flags, payload: payload) do
