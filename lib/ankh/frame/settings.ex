@@ -1,6 +1,6 @@
 defmodule Ankh.Frame.Settings do
   @moduledoc """
-  HTTP/2 SETTINGS frame struct
+  SETTINGS frame struct
   """
 
   alias __MODULE__.{Flags, Payload}

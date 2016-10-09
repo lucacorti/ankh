@@ -2,7 +2,7 @@ defmodule Ankh.Frame do
   @moduledoc """
   HTTP/2 frame struct
 
-  The __using__ macro generates the frame struct needed by the
+  The __using__ macro injects the frame struct needed by the
   `Ankh.Frame.Encoder` protocol.
   """
 

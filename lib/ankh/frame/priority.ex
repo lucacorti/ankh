@@ -1,6 +1,6 @@
 defmodule Ankh.Frame.Priority do
   @moduledoc """
-  HTTP/2 PRIORITY frame struct
+  PRIORITY frame struct
   """
 
   alias __MODULE__.Payload

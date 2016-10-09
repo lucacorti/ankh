@@ -1,6 +1,6 @@
 defmodule Ankh.Frame.Continuation do
   @moduledoc """
-  HTTP/2 CONTINUATION frame struct
+  CONTINUATION frame struct
   """
 
   alias __MODULE__.{Flags, Payload}

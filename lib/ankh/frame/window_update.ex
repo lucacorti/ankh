@@ -1,6 +1,6 @@
 defmodule Ankh.Frame.WindowUpdate do
   @moduledoc """
-  HTTP/2 WINDOW_UPDATE frame struct
+  WINDOW_UPDATE frame struct
   """
 
   alias __MODULE__.Payload

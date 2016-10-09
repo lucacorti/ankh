@@ -1,6 +1,6 @@
 defmodule Ankh.Frame.RstStream do
   @moduledoc """
-  HTTP/2 RST_STREAM frame struct
+  RST_STREAM frame struct
   """
 
   alias __MODULE__.Payload

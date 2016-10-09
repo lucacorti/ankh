@@ -1,6 +1,6 @@
 defmodule Ankh.Frame.Data do
   @moduledoc """
-  HTTP/2 DATA frame struct
+  DATA frame struct
   """
 
   alias __MODULE__.{Flags, Payload}
