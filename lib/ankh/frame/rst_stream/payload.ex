@@ -7,7 +7,7 @@ defmodule Ankh.Frame.RstStream.Payload do
   defstruct [error_code: nil]
 end
 
-defimpl Ankh.Frame.Encoder, for: Ankh.Frame.RstStream.Payload do
+defimpl Ankh.Frame.Payload, for: Ankh.Frame.RstStream.Payload do
   alias Ankh.Frame.Error
 
   def decode!(struct, <<error::32>>, _) do

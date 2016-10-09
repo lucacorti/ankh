@@ -9,7 +9,7 @@ defmodule Ankh.Frame.Headers.Flags do
              priority: false]
 end
 
-defimpl Ankh.Frame.Encoder, for: Ankh.Frame.Headers.Flags  do
+defimpl Ankh.Frame.Flags, for: Ankh.Frame.Headers.Flags  do
   import Ankh.Frame.Utils
 
   def decode!(struct, <<_::2, pr::1, _::1, pa::1, eh::1, _::1, es::1>>, _) do

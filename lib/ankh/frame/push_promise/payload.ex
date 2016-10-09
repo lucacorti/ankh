@@ -8,7 +8,7 @@ defmodule Ankh.Frame.PushPromise.Payload do
   defstruct [pad_length: 0, promised_stream_id: 0, header_block_fragment: <<>>]
 end
 
-defimpl Ankh.Frame.Encoder, for: Ankh.Frame.PushPromise.Payload do
+defimpl Ankh.Frame.Payload, for: Ankh.Frame.PushPromise.Payload do
   import Ankh.Frame.Utils
 
   def encode!(%{pad_length: pl, promised_stream_id: psi,

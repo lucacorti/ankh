@@ -7,7 +7,7 @@ defmodule Ankh.Frame.WindowUpdate.Payload do
   defstruct [window_size_increment: 0]
 end
 
-defimpl Ankh.Frame.Encoder, for: Ankh.Frame.WindowUpdate.Payload do
+defimpl Ankh.Frame.Payload, for: Ankh.Frame.WindowUpdate.Payload do
   def decode!(struct, <<_::1, window_size_increment::31>>, _) do
     %{struct | window_size_increment: window_size_increment}
   end

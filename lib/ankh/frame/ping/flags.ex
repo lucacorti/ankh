@@ -7,7 +7,7 @@ defmodule Ankh.Frame.Ping.Flags do
   defstruct [ack: false]
 end
 
-defimpl Ankh.Frame.Encoder, for: Ankh.Frame.Ping.Flags  do
+defimpl Ankh.Frame.Flags, for: Ankh.Frame.Ping.Flags  do
   import Ankh.Frame.Utils
 
   def decode!(struct, <<_::7, ack::1>>, _), do: %{struct | ack: int_to_bool!(ack)}

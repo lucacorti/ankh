@@ -7,7 +7,7 @@ defmodule Ankh.Frame.PushPromise.Flags do
   defstruct [end_headers: false, padded: false]
 end
 
-defimpl Ankh.Frame.Encoder, for: Ankh.Frame.PushPromise.Flags  do
+defimpl Ankh.Frame.Flags, for: Ankh.Frame.PushPromise.Flags  do
   import Ankh.Frame.Utils
 
   def decode!(struct, <<_::4, pa::1, eh::1, _::2>>, _) do

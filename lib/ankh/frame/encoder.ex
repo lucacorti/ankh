@@ -1,6 +1,8 @@
 defprotocol Ankh.Frame.Encoder do
   @moduledoc """
-  Protocol for encoding/decoding data between structs and binary
+  Protocol for encoding/decoding frame structs from/to binary.
+
+  Expects a struct with the format injected by the `Ankh.Frame.__using__` macro.
   """
   @fallback_to_any true
 
@@ -32,6 +34,40 @@ defprotocol Ankh.Frame.Encoder do
 end
 
 defimpl Ankh.Frame.Encoder, for: Any do
-  def decode!(_, _, _), do: nil
-  def encode!(_, _), do: <<>>
+  alias Ankh.Frame.{Flags, Payload}
+
+  def decode!(frame, <<0::24, _type::8, flags::binary-size(1),
+  0x0::1, id::31>>, options) do
+    flags = Flags.decode!(frame.flags, flags, options)
+    %{frame | stream_id: id, flags: flags}
+  end
+
+  def decode!(frame, <<length::24, _type::8, flags::binary-size(1),
+  0x0::1, id::31, payload::binary>>, options) do
+    flags = Flags.decode!(frame.flags, flags, options)
+    payload_opts = [flags: flags] ++ options
+    payload = Payload.decode!(frame.payload, payload, payload_opts)
+    %{frame | length: length, stream_id: id, flags: flags, payload: payload}
+  end
+
+  def encode!(%{type: type, flags: flags, stream_id: id, payload: nil}, options)
+  do
+    flags = Flags.encode!(flags, options)
+    <<0::24, type::8>> <> flags <> <<0x0::1, id::31>>
+  end
+
+  def encode!(%{type: type, flags: nil, stream_id: id, payload: payload},
+  options) do
+    payload = Payload.encode!(payload, options)
+    length = byte_size(payload)
+    <<length::24, type::8, 0x0::8, 0x0::1, id::31>> <> payload
+  end
+
+  def encode!(%{type: type, stream_id: id, flags: flags, payload: payload},
+  options) do
+    payload = Payload.encode!(payload, [flags: flags] ++ options)
+    length = byte_size(payload)
+    flags = Flags.encode!(flags, options)
+    <<length::24, type::8>> <> flags <> <<0x0::1, id::31>> <> payload
+  end
 end
