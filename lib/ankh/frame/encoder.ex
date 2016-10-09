@@ -2,7 +2,7 @@ defprotocol Ankh.Frame.Encoder do
   @moduledoc """
   Protocol for encoding/decoding frame structs
 
-  Expects a struct with the format injected by the `Ankh.Frame.__using__` macro.
+  Expects a struct with the format injected by `use Ankh.Frame`
   """
   @fallback_to_any true
 
