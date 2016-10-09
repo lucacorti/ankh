@@ -7,7 +7,7 @@ defmodule Ankh.Frame.Data.Payload do
   defstruct [pad_length: 0, data: <<>>]
 end
 
-defimpl Ankh.Frame.Encoder, for: Ankh.Frame.Data.Payload do
+defimpl Ankh.Frame.Payload, for: Ankh.Frame.Data.Payload do
   import Ankh.Frame.Utils
 
   def decode!(struct, <<pad_length::8, padded_data::binary>>,

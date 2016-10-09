@@ -4,8 +4,8 @@ defmodule Ankh.Frame.Priority do
 end
 
 defimpl Ankh.Frame.Encoder, for: Ankh.Frame.Priority do
-  alias Ankh.Frame.Priority
+  alias Ankh.Frame.Encoder
 
-  def encode!(frame, options), do: Priority.encode!(frame, options)
-  def decode!(frame, binary, options), do: Priority.decode!(frame, binary, options)
+  def encode!(frame, options), do: Encoder.encode!(frame, options)
+  def decode!(frame, binary, options), do: Encoder.decode!(frame, binary, options)
 end

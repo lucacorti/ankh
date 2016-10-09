@@ -10,7 +10,7 @@ defmodule Ankh.Frame.Headers.Payload do
   header_block_fragment: <<>>]
 end
 
-defimpl Ankh.Frame.Encoder, for: Ankh.Frame.Headers.Payload do
+defimpl Ankh.Frame.Payload, for: Ankh.Frame.Headers.Payload do
   import Ankh.Frame.Utils
 
   def encode!(%{pad_length: pl, exclusive: ex, stream_dependency: sd,

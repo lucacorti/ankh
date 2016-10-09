@@ -8,7 +8,7 @@ defmodule Ankh.Frame.Goaway.Payload do
   defstruct [last_stream_id: nil, error_code: nil, data: nil]
 end
 
-defimpl Ankh.Frame.Encoder, for: Ankh.Frame.Goaway.Payload do
+defimpl Ankh.Frame.Payload, for: Ankh.Frame.Goaway.Payload do
   alias Ankh.Frame.Error
 
   def decode!(struct, <<_::1, lsid::31, error::32>>, _) do
