@@ -24,6 +24,8 @@ defmodule Ankh.Stream do
   hbf_type: :headers | :push_promise, hbf: binary, data: binary,
   window_size: Integer.t}
 
+  @type error :: {:error, :stream_closed | :protocol_error}
+
   defstruct [id: 0, state: :idle, hbf_type: :headers, hbf: <<>>, data: <<>>,
   window_size: 65_535]
 
@@ -40,7 +42,7 @@ defmodule Ankh.Stream do
   @doc """
   Process the reception of a frame through the Stream state machine
   """
-  @spec received_frame(t, Frame.t) :: t
+  @spec received_frame(t, Frame.t) :: {:ok, t} | error
   def received_frame(%__MODULE__{id: id}, %{stream_id: stream_id})
   when stream_id !== id do
     raise "FATAL on stream #{id}: this frame has stream id #{stream_id}!"
@@ -181,7 +183,7 @@ defmodule Ankh.Stream do
   @doc """
   Process sending a frame through the Stream state machine
   """
-  @spec send_frame(t, Frame.t) :: t
+  @spec send_frame(t, Frame.t) :: {:ok, t} | error
   def send_frame(%__MODULE__{id: id}, %{stream_id: stream_id})
   when stream_id !== id do
     raise "FATAL on stream #{id}: this frame was sent on #{stream_id}!"
