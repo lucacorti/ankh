@@ -18,6 +18,7 @@ defmodule Ankh.Stream do
   - hbf_type: type of HBF being accumulated
   - hbf: HBF accumulator, for reassembly
   - data: DATA accumulator, for reassembly
+  - window_size: stream window size
   """
   @type t :: %__MODULE__{id: Integer.t, state: stream_state,
   hbf_type: :headers | :push_promise, hbf: binary, data: binary,

@@ -30,10 +30,10 @@ defmodule Ankh.Connection do
 
   require Logger
 
-  @default_ssl_opts binary: true, versions: [:"tlsv1.2"],
-  secure_renegotiate: true, alpn_advertised_protocols: ["h2"],
-  client_renegotiation: false,
-  ciphers: ["ECDHE-ECDSA-AES128-SHA256", "ECDHE-ECDSA-AES128-SHA"]
+  @default_ssl_opts binary: true, active: :once, versions: [:"tlsv1.2"],
+  secure_renegotiate: true, client_renegotiation: false,
+  ciphers: ["ECDHE-ECDSA-AES128-SHA256", "ECDHE-ECDSA-AES128-SHA"],
+  alpn_advertised_protocols: ["h2"]
   @preface "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
   @frame_header_size 9
   @max_stream_id 2_147_483_648
@@ -162,7 +162,8 @@ defmodule Ankh.Connection do
     {:stop, :closed, state}
   end
 
-  def handle_info({:ssl, _socket, data}, %{buffer: buffer} = state) do
+  def handle_info({:ssl, socket, data}, %{buffer: buffer} = state) do
+    :ssl.setopts(socket, active: :once)
     {state, frames} = buffer <> data
     |> parse_frames(state)
 
