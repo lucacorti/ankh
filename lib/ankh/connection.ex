@@ -39,6 +39,11 @@ defmodule Ankh.Connection do
   @max_stream_id 2_147_483_648
 
   @typedoc """
+  Ankh Connection process
+  """
+  @type connection :: GenServer.server
+
+  @typedoc """
   Ankh DATA message (full mode)
 
   `{:ankh, :data, stream_id, data}`
@@ -109,20 +114,20 @@ defmodule Ankh.Connection do
   Connects to a server via the specified URI
 
   Parameters:
-    - connection: pid or process name of the `Ankh.Connection` process
+    - connection: connection process
     - uri: The server to connect to, scheme and authority are used
   """
-  @spec connect(pid() | :atom, URI.t) :: :ok | {:error, atom}
+  @spec connect(connection, URI.t) :: :ok | {:error, atom}
   def connect(connection, uri), do: GenServer.call(connection, {:connect, uri})
 
   @doc """
   Sends a frame over the connection
 
   Parameters:
-    - connection: pid or process name of the `Ankh.Connection` process
+    - connection: connection process
     - frame: `Ankh.Frame` structure
   """
-  @spec send(pid() | :atom, Frame.t) :: :ok | {:error, atom}
+  @spec send(connection, Frame.t) :: :ok | {:error, atom}
   def send(connection, frame), do: GenServer.call(connection, {:send, frame})
 
   @doc """
@@ -131,9 +136,9 @@ defmodule Ankh.Connection do
   Before closing the TLS connection a GOAWAY frame is sent to the peer.
 
   Parameters:
-    - connection: pid or process name of the `Ankh.Connection` process
+    - connection: connection process
   """
-  @spec close(pid() | :atom) :: :closed
+  @spec close(connection) :: :closed
   def close(connection), do: GenServer.call(connection, {:close})
 
   def handle_call({:connect, %URI{host: host, port: port}}, from,
