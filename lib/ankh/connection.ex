@@ -68,14 +68,13 @@ defmodule Ankh.Connection do
 
   @typedoc """
   Startup options:
-    - uri: at least scheme and authority must be present.
     - receiver: pid of the process to send response messages to.
     Messages are shipped to the calling process if nil.
     - stream: if true, stream received data frames back to the
     receiver, else reassemble and send complete responses.
     - ssl_options: SSL connection options, for the Erlang `:ssl` module
   """
-  @type options :: [uri: URI.t, receiver: pid | nil, stream: boolean,
+  @type options :: [receiver: pid | nil, stream: boolean,
   ssl_options: Keyword.t]
 
   @doc """
@@ -85,26 +84,36 @@ defmodule Ankh.Connection do
     - args: startup options
     - options: GenServer startup options
   """
-  @spec start_link([uri: URI, receiver: pid | nil, stream: boolean,
+  @spec start_link([receiver: pid | nil, stream: boolean,
   ssl_options: Keyword.t], GenServer.option) :: GenServer.on_start
-  def start_link([uri: uri, receiver: receiver, stream: stream,
+  def start_link([receiver: receiver, stream: stream,
   ssl_options: ssl_options], options \\ []) do
     target = if is_pid(receiver), do: receiver, else: self()
     mode = if is_boolean(stream) && stream, do: :stream, else: :full
-    GenServer.start_link(__MODULE__, [uri: uri, target: target, mode: mode,
+    GenServer.start_link(__MODULE__, [target: target, mode: mode,
     ssl_options: ssl_options], options)
   end
 
-  def init([uri: uri, target: target, mode: mode, ssl_options: ssl_opts]) do
+  def init([target: target, mode: mode, ssl_options: ssl_opts]) do
     with settings <- %Settings.Payload{},
          {:ok, recv_ctx} = HPack.Table.start_link(settings.header_table_size),
          {:ok, send_ctx} = HPack.Table.start_link(settings.header_table_size) do
-      {:ok, %{uri: uri, target: target, mode: mode, ssl_opts: ssl_opts,
+      {:ok, %{target: target, mode: mode, ssl_opts: ssl_opts,
       socket: nil, streams: %{}, last_stream_id: 0, buffer: <<>>,
       recv_ctx: recv_ctx, send_ctx: send_ctx, recv_settings: settings,
       send_settings: nil, window_size: 65_535}}
     end
   end
+
+  @doc """
+  Connects to a server via the specified URI
+
+  Parameters:
+    - connection: pid or process name of the `Ankh.Connection` process
+    - uri: The server to connect to, scheme and authority are used
+  """
+  @spec connect(pid() | :atom, URI.t) :: :ok | {:error, atom}
+  def connect(connection, uri), do: GenServer.call(connection, {:connect, uri})
 
   @doc """
   Sends a frame over the connection
@@ -114,9 +123,7 @@ defmodule Ankh.Connection do
     - frame: `Ankh.Frame` structure
   """
   @spec send(pid() | :atom, Frame.t) :: :ok | {:error, atom}
-  def send(connection, frame) do
-    GenServer.call(connection, {:send, frame})
-  end
+  def send(connection, frame), do: GenServer.call(connection, {:send, frame})
 
   @doc """
   Closes the connection
@@ -129,20 +136,25 @@ defmodule Ankh.Connection do
   @spec close(pid() | :atom) :: :closed
   def close(connection), do: GenServer.call(connection, {:close})
 
-  def handle_call({:send, frame}, from, %{socket: nil, uri: %URI{host: host,
-  port: port}, ssl_opts: ssl_opts} = state) do
+  def handle_call({:connect, %URI{host: host, port: port}}, from,
+  %{socket: nil, ssl_opts: ssl_opts} = state) do
     hostname = String.to_charlist(host)
     ssl_options = Keyword.merge(ssl_opts, @default_ssl_opts)
     with {:ok, socket} <- :ssl.connect(hostname, port, ssl_options),
          :ok <- :ssl.send(socket, @preface) do
-      state = %{state | socket: socket}
-      handle_call({:send, %Settings{stream_id: 0,
-      flags: %Settings.Flags{}, payload: %Settings.Payload{}}}, from, state)
-      handle_call({:send, frame}, from, state)
+      handle_call({:send, %Settings{}}, from, %{state | socket: socket})
     else
       error ->
         {:stop, :ssl.format_error(error), state}
     end
+  end
+
+  def handle_call({:connect, _uri}, _from, state) do
+    {:reply, {:error, :connected}, state}
+  end
+
+  def handle_call({:send, _frame}, _from, %{socket: nil} = state) do
+    {:stop, {:error, :not_connected}, state}
   end
 
   def handle_call({:send, frame}, _from, state) do
