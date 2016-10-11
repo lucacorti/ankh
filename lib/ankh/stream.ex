@@ -4,7 +4,7 @@ defmodule Ankh.Stream do
   """
 
   alias Ankh.Frame
-  alias Frame.{Data, Headers, Priority, RstStream, WindowUpdate}
+  alias Frame.{Error, Data, Headers, Priority, RstStream, WindowUpdate}
 
   @typedoc """
   Stream states
@@ -24,10 +24,13 @@ defmodule Ankh.Stream do
   hbf_type: :headers | :push_promise, hbf: binary, data: binary,
   window_size: Integer.t}
 
-  @type error :: {:error, :stream_closed | :protocol_error}
-
   defstruct [id: 0, state: :idle, hbf_type: :headers, hbf: <<>>, data: <<>>,
   window_size: 65_535]
+
+  @typedoc """
+  Stream Error
+  """
+  @type error :: {:error, Error.t}
 
   @doc """
   Creates a new Stream
@@ -50,8 +53,7 @@ defmodule Ankh.Stream do
 
   # IDLE
 
-  def received_frame(%__MODULE__{state: :idle} = stream, %Headers{})
-  do
+  def received_frame(%__MODULE__{state: :idle} = stream, %Headers{}) do
     {:ok, %__MODULE__{stream | state: :open}}
   end
 
@@ -79,8 +81,8 @@ defmodule Ankh.Stream do
     {:ok, %__MODULE__{stream | state: :half_closed_local}}
   end
 
-  def received_frame(%__MODULE__{state: :reserved_remote} = stream, %RstStream{})
-  do
+  def received_frame(%__MODULE__{state: :reserved_remote} = stream,
+  %RstStream{}) do
     {:ok, %__MODULE__{stream | state: :closed}}
   end
 
@@ -101,8 +103,7 @@ defmodule Ankh.Stream do
     {:ok, %__MODULE__{stream | state: :half_closed_remote}}
   end
 
-  def received_frame(%__MODULE__{state: :open} = stream,
-  %RstStream{}) do
+  def received_frame(%__MODULE__{state: :open} = stream, %RstStream{}) do
     {:ok, %__MODULE__{stream | state: :closed}}
   end
 
@@ -154,23 +155,19 @@ defmodule Ankh.Stream do
 
   # CLOSED
 
-  def received_frame(%__MODULE__{state: :closed} = stream,
-  %Priority{}) do
+  def received_frame(%__MODULE__{state: :closed} = stream, %Priority{}) do
     {:ok, stream}
   end
 
-  def received_frame(%__MODULE__{state: :closed} = stream,
-  %WindowUpdate{}) do
+  def received_frame(%__MODULE__{state: :closed} = stream, %WindowUpdate{}) do
     {:ok, stream}
   end
 
-  def received_frame(%__MODULE__{state: :closed} = stream,
-  %RstStream{}) do
+  def received_frame(%__MODULE__{state: :closed} = stream, %RstStream{}) do
     {:ok, stream}
   end
 
-  def received_frame(%__MODULE__{state: :closed},
-  _) do
+  def received_frame(%__MODULE__{state: :closed}, _) do
     {:error, :stream_closed}
   end
 
@@ -191,44 +188,36 @@ defmodule Ankh.Stream do
 
   # IDLE
 
-  def send_frame(%__MODULE__{state: :idle} = stream,
-  %Headers{}) do
+  def send_frame(%__MODULE__{state: :idle} = stream, %Headers{}) do
     {:ok, %__MODULE__{stream | state: :open}}
   end
 
   # RESERVED LOCAL
 
-  def send_frame(%__MODULE__{state: :reserved_local} = stream,
-  %Headers{})
-  do
+  def send_frame(%__MODULE__{state: :reserved_local} = stream, %Headers{}) do
     {:ok, %__MODULE__{stream | state: :half_closed_remote}}
   end
 
-  def send_frame(%__MODULE__{state: :reserved_local} = stream,
-  %RstStream{})
-  do
+  def send_frame(%__MODULE__{state: :reserved_local} = stream, %RstStream{}) do
     {:ok, %__MODULE__{stream | state: :closed}}
   end
 
-  def send_frame(%__MODULE__{state: :reserved_local} = stream,
-  %Priority{}) do
+  def send_frame(%__MODULE__{state: :reserved_local} = stream, %Priority{}) do
     {:ok, stream}
   end
 
   # RESERVED REMOTE
 
-  def send_frame(%__MODULE__{state: :reserved_remote} = stream,
-  %RstStream{}) do
+  def send_frame(%__MODULE__{state: :reserved_remote} = stream, %RstStream{}) do
     {:ok, %__MODULE__{stream | state: :closed}}
   end
 
-  def send_frame(%__MODULE__{state: :reserved_remote} = stream,
-  %Priority{})  do
+  def send_frame(%__MODULE__{state: :reserved_remote} = stream, %Priority{})  do
     {:ok, stream}
   end
 
-  def send_frame(%__MODULE__{state: :reserved_remote} = stream,
-  %WindowUpdate{})  do
+  def send_frame(%__MODULE__{state: :reserved_remote} = stream, %WindowUpdate{})
+  do
     {:ok, stream}
   end
 
@@ -244,13 +233,11 @@ defmodule Ankh.Stream do
     {:ok, %__MODULE__{stream | state: :half_closed_local}}
   end
 
-  def send_frame(%__MODULE__{state: :open} = stream,
-  %RstStream{}) do
+  def send_frame(%__MODULE__{state: :open} = stream, %RstStream{}) do
     {:ok, %__MODULE__{stream | state: :closed}}
   end
 
-  def send_frame(%__MODULE__{state: :open} = stream,
-  _) do
+  def send_frame(%__MODULE__{state: :open} = stream, _) do
     {:ok, stream}
   end
 
@@ -261,13 +248,13 @@ defmodule Ankh.Stream do
     {:ok, stream}
   end
 
-  def send_frame(%__MODULE__{state: :half_closed_local} = stream,
-  %Priority{}) do
+  def send_frame(%__MODULE__{state: :half_closed_local} = stream, %Priority{})
+  do
     {:ok, stream}
   end
 
-  def send_frame(%__MODULE__{state: :half_closed_local} = stream,
-  %RstStream{}) do
+  def send_frame(%__MODULE__{state: :half_closed_local} = stream, %RstStream{})
+  do
     {:ok, %__MODULE__{stream | state: :closed}}
   end
 
@@ -283,20 +270,18 @@ defmodule Ankh.Stream do
     {:ok, %__MODULE__{stream | state: :closed}}
   end
 
-  def send_frame(%__MODULE__{state: :half_closed_remote} = stream,
-  %RstStream{}) do
+  def send_frame(%__MODULE__{state: :half_closed_remote} = stream, %RstStream{})
+  do
     {:ok, %__MODULE__{stream | state: :closed}}
   end
 
-  def send_frame(%__MODULE__{state: :half_closed_remote} = stream,
-  _) do
+  def send_frame(%__MODULE__{state: :half_closed_remote} = stream, _) do
     {:ok, stream}
   end
 
   # CLOSED
 
-  def send_frame(%__MODULE__{state: :closed} = stream,
-  %Priority{}) do
+  def send_frame(%__MODULE__{state: :closed} = stream, %Priority{}) do
     {:ok, stream}
   end
 
