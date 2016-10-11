@@ -2,7 +2,10 @@ defmodule Ankh.Frame.Error do
   @moduledoc """
   HTTP/2 Error encoding and decoding
   """
-  @type t :: atom | Integer.t
+  @type t :: :no_error | :protocol_error | :internal_error | :flow_control_error
+  | :settings_timeout | :stream_closed | :frame_size_error | :refused_stream
+  | :cancel | :compression_error | :connect_error | :enache_your_calm
+  | :inadequate_security | :http_1_1_required
 
   @no_error            0x0
   @protocol_error      0x1
@@ -22,7 +25,7 @@ defmodule Ankh.Frame.Error do
   @doc """
   Returns a human readable string for the corresponding error code atom
   """
-  @spec format(atom) :: String.t
+  @spec format(t) :: String.t
   def format(:no_error), do: "Graceful shutdown"
   def format(:protocol_error), do: "Protocol error detected"
   def format(:internal_error), do: "Implementation fault"
