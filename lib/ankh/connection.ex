@@ -312,7 +312,7 @@ defmodule Ankh.Connection do
     {:ok, state} = send_frame(state, %Settings{frame|
       flags: %Settings.Flags{ack: true}, payload: nil
     })
-    :ok = HPack.Table.resize(table_size, table)
+    :ok = Table.resize(table_size, table)
     %{state | send_settings: payload}
   end
 
