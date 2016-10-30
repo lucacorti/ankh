@@ -16,7 +16,8 @@ defimpl Ankh.Frame.Payload, for: Ankh.Frame.Goaway.Payload do
   end
 
   def decode!(struct, <<_::1, lsid::31, error::32, data::binary>>, _) do
-    %{struct | last_stream_id: lsid, error_code: Error.decode!(error), data: data}
+    %{struct | last_stream_id: lsid, error_code: Error.decode!(error),
+      data: data}
   end
 
   def encode!(%{last_stream_id: lsid, error_code: error, data: data}, _) do
