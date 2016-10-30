@@ -24,6 +24,7 @@ defmodule Ankh.Connection do
 
   use GenServer
 
+  alias HPack.Table
   alias Ankh.{Frame, Stream}
   alias Frame.{Encoder, Continuation, Data, Goaway, Headers, Ping, Priority,
   PushPromise, RstStream, Settings, WindowUpdate}
@@ -69,7 +70,8 @@ defmodule Ankh.Connection do
 
   `{:ankh, :headers, stream_id, promised_stream_id, headers}`
   """
-  @type push_promise_msg :: {:ankh, :push_promise, Integer.t, Integer.t, Keyword.t}
+  @type push_promise_msg :: {:ankh, :push_promise, Integer.t, Integer.t,
+  Keyword.t}
 
   @typedoc """
   Startup options:
@@ -101,8 +103,8 @@ defmodule Ankh.Connection do
 
   def init([target: target, mode: mode, ssl_options: ssl_opts]) do
     with settings <- %Settings.Payload{},
-         {:ok, recv_ctx} = HPack.Table.start_link(settings.header_table_size),
-         {:ok, send_ctx} = HPack.Table.start_link(settings.header_table_size) do
+         {:ok, recv_ctx} = Table.start_link(settings.header_table_size),
+         {:ok, send_ctx} = Table.start_link(settings.header_table_size) do
       {:ok, %{target: target, mode: mode, ssl_opts: ssl_opts,
       socket: nil, streams: %{}, last_stream_id: 0, buffer: <<>>,
       recv_ctx: recv_ctx, send_ctx: send_ctx, recv_settings: settings,
@@ -239,8 +241,9 @@ defmodule Ankh.Connection do
     frame_data = binary_part(data, 0, frame_size)
     rest_size = byte_size(data) - frame_size
     rest_data = binary_part(data, frame_size, rest_size)
+    struct = struct_for_type(type)
 
-    {state, frame} = struct_for_type(type)
+    {state, frame} = struct
     |> Encoder.decode!(frame_data, [])
     |> decode_frame(state)
 
