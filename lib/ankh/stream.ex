@@ -46,9 +46,15 @@ defmodule Ankh.Stream do
   Process the reception of a frame through the Stream state machine
   """
   @spec received_frame(t, Frame.t) :: {:ok, t} | error
+
   def received_frame(%__MODULE__{id: id}, %{stream_id: stream_id})
   when stream_id !== id do
     raise "FATAL on stream #{id}: this frame has stream id #{stream_id}!"
+  end
+
+  def received_frame(%__MODULE__{id: id}, %{stream_id: stream_id})
+  when stream_id === 0 do
+    raise "FATAL on stream #{id}: stream id #{stream_id} is reserved!"
   end
 
   # IDLE
@@ -181,9 +187,15 @@ defmodule Ankh.Stream do
   Process sending a frame through the Stream state machine
   """
   @spec send_frame(t, Frame.t) :: {:ok, t} | error
+
   def send_frame(%__MODULE__{id: id}, %{stream_id: stream_id})
   when stream_id !== id do
     raise "FATAL on stream #{id}: this frame was sent on #{stream_id}!"
+  end
+
+  def send_frame(%__MODULE__{id: id}, %{stream_id: stream_id})
+  when stream_id === 0 do
+    raise "FATAL on stream #{id}: stream id #{stream_id} is reserved!"
   end
 
   # IDLE
