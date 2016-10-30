@@ -348,7 +348,7 @@ defmodule Ankh.Connection do
   end
 
   defp receive_frame(state, _stream, %Goaway{stream_id: 0,
-  payload: %{error_code: %{code: code}}} = frame) do
+  payload: %{error_code: code}} = frame) do
     Logger.debug "STREAM 0 RECEIVED FRAME #{inspect frame}"
     {:stop, code, state}
   end
