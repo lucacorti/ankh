@@ -11,7 +11,6 @@ defmodule Ankh.Frame.Utils do
   @spec bool_to_int!(boolean) :: 0 | 1
   def bool_to_int!(false), do: 0
   def bool_to_int!(true), do: 1
-  def bool_to_int!(_), do: raise ArgumentError
 
   @doc """
   Converts 0/1 integers into the corresponding boolean values
@@ -21,7 +20,6 @@ defmodule Ankh.Frame.Utils do
   @spec int_to_bool!(0 | 1) :: boolean
   def int_to_bool!(0), do: false
   def int_to_bool!(1), do: true
-  def int_to_bool!(_), do: raise ArgumentError
 
   @doc """
   Generates an 0 padding binary of the specified size
