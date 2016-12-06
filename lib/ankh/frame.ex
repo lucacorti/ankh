@@ -19,9 +19,7 @@ defmodule Ankh.Frame do
       raise CompileError, "Frame type must be Integer.t"
     end
 
-    quote do
-      alias Ankh.Frame.Encoder
-
+    quote bind_quoted: [type: type, flags: flags, payload: payload] do
       @typedoc """
       - length: payload length in bytes
       - flags: `Ankh.Frame.Flags` conforming struct
@@ -29,9 +27,9 @@ defmodule Ankh.Frame do
       - payload: `Ankh.Frame.Payload` conforming struct
       """
       @type t :: %__MODULE__{length: Integer.t, stream_id: Integer.t,
-      flags: unquote(flags), payload: unquote(payload)}
-      defstruct [length: 0, type: unquote(type), stream_id: 0,
-                 flags: unquote(flags), payload: unquote(payload)]
+      flags: Flags.t, payload: Payload.t}
+      defstruct [length: 0, type: type, stream_id: 0, flags: flags,
+                 payload: payload]
     end
   end
 end

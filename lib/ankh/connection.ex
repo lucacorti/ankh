@@ -26,8 +26,8 @@ defmodule Ankh.Connection do
 
   alias HPack.Table
   alias Ankh.{Frame, Stream}
-  alias Frame.{Encoder, Continuation, Data, Goaway, Headers, Ping, Priority,
-  PushPromise, RstStream, Settings, WindowUpdate}
+  alias Frame.{Encoder, Registry, Continuation, Data, Goaway, Headers, Ping,
+  PushPromise, Settings, WindowUpdate}
 
   require Logger
 
@@ -93,8 +93,8 @@ defmodule Ankh.Connection do
   """
   @spec start_link([receiver: pid | nil, stream: boolean,
   ssl_options: Keyword.t], GenServer.option) :: GenServer.on_start
-  def start_link([receiver: receiver, stream: stream,
-  ssl_options: ssl_options], options \\ []) do
+  def start_link([receiver: receiver, stream: stream, ssl_options: ssl_options],
+  options \\ []) do
     target = if is_pid(receiver), do: receiver, else: self()
     mode = if is_boolean(stream) && stream, do: :stream, else: :full
     GenServer.start_link(__MODULE__, [target: target, mode: mode,
@@ -220,8 +220,7 @@ defmodule Ankh.Connection do
     {:ok, stream} = Stream.send_frame(stream, frame)
     Logger.debug "STREAM #{id} IS #{inspect stream}"
 
-    {state, stream, frame} = frame
-    |> encode_frame(stream, state)
+    {state, stream, frame} = encode_frame(frame, stream, state)
 
     case :ssl.send(socket, Encoder.encode!(frame, [])) do
       :ok ->
@@ -241,7 +240,7 @@ defmodule Ankh.Connection do
     frame_data = binary_part(data, 0, frame_size)
     rest_size = byte_size(data) - frame_size
     rest_data = binary_part(data, frame_size, rest_size)
-    struct = struct_for_type(type)
+    struct = Registry.struct(type)
 
     {state, frame} = struct
     |> Encoder.decode!(frame_data, [])
@@ -472,15 +471,4 @@ defmodule Ankh.Connection do
   end
 
   defp decode_frame(frame, state), do: {state, frame}
-
-  defp struct_for_type(0x0), do: %Data{}
-  defp struct_for_type(0x1), do: %Headers{}
-  defp struct_for_type(0x2), do: %Priority{}
-  defp struct_for_type(0x3), do: %RstStream{}
-  defp struct_for_type(0x4), do: %Settings{}
-  defp struct_for_type(0x5), do: %PushPromise{}
-  defp struct_for_type(0x6), do: %Ping{}
-  defp struct_for_type(0x7), do: %Goaway{}
-  defp struct_for_type(0x8), do: %WindowUpdate{}
-  defp struct_for_type(0x9), do: %Continuation{}
 end
