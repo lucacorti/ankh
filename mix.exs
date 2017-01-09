@@ -9,8 +9,8 @@ defmodule Ankh.Mixfile do
       build_embedded: Mix.env == :prod,
       start_permanent: Mix.env == :prod,
       description: "Pure Elixir HTTP/2 implementation",
-      package: package,
-      deps: deps
+      package: package(),
+      deps: deps()
     ]
   end
 

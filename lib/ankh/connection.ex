@@ -37,7 +37,7 @@ defmodule Ankh.Connection do
   alpn_advertised_protocols: ["h2"]
   @preface "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
   @frame_header_size 9
-  @max_stream_id 2_147_483_648
+  # @max_stream_id 2_147_483_648
 
   @typedoc """
   Ankh Connection process
