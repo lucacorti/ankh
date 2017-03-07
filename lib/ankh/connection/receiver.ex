@@ -53,7 +53,7 @@ defmodule Ankh.Connection.Receiver do
   end
 
   def handle_call({:stream, id}, _from, %{streams: streams} = state) do
-    {stream, streams} = Map.get_and_update(streams, id, fn
+    {_stream, streams} = Map.get_and_update(streams, id, fn
       nil ->
         # mcs = Map.get(state, :max_concurrent_streams)
         # case concurrent_streams(streams) do
@@ -96,15 +96,15 @@ defmodule Ankh.Connection.Receiver do
   def handle_info({:ssl_error, _socket, reason}, state) do
     {:stop, {:shutdown, reason}, state}
   end
-
-  defp concurrent_streams(streams) do
-    Enum.count(streams, fn
-      %Stream{state: :open} -> true
-      %Stream{state: :half_closed_local} -> true
-      %Stream{state: :half_closed_remote} -> true
-      _ -> false
-    end)
-  end
+  #
+  # defp concurrent_streams(streams) do
+  #   Enum.count(streams, fn
+  #     %Stream{state: :open} -> true
+  #     %Stream{state: :half_closed_local} -> true
+  #     %Stream{state: :half_closed_remote} -> true
+  #     _ -> false
+  #   end)
+  # end
 
   defp parse_frames(<<payload_length::24, _::binary>> = data, state)
   when @frame_header_size + payload_length > byte_size(data) do
