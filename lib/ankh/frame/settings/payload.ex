@@ -7,7 +7,7 @@ defmodule Ankh.Frame.Settings.Payload do
   max_concurrent_streams: Integer.t, initial_window_size: Intger.t,
   max_frame_size: Integer.t, max_header_list_size: Integer.t}
   defstruct [header_table_size: 4_096, enable_push: true,
-             max_concurrent_streams: 128, initial_window_size: 65_535,
+             max_concurrent_streams: 128, initial_window_size: 2_147_483_647,
              max_frame_size: 16_384, max_header_list_size: 128]
 end
 
@@ -30,12 +30,10 @@ defimpl Ankh.Frame.Payload, for: Ankh.Frame.Settings.Payload do
   def encode!(%{header_table_size: hts, enable_push: ep,
   max_concurrent_streams: mcs, initial_window_size: iws, max_frame_size: mfs,
   max_header_list_size: mhls}, _) do
-    <<@header_table_size::16, hts::32,
-      @enable_push::16, bool_to_int!(ep)::32,
-      @max_concurrent_streams::16, mcs::32,
-      @initial_window_size::16, iws::32,
-      @max_frame_size::16, mfs::32,
-      @max_header_list_size::16, mhls::32>>
+    [<<@header_table_size::16>>, <<hts::32>>, <<@enable_push::16>>,
+    <<bool_to_int!(ep)::32>>, <<@max_concurrent_streams::16>>, <<mcs::32>>,
+    <<@initial_window_size::16>>, <<iws::32>>, <<@max_frame_size::16>>,
+    <<mfs::32>>, <<@max_header_list_size::16>>, <<mhls::32>>]
   end
 
   defp parse_settings_payload(<<@header_table_size::16, value::32,

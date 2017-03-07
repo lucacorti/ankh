@@ -22,13 +22,13 @@ defprotocol Ankh.Frame.Payload do
   def decode!(struct, binary, options)
 
   @doc """
-  Encodes a conforming struct into binary
+  Encodes a conforming struct into binary or IO list
 
   Parameters:
     - struct: struct conforming to the `Ankh.Frame.Payload` protocol
     - options: options to pass as context to the encoding function
   """
-  @spec encode!(t, Keyword.t) :: binary
+  @spec encode!(t, Keyword.t) :: binary | [binary]
   def encode!(struct, options)
 end
 

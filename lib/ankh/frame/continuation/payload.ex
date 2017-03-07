@@ -8,6 +8,6 @@ defmodule Ankh.Frame.Continuation.Payload do
 end
 
 defimpl Ankh.Frame.Payload, for: Ankh.Frame.Continuation.Payload do
-  def encode!(%{header_block_fragment: hbf}, _), do: hbf
+  def encode!(%{header_block_fragment: hbf}, _), do: [hbf]
   def decode!(struct, data, _), do: %{struct| header_block_fragment: data}
 end

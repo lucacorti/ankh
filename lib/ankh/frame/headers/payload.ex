@@ -17,22 +17,22 @@ defimpl Ankh.Frame.Payload, for: Ankh.Frame.Headers.Payload do
   weight: wh, header_block_fragment: hbf}, flags: %{padded: true,
   priority: true})
   do
-    <<pl::8, bool_to_int!(ex)::1, sd::31, wh::8>> <> hbf <> padding(pl)
+    [<<pl::8, bool_to_int!(ex)::1, sd::31, wh::8>>, hbf, padding(pl)]
   end
 
   def encode!(%{pad_length: pl, header_block_fragment: hbf},
   flags: %{padded: true, priority: false}) do
-    <<pl::8>> <> hbf <> padding(pl)
+    [<<pl::8>>, hbf, padding(pl)]
   end
 
   def encode!(%{exclusive: ex, stream_dependency: sd, weight: wh,
   header_block_fragment: hbf}, flags: %{padded: false, priority: true}) do
-    <<bool_to_int!(ex)::1, sd::31, wh::8, hbf::binary>>
+    [<<bool_to_int!(ex)::1>>, <<sd::31>>, <<wh::8>>, hbf]
   end
 
   def encode!(%{header_block_fragment: hbf}, flags: %{padded: false,
   priority: false}) do
-    hbf
+    [hbf]
   end
 
   def decode!(struct, <<pl::8, ex::1, sd::31, wh::8, data::binary>>,

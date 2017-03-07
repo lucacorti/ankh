@@ -13,12 +13,12 @@ defimpl Ankh.Frame.Payload, for: Ankh.Frame.PushPromise.Payload do
 
   def encode!(%{pad_length: pl, promised_stream_id: psi,
   header_block_fragment: hbf}, flags: %{padded: true}) do
-    <<pl::8, 0::1, psi::31>> <> hbf <> padding(pl)
+    [<<pl::8, 0::1, psi::31>>, hbf, padding(pl)]
   end
 
   def encode!(%{promised_stream_id: psi, header_block_fragment: hbf},
    flags: %{padded: false}) do
-    <<0::1, psi::31>> <> hbf
+    [<<0::1, psi::31>>, hbf]
   end
 
   def decode!(struct, <<pl::8, _::1, psi::31, data::binary>>,

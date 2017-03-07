@@ -5,7 +5,7 @@ defmodule Ankh.Frame.Goaway.Payload do
 
   @type t :: %__MODULE__{last_stream_id: Integer.t, error_code: atom,
   data: binary}
-  defstruct [last_stream_id: nil, error_code: nil, data: nil]
+  defstruct [last_stream_id: nil, error_code: nil, data: <<>>]
 end
 
 defimpl Ankh.Frame.Payload, for: Ankh.Frame.Goaway.Payload do
@@ -21,6 +21,6 @@ defimpl Ankh.Frame.Payload, for: Ankh.Frame.Goaway.Payload do
   end
 
   def encode!(%{last_stream_id: lsid, error_code: error, data: data}, _) do
-    <<0::1, lsid::31, Error.encode!(error)::32, data>>
+    [<<0::1, lsid::31>>, Error.encode!(error), data]
   end
 end

@@ -15,10 +15,6 @@ defmodule Ankh.Frame do
   """
   @spec __using__([type: Integer.t, flags: struct, payload: struct]) :: nil
   defmacro __using__(type: type, flags: flags, payload: payload) do
-    unless is_integer(type) do
-      raise CompileError, "Frame type must be Integer.t"
-    end
-
     quote bind_quoted: [type: type, flags: flags, payload: payload] do
       @typedoc """
       - length: payload length in bytes
