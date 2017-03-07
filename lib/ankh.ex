@@ -10,4 +10,9 @@ defmodule Ankh do
   Ankh only supports HTTP/2 over TLS. Support for HTTP/2 over plaintext
   TCP was intentionally left out.
   """
+  use Application
+
+  def start(_type, _args) do
+    Ankh.Supervisor.start_link()
+  end
 end

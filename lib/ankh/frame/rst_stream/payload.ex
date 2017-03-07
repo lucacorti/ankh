@@ -14,5 +14,5 @@ defimpl Ankh.Frame.Payload, for: Ankh.Frame.RstStream.Payload do
     %{struct | error_code: Error.decode!(error)}
   end
 
-  def encode!(%{error_code: error}, _), do: Error.encode!(error)
+  def encode!(%{error_code: error}, _), do: [Error.encode!(error)]
 end

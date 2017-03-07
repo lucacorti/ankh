@@ -4,8 +4,8 @@ defmodule Ankh.Mixfile do
   def project do
     [
       app: :ankh,
-      version: "0.1.1",
-      elixir: "~> 1.3",
+      version: "0.2.0",
+      elixir: "~> 1.4",
       build_embedded: Mix.env == :prod,
       start_permanent: Mix.env == :prod,
       description: "Pure Elixir HTTP/2 implementation",
@@ -23,7 +23,8 @@ defmodule Ankh.Mixfile do
   end
 
   def application do
-    [applications: [:logger, :ssl]]
+    [applications: [:logger, :ssl],
+    mod: {Ankh, []}]
   end
 
   defp deps do

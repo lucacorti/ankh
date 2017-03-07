@@ -25,7 +25,7 @@ defmodule Ankh.Stream do
   window_size: Integer.t}
 
   defstruct [id: 0, state: :idle, hbf_type: :headers, hbf: <<>>, data: <<>>,
-  window_size: 65_535]
+  window_size: 2_147_483_647]
 
   @typedoc """
   Stream Error
@@ -40,7 +40,7 @@ defmodule Ankh.Stream do
     - state: stream state
   """
   @spec new(Integer.t, stream_state) :: t
-  def new(id, state), do: %__MODULE__{id: id, state: state}
+  def new(id, state \\ :idle), do: %__MODULE__{id: id, state: state}
 
   @doc """
   Process the reception of a frame through the Stream state machine

@@ -12,5 +12,5 @@ defimpl Ankh.Frame.Payload, for: Ankh.Frame.WindowUpdate.Payload do
     %{struct | window_size_increment: window_size_increment}
   end
 
-  def encode!(%{window_size_increment: wsi}, _), do: <<0::1, wsi::31>>
+  def encode!(%{window_size_increment: wsi}, _), do: [<<0::1, wsi::31>>]
 end

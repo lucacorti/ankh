@@ -8,6 +8,6 @@ defmodule Ankh.Frame.Ping.Payload do
 end
 
 defimpl Ankh.Frame.Payload, for: Ankh.Frame.Ping.Payload do
-  def encode!(%{data: data}, _) when is_binary(data), do: data
+  def encode!(%{data: data}, _) when is_binary(data), do: [data]
   def decode!(struct, data, _) when is_binary(data), do: %{struct | data: data}
 end
