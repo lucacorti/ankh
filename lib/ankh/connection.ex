@@ -89,7 +89,7 @@ defmodule Ankh.Connection do
     - args: startup options
     - options: GenServer startup options
   """
-  @spec start_link([receiver: Receiver.receiver, stream: boolean,
+  @spec start_link([receiver: pid | nil, stream: boolean,
   ssl_options: Keyword.t], GenServer.option) :: GenServer.on_start
   def start_link([receiver: receiver, stream: stream, ssl_options: ssl_options],
   options \\ []) do
