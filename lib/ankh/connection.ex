@@ -236,19 +236,17 @@ defmodule Ankh.Connection do
     end
   end
 
-  defp encode_headers(%Headers{payload:
-  %{header_block_fragment: headers} = payload} = frame,
+  defp encode_headers(%Headers{payload: %{hbf: headers} = payload} = frame,
   stream, table) do
     hbf = HPack.encode(headers, table)
-    {stream, %{frame | payload: %{payload | header_block_fragment: hbf}}}
+    {stream, %{frame | payload: %{payload | hbf: hbf}}}
   end
 
-  defp encode_headers(%PushPromise{payload:
-  %{header_block_fragment: headers} = payload} = frame,
+  defp encode_headers(%PushPromise{payload: %{hbf: headers} = payload} = frame,
   stream, table) do
     hbf = HPack.encode(headers, table)
     {%{stream| state: :reserved_local},
-    %{frame | payload: %{payload | header_block_fragment: hbf}}}
+    %{frame | payload: %{payload | hbf: hbf}}}
   end
 
   defp encode_headers(frame, stream, _table) do
