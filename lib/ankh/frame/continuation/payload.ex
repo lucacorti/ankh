@@ -3,11 +3,11 @@ defmodule Ankh.Frame.Continuation.Payload do
   CONTINUATION frame payload
   """
 
-  @type t :: %__MODULE__{header_block_fragment: binary}
-  defstruct [header_block_fragment: <<>>]
+  @type t :: %__MODULE__{hbf: binary}
+  defstruct [hbf: <<>>]
 end
 
 defimpl Ankh.Frame.Payload, for: Ankh.Frame.Continuation.Payload do
-  def encode!(%{header_block_fragment: hbf}, _), do: [hbf]
-  def decode!(struct, data, _), do: %{struct| header_block_fragment: data}
+  def encode!(%{hbf: hbf}, _), do: [hbf]
+  def decode!(struct, data, _), do: %{struct| hbf: data}
 end

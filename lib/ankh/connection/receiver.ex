@@ -220,7 +220,7 @@ defmodule Ankh.Connection.Receiver do
   defp decode_frame(%{stream_id: 0} = frame, state), do: {state, frame}
 
   defp decode_frame(%Headers{stream_id: id, flags: %{end_headers: false},
-  payload: %{header_block_fragment: hbf}} = frame, %{streams: streams} = state)
+  payload: %{hbf: hbf}} = frame, %{streams: streams} = state)
   do
     Logger.debug("STREAM #{id} RECEIVED PARTIAL HBF #{inspect hbf}")
     {_, streams} = Map.get_and_update(streams, id, fn
@@ -231,8 +231,8 @@ defmodule Ankh.Connection.Receiver do
   end
 
   defp decode_frame(%PushPromise{stream_id: id, flags: %{end_headers: false},
-  payload: %{promised_stream_id: promised_id,
-  header_block_fragment: hbf}} = frame, %{streams: streams} = state) do
+  payload: %{promised_stream_id: promised_id, hbf: hbf}} = frame,
+  %{streams: streams} = state) do
     Logger.debug("STREAM #{id} RECEIVED PARTIAL HBF #{inspect hbf}")
     {_, streams} = Map.get_and_update(streams, id, fn
       a_stream ->
@@ -243,7 +243,7 @@ defmodule Ankh.Connection.Receiver do
   end
 
   defp decode_frame(%Continuation{stream_id: id, flags: %{end_headers: false},
-  payload: %{header_block_fragment: hbf}} = frame, %{streams: streams} = state)
+  payload: %{hbf: hbf}} = frame, %{streams: streams} = state)
   do
     Logger.debug("STREAM #{id} RECEIVED PARTIAL HBF #{inspect hbf}")
     {_, streams} = Map.get_and_update(streams, id, fn
@@ -254,7 +254,7 @@ defmodule Ankh.Connection.Receiver do
   end
 
   defp decode_frame(%Headers{stream_id: id, flags: %{end_headers: true},
-  payload: %{header_block_fragment: hbf}} = frame,
+  payload: %{hbf: hbf}} = frame,
   %{streams: streams, recv_ctx: table, receiver: receiver} = state) do
     stream = Map.get(streams, id)
     headers = HPack.decode(stream.hbf <> hbf, table)
@@ -264,8 +264,7 @@ defmodule Ankh.Connection.Receiver do
   end
 
   defp decode_frame(%PushPromise{stream_id: id, flags: %{end_headers: true},
-  payload: %{promised_stream_id: promised_id,
-  header_block_fragment: hbf}} = frame,
+  payload: %{promised_stream_id: promised_id, hbf: hbf}} = frame,
   %{streams: streams, recv_ctx: table, receiver: receiver} = state) do
     stream = Map.get(streams, id)
     headers = HPack.decode(stream.hbf <> hbf, table)
@@ -278,7 +277,7 @@ defmodule Ankh.Connection.Receiver do
   end
 
   defp decode_frame(%Continuation{stream_id: id, flags: %{end_headers: true},
-  payload: %{header_block_fragment: hbf}} = frame,
+  payload: %{hbf: hbf}} = frame,
   %{streams: streams, recv_ctx: table, receiver: receiver} = state) do
     stream = Map.get(streams, id)
     headers = HPack.decode(stream.hbf <> hbf, table)
