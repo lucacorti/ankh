@@ -217,7 +217,7 @@ defmodule Ankh.Connection do
   defp send_frame(%{socket: socket, receiver: receiver, send_ctx: table} = state,
   %{stream_id: id} = frame) do
 
-    with {:ok, stream} = Receiver.stream(receiver, id),
+    with {:ok, stream} <- Receiver.stream(receiver, id),
          {:ok, a_stream} <- Stream.send_frame(stream, frame),
          {_stream, frame} <- encode_headers(frame, a_stream, table) do
       Logger.debug "STREAM #{id} SEND #{inspect frame}"
