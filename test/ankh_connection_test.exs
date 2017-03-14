@@ -1,7 +1,7 @@
 defmodule AnkhTest.Connection do
   use ExUnit.Case
 
-  alias Ankh.Frame.{Data, Headers, Settings}
+  alias Ankh.Frame.{Headers, Settings}
   alias Ankh.Connection
 
   alias AnkhTest.StreamGen
