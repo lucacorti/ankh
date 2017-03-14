@@ -1,5 +1,6 @@
 defmodule AnkhTest.Stream do
   use ExUnit.Case
+
   alias Ankh.Frame.{Data, Headers, Ping, Priority, RstStream, WindowUpdate}
   alias Ankh.Stream
 
