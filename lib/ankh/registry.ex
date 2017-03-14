@@ -4,6 +4,8 @@ defmodule Ankh.Registry do
     quote do
       use GenServer
 
+      require Logger
+
       def start_link do
         GenServer.start_link(__MODULE__, [], name: __MODULE__)
       end
@@ -41,6 +43,7 @@ defmodule Ankh.Registry do
       end
 
       def handle_info({:DOWN, _, :process, pid, _}, state) do
+        Logger.debug "#{__MODULE__}: DOWN #{inspect pid}"
         {:noreply, remove_pid(state, pid)}
       end
 
