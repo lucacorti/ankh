@@ -8,8 +8,6 @@ defmodule Ankh.Frame.Data.Payload do
 end
 
 defimpl Ankh.Frame.Payload, for: Ankh.Frame.Data.Payload do
-  import Ankh.Frame.Utils
-
   def decode!(struct, <<pad_length::8, padded_data::binary>>,
   flags: %{padded: true}) do
     data = binary_part(padded_data, 0, byte_size(padded_data) - pad_length)
@@ -21,7 +19,7 @@ defimpl Ankh.Frame.Payload, for: Ankh.Frame.Data.Payload do
   end
 
   def encode!(%{pad_length: pad_length, data: data}, flags: %{padded: true}) do
-    [<<pad_length::8, data>>, padding(pad_length)]
+    [<<pad_length::8, data>>, :binary.copy(<<0>>, pad_length)]
   end
 
   def encode!(%{data: data}, flags: %{padded: false}) do

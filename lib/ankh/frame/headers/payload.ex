@@ -12,15 +12,15 @@ end
 defimpl Ankh.Frame.Payload, for: Ankh.Frame.Headers.Payload do
   import Ankh.Frame.Utils
 
-  def encode!(%{pad_length: pl, exclusive: ex, stream_dependency: sd,
+  def encode!(%{pad_length: pad_length, exclusive: ex, stream_dependency: sd,
   weight: wh, hbf: hbf}, flags: %{padded: true, priority: true})
   do
-    [<<pl::8, bool_to_int!(ex)::1, sd::31, wh::8>>, hbf, padding(pl)]
+    [<<pad_length::8, bool_to_int!(ex)::1, sd::31, wh::8>>, hbf, :binary.copy(<<0>>, pad_length)]
   end
 
-  def encode!(%{pad_length: pl, hbf: hbf},
+  def encode!(%{pad_length: pad_length, hbf: hbf},
   flags: %{padded: true, priority: false}) do
-    [<<pl::8>>, hbf, padding(pl)]
+    [<<pad_length::8>>, hbf, :binary.copy(<<0>>, pad_length)]
   end
 
   def encode!(%{exclusive: ex, stream_dependency: sd, weight: wh,

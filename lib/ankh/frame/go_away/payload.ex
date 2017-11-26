@@ -1,4 +1,4 @@
-defmodule Ankh.Frame.Goaway.Payload do
+defmodule Ankh.Frame.GoAway.Payload do
   @moduledoc """
   GOAWAY frame payload
   """
@@ -8,7 +8,7 @@ defmodule Ankh.Frame.Goaway.Payload do
   defstruct [last_stream_id: nil, error_code: nil, data: <<>>]
 end
 
-defimpl Ankh.Frame.Payload, for: Ankh.Frame.Goaway.Payload do
+defimpl Ankh.Frame.Payload, for: Ankh.Frame.GoAway.Payload do
   alias Ankh.Frame.Error
 
   def decode!(struct, <<_::1, lsid::31, error::32>>, _) do

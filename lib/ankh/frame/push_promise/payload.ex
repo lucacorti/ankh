@@ -9,11 +9,9 @@ defmodule Ankh.Frame.PushPromise.Payload do
 end
 
 defimpl Ankh.Frame.Payload, for: Ankh.Frame.PushPromise.Payload do
-  import Ankh.Frame.Utils
-
-  def encode!(%{pad_length: pl, promised_stream_id: psi, hbf: hbf},
+  def encode!(%{pad_length: pad_length, promised_stream_id: psi, hbf: hbf},
   flags: %{padded: true}) do
-    [<<pl::8, 0::1, psi::31>>, hbf, padding(pl)]
+    [<<pad_length::8, 0::1, psi::31>>, hbf, :binary.copy(<<0>>, pad_length)]
   end
 
   def encode!(%{promised_stream_id: psi, hbf: hbf}, flags: %{padded: false}) do
