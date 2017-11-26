@@ -19,7 +19,6 @@ defmodule AnkhTest do
 end
 
 defmodule AnkhTest.StreamGen do
-
   @values %{client: -1, server: 0}
 
   @doc """

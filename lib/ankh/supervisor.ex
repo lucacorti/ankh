@@ -1,4 +1,7 @@
 defmodule Ankh.Supervisor do
+  @moduledoc """
+  Ankh Supervisor
+  """
   use Supervisor
 
   def start_link do
@@ -6,7 +9,7 @@ defmodule Ankh.Supervisor do
   end
 
   def init([]) do
-    [supervisor(Connection.Supervisor, [])]
-    |> supervise(strategy: :simple_one_for_one, restart: :transient)
+    [supervisor(Registry, [:unique, Ankh.Frame.Registry], id: Ankh.Frame.Registry1)]
+    |> supervise(strategy: :one_for_one)
   end
 end

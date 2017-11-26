@@ -4,8 +4,8 @@ defmodule Ankh.Mixfile do
   def project do
     [
       app: :ankh,
-      version: "0.3.1",
-      elixir: "~> 1.4",
+      version: "0.4.0",
+      elixir: "~> 1.5",
       build_embedded: Mix.env == :prod,
       start_permanent: Mix.env == :prod,
       description: "Pure Elixir HTTP/2 implementation",
@@ -32,7 +32,9 @@ defmodule Ankh.Mixfile do
       {:ex_doc, ">= 0.0.0", only: :dev},
       {:credo, ">= 0.0.0", only: :dev},
       {:dialyxir, ">= 0.0.0", only: :dev},
-      {:hpack, "~> 1.0.3"}
+      {:hpack, "~> 1.0.3", only: :test},
+      {:certifi, "~> 2.0"},
+      {:ssl_verify_fun, "~> 1.1"}
     ]
   end
 end

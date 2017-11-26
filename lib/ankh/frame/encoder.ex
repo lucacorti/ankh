@@ -6,20 +6,21 @@ defprotocol Ankh.Frame.Encoder do
   """
   @fallback_to_any true
 
-  @typedoc """
-  Struct conforming to the `Ankh.Frame.Encoder` protocol
-  """
-  @type t :: struct
+  @typedoc "Struct conforming to the `Ankh.Frame.Encoder` protocol"
+  @type t :: term | nil
+
+  @typedoc "Frane encoder options"
+  @type options :: Keyword.t
 
   @doc """
   Decodes a binary into a conforming struct
 
   Parameters:
-    - struct: struct conforming to the `Ankh.Frame.Encoder` protocol
+    - struct: struct using `Ankh.Frame` and conforming to `Ankh.Frame.Encoder`
     - binary: data to decode into the struct
     - options: options to pass as context to the decoding function
   """
-  @spec decode!(t, binary, Keyword.t) :: t
+  @spec decode!(t, binary, options) :: t
   def decode!(struct, binary, options)
 
   @doc """
@@ -29,7 +30,7 @@ defprotocol Ankh.Frame.Encoder do
     - struct: struct conforming to the `Ankh.Frame.Encoder` protocol
     - options: options to pass as context to the encoding function
   """
-  @spec encode!(t, Keyword.t) :: binary
+  @spec encode!(t, options) :: iodata
   def encode!(struct, options)
 end
 
@@ -59,7 +60,7 @@ defimpl Ankh.Frame.Encoder, for: Any do
   def encode!(%{type: type, flags: nil, stream_id: id, payload: payload},
   options) do
     payload = Payload.encode!(payload, options)
-    length = Enum.reduce(payload, 0, fn part, acc -> acc + byte_size(part) end)
+    length = IO.iodata_length(payload)
     [<<length::24, type::8, 0::8, 0::1, id::31>> | payload]
   end
 
@@ -67,7 +68,7 @@ defimpl Ankh.Frame.Encoder, for: Any do
   options) do
     payload_options = Keyword.put(options, :flags, flags)
     payload = Payload.encode!(payload, payload_options)
-    length = Enum.reduce(payload, 0, fn part, acc -> acc + byte_size(part) end)
+    length = IO.iodata_length(payload)
     flags = Flags.encode!(flags, options)
     [<<length::24, type::8>>, flags, <<0::1, id::31>> | payload]
   end

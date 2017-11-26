@@ -1,35 +1,36 @@
 defprotocol Ankh.Frame.Flags do
   @moduledoc """
-  Protocol for enoding/decoding flags structs
+  Protocol for enoding/decoding flags data types
   """
 
   @fallback_to_any true
 
-  @typedoc """
-  Struct conforming to the `Ankh.Frame.Flags` protocol
-  """
-  @type t :: struct
+  @typedoc "Data type conforming to the `Ankh.Frame.Flags` protocol"
+  @type t :: term | nil
+
+  @typedoc "Flags decode options"
+  @type options :: Keyword.t
 
   @doc """
-  Decodes a binary into a conforming struct
+  Decodes a binary into a conforming data type
 
   Parameters:
-    - struct: struct conforming to the `Ankh.Frame.Flags` protocol
+    - data: data type conforming to the `Ankh.Frame.Flags` protocol
     - binary: data to decode into the struct
     - options: options to pass as context to the decoding function
   """
-  @spec decode!(t, binary, Keyword.t) :: t
-  def decode!(struct, binary, options)
+  @spec decode!(t, binary, options) :: t
+  def decode!(struct, binary, options \\ [])
 
   @doc """
   Encodes a conforming struct into binary
 
   Parameters:
-    - struct: struct conforming to the `Ankh.Frame.Flags` protocol
+    - data: data conforming to the `Ankh.Frame.Flags` protocol
     - options: options to pass as context to the encoding function
   """
-  @spec encode!(t, Keyword.t) :: binary
-  def encode!(struct, options)
+  @spec encode!(t, options) :: iodata
+  def encode!(data, options \\ [])
 end
 
 defimpl Ankh.Frame.Flags, for: Any do

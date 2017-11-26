@@ -1,35 +1,36 @@
 defprotocol Ankh.Frame.Payload do
   @moduledoc """
-  Protocol for enoding/decoding payload structs
+  Protocol for enoding/decoding payload data types
   """
 
   @fallback_to_any true
 
-  @typedoc """
-  Struct conforming to the `Ankh.Frame.Payload` protocol
-  """
-  @type t :: struct
+  @typedoc "Data type conforming to the `Ankh.Frame.Payload` protocol"
+  @type t :: term | nil
+
+  @typedoc "Payload decode options"
+  @type options :: Keyword.t
 
   @doc """
-  Decodes a binary into a conforming struct
+  Decodes a binary into a conforming data type
 
   Parameters:
-    - struct: struct conforming to the `Ankh.Frame.Payload` protocol
-    - binary: data to decode into the struct
+    - data: data type conforming to the `Ankh.Frame.Payload` protocol
+    - binary: binary to decode into the data type
     - options: options to pass as context to the decoding function
   """
-  @spec decode!(t, binary, Keyword.t) :: t
-  def decode!(struct, binary, options)
+  @spec decode!(t, binary, options) :: t
+  def decode!(data, binary, options \\ [])
 
   @doc """
-  Encodes a conforming struct into binary or IO list
+  Encodes a conforming data type into an IO list
 
   Parameters:
-    - struct: struct conforming to the `Ankh.Frame.Payload` protocol
+    - data: data type conforming to the `Ankh.Frame.Payload` protocol
     - options: options to pass as context to the encoding function
   """
-  @spec encode!(t, Keyword.t) :: binary | [binary]
-  def encode!(struct, options)
+  @spec encode!(t, options) :: iodata
+  def encode!(data, options \\ [])
 end
 
 defimpl Ankh.Frame.Payload, for: Any do
