@@ -7,17 +7,20 @@ defmodule Ankh.Stream do
   alias Frame.{Data, Continuation, Error, Headers, Priority, PushPromise, RstStream, WindowUpdate}
   require Logger
 
-  @typedoc """
-  Stream states
-  """
+  @typedoc "Stream states"
   @type state :: :idle | :open | :closed | :half_closed_local |
   :half_closed_remote | :reserved_remote | :reserved_local
 
+  @typedoc "Stream mode"
   @type mode :: :reassemble | :streaming
+
+  @typedoc "Stream HBF type"
+  @type hbf_type :: :headers | :push_promise
+
   @typedoc """
   - id: stream id
-  - state: stream state
-  - mode: reassemble | :stream, request mode
+  - state: stream `state`
+  - mode: stream `mode`
   - hbf_type: :headers | :push_promise, type of HBF being accumulated
   - hbf: HBF accumulator, for reassembly
   - data: DATA accumulator, for reassembly
@@ -27,8 +30,8 @@ defmodule Ankh.Stream do
     id: Integer.t,
     connection: Connection.t,
     state: state,
-    mode: :reassemble | :streaming,
-    recv_hbf_type: :headers | :push_promise,
+    mode: mode,
+    recv_hbf_type: hbf_type,
     recv_hbf: iodata,
     recv_data: iodata,
     window_size: Integer.t
