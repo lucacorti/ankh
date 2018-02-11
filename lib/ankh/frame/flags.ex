@@ -9,7 +9,7 @@ defprotocol Ankh.Frame.Flags do
   @type t :: term | nil
 
   @typedoc "Flags decode options"
-  @type options :: Keyword.t
+  @type options :: Keyword.t()
 
   @doc """
   Decodes a binary into a conforming data type

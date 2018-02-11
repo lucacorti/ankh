@@ -27,44 +27,48 @@ defmodule Ankh.Connection do
   alias Ankh.Frame
   alias Ankh.Connection.Receiver
 
-  @default_ssl_opts binary: true, active: false, versions: [:"tlsv1.2"],
-  secure_renegotiate: true, client_renegotiation: false,
-  ciphers: ["ECDHE-ECDSA-AES128-SHA256", "ECDHE-ECDSA-AES128-SHA"],
-  alpn_advertised_protocols: ["h2"], cacerts: :certifi.cacerts()
+  @default_ssl_opts binary: true,
+                    active: false,
+                    versions: [:"tlsv1.2"],
+                    secure_renegotiate: true,
+                    client_renegotiation: false,
+                    ciphers: ["ECDHE-ECDSA-AES128-SHA256", "ECDHE-ECDSA-AES128-SHA"],
+                    alpn_advertised_protocols: ["h2"],
+                    cacerts: :certifi.cacerts()
   @preface "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
 
   @typedoc """
   Ankh Connection process
   """
-  @type connection :: GenServer.server
+  @type connection :: GenServer.server()
 
   @typedoc """
   Ankh DATA message (full mode)
 
   `{:ankh, :data, stream_id, data}`
   """
-  @type data_msg :: {:ankh, :data, Integer.t, binary}
+  @type data_msg :: {:ankh, :data, Integer.t(), binary}
 
   @typedoc """
   Ankh DATA frame (streaming mode)
 
   `{:ankh, :stream_data, stream_id, data}`
   """
-  @type streaming_data_msg :: {:ankh, :stream_data, Integer.t, binary}
+  @type streaming_data_msg :: {:ankh, :stream_data, Integer.t(), binary}
 
   @typedoc """
   Ankh HEADERS message
 
   `{:ankh, :headers, stream_id, headers}`
   """
-  @type headers_msg :: {:ankh, :headers, Integer.t, Keyword.t}
+  @type headers_msg :: {:ankh, :headers, Integer.t(), Keyword.t()}
 
   @typedoc """
   Ankh PUSH_PROMISE message
 
   `{:ankh, :headers, stream_id, promised_stream_id, headers}`
   """
-  @type push_promise_msg :: {:ankh, :push_promise, Integer.t, Integer.t, Keyword.t}
+  @type push_promise_msg :: {:ankh, :push_promise, Integer.t(), Integer.t(), Keyword.t()}
 
   @typedoc """
   Startup options:
@@ -72,7 +76,7 @@ defmodule Ankh.Connection do
     Messages are shipped to the calling process if nil.
     - ssl_options: SSL connection options, for the Erlang `:ssl` module
   """
-  @type args :: [uri: URI.t, controlling_process: pid | nil, ssl_options: Keyword.t]
+  @type args :: [uri: URI.t(), controlling_process: pid | nil, ssl_options: Keyword.t()]
 
   @doc """
   Start the connection process for the specified `URI`.
@@ -81,14 +85,17 @@ defmodule Ankh.Connection do
     - args: startup options
     - options: GenServer startup options
   """
-  @spec start_link(args, GenServer.options) :: GenServer.on_start
+  @spec start_link(args, GenServer.options()) :: GenServer.on_start()
   def start_link(args, options \\ []) do
-    {_, args} = Keyword.get_and_update(args, :controlling_process, fn
-      nil ->
-        {self(), self()}
-      value ->
-        {value, value}
-    end)
+    {_, args} =
+      Keyword.get_and_update(args, :controlling_process, fn
+        nil ->
+          {self(), self()}
+
+        value ->
+          {value, value}
+      end)
+
     GenServer.start_link(__MODULE__, args, options)
   end
 
@@ -96,7 +103,9 @@ defmodule Ankh.Connection do
     controlling_process = Keyword.get(args, :controlling_process)
     uri = Keyword.get(args, :uri)
     ssl_opts = Keyword.get(args, :ssl_options, [])
-    with {:ok, receiver} <- Receiver.start_link(uri: uri, controlling_process: controlling_process) do
+
+    with {:ok, receiver} <-
+           Receiver.start_link(uri: uri, controlling_process: controlling_process) do
       {:ok, %{uri: uri, ssl_opts: ssl_opts, receiver: receiver, socket: nil}}
     else
       error ->
@@ -121,7 +130,7 @@ defmodule Ankh.Connection do
     - connection: connection process
     - frame: `Ankh.Frame` structure
   """
-  @spec send(connection, Frame.t) :: :ok | {:error, atom}
+  @spec send(connection, Frame.t()) :: :ok | {:error, atom}
   def send(connection, frame) do
     GenServer.call(connection, {:send, Frame.Encoder.encode!(frame, [])})
   end
@@ -137,10 +146,15 @@ defmodule Ankh.Connection do
   @spec close(connection) :: :closed
   def close(connection), do: GenServer.call(connection, {:close})
 
-  def handle_call({:connect}, _from, %{socket: nil, ssl_opts: ssl_opts,
-  uri: %URI{host: host, port: port}, receiver: receiver} = state) do
+  def handle_call(
+        {:connect},
+        _from,
+        %{socket: nil, ssl_opts: ssl_opts, uri: %URI{host: host, port: port}, receiver: receiver} =
+          state
+      ) do
     hostname = String.to_charlist(host)
     ssl_options = Keyword.merge(ssl_opts, @default_ssl_opts)
+
     with {:ok, socket} <- :ssl.connect(hostname, port, ssl_options),
          :ok <- :ssl.controlling_process(socket, receiver),
          :ok <- :ssl.setopts(socket, active: :once),
@@ -164,6 +178,7 @@ defmodule Ankh.Connection do
     case :ssl.send(socket, frame) do
       :ok ->
         {:reply, :ok, state}
+
       error ->
         {:stop, :ssl.format_error(error), state}
     end

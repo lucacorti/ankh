@@ -3,8 +3,8 @@ defmodule Ankh.Frame.RstStream.Payload do
   RST_STREAM frame payload
   """
 
-  @type t :: %__MODULE__{error_code: Ankh.Frame.Error.t}
-  defstruct [error_code: nil]
+  @type t :: %__MODULE__{error_code: Ankh.Frame.Error.t()}
+  defstruct error_code: nil
 end
 
 defimpl Ankh.Frame.Payload, for: Ankh.Frame.RstStream.Payload do

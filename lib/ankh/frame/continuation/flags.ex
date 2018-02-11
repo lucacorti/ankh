@@ -4,10 +4,10 @@ defmodule Ankh.Frame.Continuation.Flags do
   """
 
   @type t :: %__MODULE__{end_headers: boolean}
-  defstruct [end_headers: false]
+  defstruct end_headers: false
 end
 
-defimpl Ankh.Frame.Flags, for: Ankh.Frame.Continuation.Flags  do
+defimpl Ankh.Frame.Flags, for: Ankh.Frame.Continuation.Flags do
   import Ankh.Frame.Utils
 
   def decode!(struct, <<_::5, eh::1, _::2>>, _) do

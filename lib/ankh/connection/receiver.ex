@@ -8,14 +8,19 @@ defmodule Ankh.Connection.Receiver do
 
   @frame_header_size 9
 
-  @type receiver :: GenServer.server
+  @type receiver :: GenServer.server()
 
-  @type args :: [uri: URI.t, controlling_process: pid | nil]
+  @type args :: [uri: URI.t(), controlling_process: pid | nil]
 
-  @spec start_link(args, GenServer.options) :: GenServer.on_start
+  @spec start_link(args, GenServer.options()) :: GenServer.on_start()
   def start_link(args, options \\ []) do
     controlling_process = Keyword.get(args, :controlling_process, self())
-    GenServer.start_link(__MODULE__, Keyword.merge(args, [controlling_process: controlling_process]), options)
+
+    GenServer.start_link(
+      __MODULE__,
+      Keyword.merge(args, controlling_process: controlling_process),
+      options
+    )
   end
 
   def init(args) do
@@ -24,9 +29,13 @@ defmodule Ankh.Connection.Receiver do
     {:ok, %{buffer: <<>>, uri: uri, controlling_process: controlling_process}}
   end
 
-  def handle_info({:ssl, socket, data}, %{buffer: buffer, controlling_process: controlling_process} = state) do
+  def handle_info(
+        {:ssl, socket, data},
+        %{buffer: buffer, controlling_process: controlling_process} = state
+      ) do
     :ssl.setopts(socket, active: :once)
     {state, frames} = parse_frames(buffer <> data, state)
+
     for frame <- frames do
       Process.send(controlling_process, {:ankh, :frame, frame}, [])
     end
@@ -43,7 +52,7 @@ defmodule Ankh.Connection.Receiver do
   end
 
   defp parse_frames(<<payload_length::24, _::binary>> = data, state)
-  when @frame_header_size + payload_length > byte_size(data) do
+       when @frame_header_size + payload_length > byte_size(data) do
     {%{state | buffer: data}, []}
   end
 
@@ -53,9 +62,10 @@ defmodule Ankh.Connection.Receiver do
     rest_size = byte_size(data) - frame_size
     rest_data = binary_part(data, frame_size, rest_size)
 
-    frame = uri
-    |> Frame.Registry.struct_for_type(type)
-    |> Frame.Encoder.decode!(frame_data, [])
+    frame =
+      uri
+      |> Frame.Registry.struct_for_type(type)
+      |> Frame.Encoder.decode!(frame_data, [])
 
     {new_state, frames} = parse_frames(rest_data, state)
     {new_state, [frame | frames]}

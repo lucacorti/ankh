@@ -3,13 +3,12 @@ defmodule Ankh.Frame.Data.Payload do
   DATA frame payload
   """
 
-  @type t :: %__MODULE__{pad_length: Integer.t, data: binary}
-  defstruct [pad_length: 0, data: <<>>]
+  @type t :: %__MODULE__{pad_length: Integer.t(), data: binary}
+  defstruct pad_length: 0, data: <<>>
 end
 
 defimpl Ankh.Frame.Payload, for: Ankh.Frame.Data.Payload do
-  def decode!(struct, <<pad_length::8, padded_data::binary>>,
-  flags: %{padded: true}) do
+  def decode!(struct, <<pad_length::8, padded_data::binary>>, flags: %{padded: true}) do
     data = binary_part(padded_data, 0, byte_size(padded_data) - pad_length)
     %{struct | pad_length: pad_length, data: data}
   end

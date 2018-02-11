@@ -3,9 +3,8 @@ defmodule Ankh.Frame.Priority.Payload do
   PRIORITY frame payload
   """
 
-  @type t :: %__MODULE__{exclusive: boolean, stream_dependency: Integer.t,
-  weight: Integer.t}
-  defstruct [exclusive: false, stream_dependency: 0, weight: 0]
+  @type t :: %__MODULE__{exclusive: boolean, stream_dependency: Integer.t(), weight: Integer.t()}
+  defstruct exclusive: false, stream_dependency: 0, weight: 0
 end
 
 defimpl Ankh.Frame.Payload, for: Ankh.Frame.Priority.Payload do

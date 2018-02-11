@@ -4,7 +4,7 @@ defmodule Ankh.Frame.Ping.Payload do
   """
 
   @type t :: %__MODULE__{data: binary}
-  defstruct [data: <<>>]
+  defstruct data: <<>>
 end
 
 defimpl Ankh.Frame.Payload, for: Ankh.Frame.Ping.Payload do

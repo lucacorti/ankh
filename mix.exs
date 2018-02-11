@@ -6,8 +6,8 @@ defmodule Ankh.Mixfile do
       app: :ankh,
       version: "0.4.0",
       elixir: "~> 1.5",
-      build_embedded: Mix.env == :prod,
-      start_permanent: Mix.env == :prod,
+      build_embedded: Mix.env() == :prod,
+      start_permanent: Mix.env() == :prod,
       description: "Pure Elixir HTTP/2 implementation",
       package: package(),
       deps: deps()
@@ -18,13 +18,12 @@ defmodule Ankh.Mixfile do
     [
       maintainers: ["Luca Corti"],
       licenses: ["MIT"],
-      links: %{ "GitHub": "https://github.com/lucacorti/ankh" }
+      links: %{GitHub: "https://github.com/lucacorti/ankh"}
     ]
   end
 
   def application do
-    [applications: [:logger, :ssl],
-    mod: {Ankh, []}]
+    [applications: [:logger, :ssl], mod: {Ankh, []}]
   end
 
   defp deps do

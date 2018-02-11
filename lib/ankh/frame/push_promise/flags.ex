@@ -4,10 +4,10 @@ defmodule Ankh.Frame.PushPromise.Flags do
   """
 
   @type t :: %__MODULE__{end_headers: boolean, padded: boolean}
-  defstruct [end_headers: false, padded: false]
+  defstruct end_headers: false, padded: false
 end
 
-defimpl Ankh.Frame.Flags, for: Ankh.Frame.PushPromise.Flags  do
+defimpl Ankh.Frame.Flags, for: Ankh.Frame.PushPromise.Flags do
   import Ankh.Frame.Utils
 
   def decode!(struct, <<_::4, pa::1, eh::1, _::2>>, _) do

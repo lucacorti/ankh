@@ -3,8 +3,8 @@ defmodule Ankh.Frame.WindowUpdate.Payload do
   WINDOW_UPDATE frame payload
   """
 
-  @type t :: %__MODULE__{window_size_increment: Integer.t}
-  defstruct [window_size_increment: 0]
+  @type t :: %__MODULE__{window_size_increment: Integer.t()}
+  defstruct window_size_increment: 0
 end
 
 defimpl Ankh.Frame.Payload, for: Ankh.Frame.WindowUpdate.Payload do

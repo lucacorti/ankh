@@ -24,7 +24,7 @@ defmodule AnkhTest.StreamGen do
   @doc """
   Init client or server stream number generator
   """
-  @spec start_link(:client|:server) :: Agent.on_start
+  @spec start_link(:client | :server) :: Agent.on_start()
   def start_link(type), do: Agent.start_link(fn -> Map.get(@values, type) end)
 
   @doc """
