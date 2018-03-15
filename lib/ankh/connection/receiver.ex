@@ -5,6 +5,7 @@ defmodule Ankh.Connection.Receiver do
   use GenServer
 
   alias Ankh.Frame
+  alias Ankh.Frame.Encoder
 
   @frame_header_size 9
 
@@ -65,7 +66,7 @@ defmodule Ankh.Connection.Receiver do
     frame =
       uri
       |> Frame.Registry.struct_for_type(type)
-      |> Frame.Encoder.decode!(frame_data, [])
+      |> Encoder.decode!(frame_data, [])
 
     {new_state, frames} = parse_frames(rest_data, state)
     {new_state, [frame | frames]}

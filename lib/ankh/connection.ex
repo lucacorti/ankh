@@ -25,6 +25,7 @@ defmodule Ankh.Connection do
   use GenServer
 
   alias Ankh.Frame
+  alias Ankh.Frame.Encoder
   alias Ankh.Connection.Receiver
 
   @default_ssl_opts binary: true,
@@ -132,7 +133,7 @@ defmodule Ankh.Connection do
   """
   @spec send(connection, Frame.t()) :: :ok | {:error, atom}
   def send(connection, frame) do
-    GenServer.call(connection, {:send, Frame.Encoder.encode!(frame, [])})
+    GenServer.call(connection, {:send, Encoder.encode!(frame, [])})
   end
 
   @doc """
