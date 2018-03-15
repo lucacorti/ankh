@@ -9,7 +9,7 @@ defmodule Ankh.Supervisor do
   end
 
   def init([]) do
-    [supervisor(Registry, [:unique, Ankh.Frame.Registry], id: Ankh.Frame.Registry1)]
+    [supervisor(Registry, [:unique, Ankh.Frame.Registry], id: Ankh.Frame.Registry)]
     |> supervise(strategy: :one_for_one)
   end
 end
