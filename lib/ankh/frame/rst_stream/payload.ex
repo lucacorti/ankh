@@ -1,7 +1,5 @@
 defmodule Ankh.Frame.RstStream.Payload do
-  @moduledoc """
-  RST_STREAM frame payload
-  """
+  @moduledoc false
 
   @type t :: %__MODULE__{error_code: Ankh.Frame.Error.t()}
   defstruct error_code: nil

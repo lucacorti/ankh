@@ -1,7 +1,5 @@
 defmodule Ankh.Frame.Ping.Flags do
-  @moduledoc """
-  PING frame flags
-  """
+  @moduledoc false
 
   @type t :: %__MODULE__{ack: boolean}
   defstruct ack: false

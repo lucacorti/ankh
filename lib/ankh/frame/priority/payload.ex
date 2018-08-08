@@ -1,7 +1,5 @@
 defmodule Ankh.Frame.Priority.Payload do
-  @moduledoc """
-  PRIORITY frame payload
-  """
+  @moduledoc false
 
   @type t :: %__MODULE__{exclusive: boolean, stream_dependency: Integer.t(), weight: Integer.t()}
   defstruct exclusive: false, stream_dependency: 0, weight: 0

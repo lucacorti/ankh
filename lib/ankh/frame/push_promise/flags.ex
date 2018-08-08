@@ -1,7 +1,5 @@
 defmodule Ankh.Frame.PushPromise.Flags do
-  @moduledoc """
-  PUSH_PROMISE frame flags
-  """
+  @moduledoc false
 
   @type t :: %__MODULE__{end_headers: boolean, padded: boolean}
   defstruct end_headers: false, padded: false

@@ -1,7 +1,5 @@
 defmodule Ankh.Frame.GoAway.Payload do
-  @moduledoc """
-  GOAWAY frame payload
-  """
+  @moduledoc false
 
   @type t :: %__MODULE__{last_stream_id: Integer.t(), error_code: atom, data: binary}
   defstruct last_stream_id: nil, error_code: nil, data: <<>>

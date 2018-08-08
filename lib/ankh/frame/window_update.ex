@@ -1,7 +1,5 @@
 defmodule Ankh.Frame.WindowUpdate do
-  @moduledoc """
-  WINDOW_UPDATE frame struct
-  """
+  @moduledoc false
 
   alias __MODULE__.Payload
   use Ankh.Frame, type: 0x8, payload: %Payload{}

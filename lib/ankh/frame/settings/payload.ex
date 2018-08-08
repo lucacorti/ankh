@@ -1,7 +1,5 @@
 defmodule Ankh.Frame.Settings.Payload do
-  @moduledoc """
-  SETTINGS frame payload
-  """
+  @moduledoc false
 
   @type t :: %__MODULE__{
           header_table_size: Integer.t(),

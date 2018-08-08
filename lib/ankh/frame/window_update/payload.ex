@@ -1,7 +1,5 @@
 defmodule Ankh.Frame.WindowUpdate.Payload do
-  @moduledoc """
-  WINDOW_UPDATE frame payload
-  """
+  @moduledoc false
 
   @type t :: %__MODULE__{window_size_increment: Integer.t()}
   defstruct window_size_increment: 0

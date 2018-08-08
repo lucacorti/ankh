@@ -1,7 +1,5 @@
 defmodule Ankh.Frame.PushPromise.Payload do
-  @moduledoc """
-  PUSH_PROMISE frame payload
-  """
+  @moduledoc false
 
   @type t :: %__MODULE__{pad_length: Integer.t(), promised_stream_id: Integer.t(), hbf: binary}
   defstruct pad_length: 0, promised_stream_id: 0, hbf: <<>>

@@ -1,7 +1,5 @@
 defmodule Ankh.Frame.Headers.Payload do
-  @moduledoc """
-  HEADERS frame payload
-  """
+  @moduledoc false
 
   @type t :: %__MODULE__{
           pad_length: Integer.t(),

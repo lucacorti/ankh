@@ -1,7 +1,5 @@
 defmodule Ankh.Frame.Headers.Flags do
-  @moduledoc """
-  HEADERS frame flags
-  """
+  @moduledoc false
 
   @type t :: %__MODULE__{
           end_stream: boolean,
