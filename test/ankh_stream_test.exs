@@ -1,5 +1,5 @@
 defmodule AnkhTest.Stream do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
 
   alias Ankh.Frame.{Data, Headers, Ping, Priority, RstStream, WindowUpdate}
   alias Ankh.Stream
@@ -9,298 +9,430 @@ defmodule AnkhTest.Stream do
   @stream_id 1
 
   setup_all do
-    %{
-      stream: Stream.new(:ankh_test_mock_connection, @stream_id)
-    }
+    :ok
   end
 
-  test "receiving frame on the wrong stream raises", ctx do
-    frame = %Headers{stream_id: 3}
-
-    assert_raise RuntimeError, "FATAL on stream 1: can't receive frame for stream 3", fn ->
-      Stream.recv(ctx.stream, frame)
-    end
+  setup do
+    {:ok, table} = HPack.Table.start_link(4096)
+    {:ok, stream} = Stream.start_link(Ankh.Connection.Mock, @stream_id, table, nil)
+    %{stream: stream}
   end
 
-  test "stream idle to open on receiving headers", ctx do
-    assert {:ok, stream} =
-             ctx.stream
+  test "receiving frame on the wrong stream raises", %{stream: stream} do
+    assert {:error, :stream_id_mismatch} ==
+             stream
+             |> Stream.recv(%Headers{stream_id: 3})
+  end
+
+  test "stream idle to open on receiving headers", %{stream: stream} do
+    assert {:ok, :open} ==
+             stream
              |> Stream.recv(%Headers{stream_id: @stream_id})
-
-    assert stream.state === :open
   end
 
-  test "stream idle protocol_error on receiving frame != HEADERS", ctx do
-    assert {:error, :protocol_error} =
-             ctx.stream
+  test "stream idle protocol_error on receiving frame != HEADERS", %{stream: stream} do
+    assert {:error, :protocol_error} ==
+             stream
              |> Stream.recv(%Ping{stream_id: @stream_id})
   end
 
-  test "stream idle to open on sending headers", ctx do
-    assert {:ok, stream} =
-             ctx.stream
-             |> Stream.send(%Headers{stream_id: @stream_id})
-
-    assert stream.state === :open
+  test "stream idle to open on sending headers", %{stream: stream} do
+    assert {:ok, :open} ==
+             stream
+             |> Stream.send(%Headers{flags: %Headers.Flags{end_headers: true}})
   end
 
-  test "stream reserved_local to half_closed_remote on sending headers", ctx do
-    {:ok, stream} =
-      %{ctx.stream | state: :reserved_local}
-      |> Stream.send(%Headers{stream_id: @stream_id})
+  test "stream reserved_local to half_closed_remote on sending headers", %{stream: stream} do
+    assert {:ok, :reserved_local} ==
+             stream
+             |> Stream.reserve(:local)
 
-    assert stream.state === :half_closed_remote
+    assert {:ok, :half_closed_remote} ==
+             stream
+             |> Stream.send(%Headers{})
   end
 
-  test "stream reserved_local to closed on sending rst_stream", ctx do
-    {:ok, stream} =
-      %{ctx.stream | state: :reserved_local}
-      |> Stream.send(%RstStream{stream_id: @stream_id})
+  test "stream reserved_local to closed on sending rst_stream", %{stream: stream} do
+    assert {:ok, :reserved_local} ==
+             stream
+             |> Stream.reserve(:local)
 
-    assert stream.state === :closed
+    assert {:ok, :closed} ==
+             stream
+             |> Stream.send(%RstStream{})
   end
 
-  test "stream reserved_local to closed on receiving rst_stream", ctx do
-    {:ok, stream} =
-      %{ctx.stream | state: :reserved_local}
-      |> Stream.recv(%RstStream{stream_id: @stream_id})
+  test "stream reserved_local to closed on receiving rst_stream", %{stream: stream} do
+    assert {:ok, :reserved_local} ==
+             stream
+             |> Stream.reserve(:local)
 
-    assert stream.state === :closed
+    assert {:ok, :closed} ==
+             stream
+             |> Stream.recv(%RstStream{stream_id: @stream_id})
   end
 
-  test "stream reserved_local can send priority", ctx do
-    {:ok, stream} =
-      %{ctx.stream | state: :reserved_local}
-      |> Stream.send(%Priority{stream_id: @stream_id})
+  test "stream reserved_local can send priority", %{stream: stream} do
+    assert {:ok, :reserved_local} ==
+             stream
+             |> Stream.reserve(:local)
 
-    assert stream.state === :reserved_local
+    assert {:ok, :reserved_local} ==
+             stream
+             |> Stream.send(%Priority{})
   end
 
-  test "stream reserved_local can receive priority", ctx do
-    {:ok, stream} =
-      %{ctx.stream | state: :reserved_local}
-      |> Stream.recv(%Priority{stream_id: @stream_id})
+  test "stream reserved_local can receive priority", %{stream: stream} do
+    assert {:ok, :reserved_local} ==
+             stream
+             |> Stream.reserve(:local)
 
-    assert stream.state === :reserved_local
+    assert {:ok, :reserved_local} ==
+             stream
+             |> Stream.recv(%Priority{stream_id: @stream_id})
   end
 
-  test "stream reserved_local can receive window_update", ctx do
-    {:ok, stream} =
-      %{ctx.stream | state: :reserved_local}
-      |> Stream.recv(%WindowUpdate{stream_id: @stream_id})
+  test "stream reserved_local can receive window_update", %{stream: stream} do
+    assert {:ok, :reserved_local} ==
+             stream
+             |> Stream.reserve(:local)
 
-    assert stream.state === :reserved_local
+    assert {:ok, :reserved_local} ==
+             stream
+             |> Stream.recv(%WindowUpdate{stream_id: @stream_id})
   end
 
-  test "stream reserved_local protocol_error on other frame type", ctx do
-    stream =
-      %{ctx.stream | state: :reserved_local}
-      |> Stream.recv(%Ping{stream_id: @stream_id})
+  test "stream reserved_local protocol_error on other frame type", %{stream: stream} do
+    assert {:ok, :reserved_local} ==
+             stream
+             |> Stream.reserve(:local)
 
-    assert stream === {:error, :protocol_error}
+    assert {:error, :protocol_error} ==
+             stream
+             |> Stream.recv(%Ping{stream_id: @stream_id})
   end
 
-  test "stream reserved_remote to half_closed_remote on receiving headers", ctx do
-    {:ok, stream} =
-      %{ctx.stream | state: :reserved_remote}
-      |> Stream.recv(%Headers{stream_id: @stream_id})
+  test "stream reserved_remote to half_closed_remote on receiving headers", %{stream: stream} do
+    assert {:ok, :reserved_remote} ==
+             stream
+             |> Stream.reserve(:remote)
 
-    assert stream.state === :half_closed_local
-  end
-
-  test "stream reserved_remote to closed on sending rst_stream", ctx do
-    {:ok, stream} =
-      %{ctx.stream | state: :reserved_remote}
-      |> Stream.send(%RstStream{stream_id: @stream_id})
-
-    assert stream.state === :closed
-  end
-
-  test "stream reserved_remote to closed on receiving rst_stream", ctx do
-    {:ok, stream} =
-      %{ctx.stream | state: :reserved_remote}
-      |> Stream.recv(%RstStream{stream_id: @stream_id})
-
-    assert stream.state === :closed
-  end
-
-  test "stream reserved_remote can send priority", ctx do
-    {:ok, stream} =
-      %{ctx.stream | state: :reserved_remote}
-      |> Stream.send(%Priority{stream_id: @stream_id})
-
-    assert stream.state === :reserved_remote
-  end
-
-  test "stream reserved_remote can receive priority", ctx do
-    {:ok, stream} =
-      %{ctx.stream | state: :reserved_remote}
-      |> Stream.recv(%Priority{stream_id: @stream_id})
-
-    assert stream.state === :reserved_remote
-  end
-
-  test "stream reserved_remote protocol_error on other frame type", ctx do
-    {:error, :protocol_error} =
-      %{ctx.stream | state: :reserved_remote}
-      |> Stream.recv(%Ping{stream_id: @stream_id})
-  end
-
-  test "stream open can receive and send any frame type", ctx do
-    {:ok, stream} =
-      %{ctx.stream | state: :open}
-      |> Stream.recv(%Data{stream_id: @stream_id})
-
-    assert stream.state === :open
-  end
-
-  test "stream open to half_closed_remote on receiving flag END_STREAM", ctx do
-    {:ok, stream} =
-      %{ctx.stream | state: :open}
-      |> Stream.recv(%Headers{stream_id: @stream_id, flags: %Headers.Flags{end_stream: true}})
-
-    assert stream.state === :half_closed_remote
-  end
-
-  test "stream open to half_closed_local on sending flag END_STREAM", ctx do
-    {:ok, stream} =
-      %{ctx.stream | state: :open}
-      |> Stream.send(%Headers{stream_id: @stream_id, flags: %Headers.Flags{end_stream: true}})
-
-    assert stream.state === :half_closed_local
-  end
-
-  test "stream open to closed on sending rst_stream", ctx do
-    {:ok, stream} =
-      %{ctx.stream | state: :open}
-      |> Stream.send(%RstStream{stream_id: @stream_id})
-
-    assert stream.state === :closed
-  end
-
-  test "stream open to closed on receiving rst_stream", ctx do
-    {:ok, stream} =
-      %{ctx.stream | state: :open}
-      |> Stream.send(%RstStream{stream_id: @stream_id})
-
-    assert stream.state === :closed
-  end
-
-  test "stream half_closed_local can send window_update", ctx do
-    {:ok, stream} =
-      %{ctx.stream | state: :half_closed_local}
-      |> Stream.send(%WindowUpdate{stream_id: @stream_id})
-
-    assert stream.state === :half_closed_local
-  end
-
-  test "stream half_closed_local can send priority", ctx do
-    {:ok, stream} =
-      %{ctx.stream | state: :half_closed_local}
-      |> Stream.send(%Priority{stream_id: @stream_id})
-
-    assert stream.state === :half_closed_local
-  end
-
-  test "stream half_closed_local to closed on sending rst_stream", ctx do
-    {:ok, stream} =
-      %{ctx.stream | state: :half_closed_local}
-      |> Stream.send(%RstStream{stream_id: @stream_id})
-
-    assert stream.state === :closed
-  end
-
-  test "stream half_closed_local to closed on receiving flag END_STREAM", ctx do
-    {:ok, stream} =
-      %{ctx.stream | state: :half_closed_local}
-      |> Stream.recv(%Headers{stream_id: @stream_id, flags: %Headers.Flags{end_stream: true}})
-
-    assert stream.state === :closed
-  end
-
-  test "stream half_closed_local to closed on receiving rst_stream", ctx do
-    {:ok, stream} =
-      %{ctx.stream | state: :half_closed_local}
-      |> Stream.recv(%RstStream{stream_id: @stream_id})
-
-    assert stream.state === :closed
-  end
-
-  test "stream half_closed_remote can receive window_update", ctx do
-    {:ok, stream} =
-      %{ctx.stream | state: :half_closed_remote}
-      |> Stream.recv(%WindowUpdate{stream_id: @stream_id})
-
-    assert stream.state === :half_closed_remote
-  end
-
-  test "stream half_closed_remote can receive priority", ctx do
-    {:ok, stream} =
-      %{ctx.stream | state: :half_closed_remote}
-      |> Stream.recv(%Priority{stream_id: @stream_id})
-
-    assert stream.state === :half_closed_remote
-  end
-
-  test "stream half_closed_remote error stream_closed on other frame types", ctx do
-    assert {:error, :stream_closed} ===
-             %{ctx.stream | state: :half_closed_remote}
+    assert {:ok, :half_closed_local} ==
+             stream
              |> Stream.recv(%Headers{stream_id: @stream_id})
   end
 
-  test "stream half_closed_remote can send frame type", ctx do
-    {:ok, stream} =
-      %{ctx.stream | state: :half_closed_remote}
-      |> Stream.send(%Headers{stream_id: @stream_id})
+  test "stream reserved_remote to closed on sending rst_stream", %{stream: stream} do
+    assert {:ok, :reserved_remote} ==
+             stream
+             |> Stream.reserve(:remote)
 
-    assert stream.state === :half_closed_remote
+    assert {:ok, :closed} ==
+             stream
+             |> Stream.send(%RstStream{})
   end
 
-  test "stream half_closed_remote to closed on sending rst_stream", ctx do
-    {:ok, stream} =
-      %{ctx.stream | state: :half_closed_remote}
-      |> Stream.send(%RstStream{stream_id: @stream_id})
+  test "stream reserved_remote to closed on receiving rst_stream", %{stream: stream} do
+    assert {:ok, :reserved_remote} ==
+             stream
+             |> Stream.reserve(:remote)
 
-    assert stream.state === :closed
+    assert {:ok, :closed} ==
+             stream
+             |> Stream.recv(%RstStream{stream_id: @stream_id})
   end
 
-  test "stream half_closed_remote to closed on sending flag END_STREAM", ctx do
-    {:ok, stream} =
-      %{ctx.stream | state: :half_closed_remote}
-      |> Stream.send(%Headers{stream_id: @stream_id, flags: %Headers.Flags{end_stream: true}})
+  test "stream reserved_remote can send priority", %{stream: stream} do
+    assert {:ok, :reserved_remote} ==
+             stream
+             |> Stream.reserve(:remote)
 
-    assert stream.state === :closed
+    assert {:ok, :reserved_remote} ==
+             stream
+             |> Stream.send(%Priority{})
   end
 
-  test "stream half_closed_remote to closed on receiving rst_stream", ctx do
-    {:ok, stream} =
-      %{ctx.stream | state: :half_closed_remote}
-      |> Stream.recv(%RstStream{stream_id: @stream_id})
+  test "stream reserved_remote can receive priority", %{stream: stream} do
+    assert {:ok, :reserved_remote} ==
+             stream
+             |> Stream.reserve(:remote)
 
-    assert stream.state === :closed
+    assert {:ok, :reserved_remote} ==
+             stream
+             |> Stream.recv(%Priority{stream_id: @stream_id})
   end
 
-  test "stream closed can send priority", ctx do
-    {:ok, stream} =
-      %{ctx.stream | state: :closed}
-      |> Stream.send(%Priority{stream_id: @stream_id})
+  test "stream reserved_remote protocol_error on other frame type", %{stream: stream} do
+    assert {:ok, :reserved_remote} ==
+             stream
+             |> Stream.reserve(:remote)
 
-    assert stream.state === :closed
+    assert {:error, :protocol_error} ==
+             stream
+             |> Stream.recv(%Ping{stream_id: @stream_id})
   end
 
-  test "stream closed can receive window_update", ctx do
-    {:ok, stream} =
-      %{ctx.stream | state: :closed}
-      |> Stream.recv(%WindowUpdate{stream_id: @stream_id})
+  test "stream open can receive and send any frame type", %{stream: stream} do
+    assert {:ok, :open} ==
+             stream
+             |> Stream.send(%Headers{flags: %Headers.Flags{end_headers: true}})
 
-    assert stream.state === :closed
+    assert {:ok, :open} ==
+             stream
+             |> Stream.recv(%Data{stream_id: @stream_id})
   end
 
-  test "stream closed can receive rst_stream", ctx do
-    {:ok, stream} =
-      %{ctx.stream | state: :closed}
-      |> Stream.recv(%RstStream{stream_id: @stream_id})
+  test "stream open to half_closed_remote on receiving flag END_STREAM", %{stream: stream} do
+    assert {:ok, :open} ==
+             stream
+             |> Stream.send(%Headers{})
 
-    assert stream.state === :closed
+    assert {:ok, :half_closed_remote} ==
+             stream
+             |> Stream.recv(%Headers{
+               stream_id: @stream_id,
+               flags: %Headers.Flags{end_stream: true}
+             })
+  end
+
+  test "stream open to half_closed_local on sending flag END_STREAM", %{stream: stream} do
+    assert {:ok, :open} ==
+             stream
+             |> Stream.send(%Headers{})
+
+    assert {:ok, :half_closed_local} ==
+             stream
+             |> Stream.send(%Headers{
+               flags: %Headers.Flags{end_stream: true}
+             })
+  end
+
+  test "stream open to closed on sending rst_stream", %{stream: stream} do
+    assert {:ok, :open} ==
+             stream
+             |> Stream.send(%Headers{})
+
+    assert {:ok, :closed} ==
+             stream
+             |> Stream.send(%RstStream{})
+  end
+
+  test "stream open to closed on receiving rst_stream", %{stream: stream} do
+    assert {:ok, :open} ==
+             stream
+             |> Stream.send(%Headers{})
+
+    assert {:ok, :closed} ==
+             stream
+             |> Stream.send(%RstStream{})
+  end
+
+  test "stream half_closed_local can send window_update", %{stream: stream} do
+    assert {:ok, :half_closed_local} ==
+             stream
+             |> Stream.send(%Headers{
+               flags: %Headers.Flags{end_stream: true}
+             })
+
+    assert {:ok, :half_closed_local} ==
+             stream
+             |> Stream.send(%WindowUpdate{})
+  end
+
+  test "stream half_closed_local can send priority", %{stream: stream} do
+    assert {:ok, :half_closed_local} ==
+             stream
+             |> Stream.send(%Headers{
+               flags: %Headers.Flags{end_stream: true}
+             })
+
+    assert {:ok, :half_closed_local} ==
+             stream
+             |> Stream.send(%Priority{})
+  end
+
+  test "stream half_closed_local to closed on sending rst_stream", %{stream: stream} do
+    assert {:ok, :half_closed_local} ==
+             stream
+             |> Stream.send(%Headers{
+               flags: %Headers.Flags{end_stream: true}
+             })
+
+    assert {:ok, :closed} ==
+             stream
+             |> Stream.send(%RstStream{})
+  end
+
+  test "stream half_closed_local to closed on receiving flag END_STREAM", %{stream: stream} do
+    assert {:ok, :half_closed_local} ==
+             stream
+             |> Stream.send(%Headers{
+               flags: %Headers.Flags{end_stream: true}
+             })
+
+    assert {:ok, :closed} ==
+             stream
+             |> Stream.recv(%Headers{
+               stream_id: @stream_id,
+               flags: %Headers.Flags{end_stream: true}
+             })
+  end
+
+  test "stream half_closed_local to closed on receiving rst_stream", %{stream: stream} do
+    assert {:ok, :half_closed_local} ==
+             stream
+             |> Stream.send(%Headers{
+               flags: %Headers.Flags{end_stream: true}
+             })
+
+    assert {:ok, :closed} ==
+             stream
+             |> Stream.recv(%RstStream{stream_id: @stream_id})
+  end
+
+  test "stream half_closed_remote can receive window_update", %{stream: stream} do
+    assert {:ok, :half_closed_remote} ==
+             stream
+             |> Stream.recv(%Headers{
+               stream_id: @stream_id,
+               flags: %Headers.Flags{end_stream: true}
+             })
+
+    assert {:ok, :half_closed_remote} ==
+             stream
+             |> Stream.recv(%WindowUpdate{stream_id: @stream_id})
+  end
+
+  test "stream half_closed_remote can receive priority", %{stream: stream} do
+    assert {:ok, :half_closed_remote} ==
+             stream
+             |> Stream.recv(%Headers{
+               stream_id: @stream_id,
+               flags: %Headers.Flags{end_stream: true}
+             })
+
+    assert {:ok, :half_closed_remote} ==
+             stream
+             |> Stream.recv(%Priority{stream_id: @stream_id})
+  end
+
+  test "stream half_closed_remote error stream_closed on other frame types", %{stream: stream} do
+    assert {:ok, :half_closed_remote} ==
+             stream
+             |> Stream.recv(%Headers{
+               stream_id: @stream_id,
+               flags: %Headers.Flags{end_stream: true}
+             })
+
+    assert {:error, :stream_closed} ==
+             stream
+             |> Stream.recv(%Headers{stream_id: @stream_id})
+  end
+
+  test "stream half_closed_remote can send any frame type", %{stream: stream} do
+    assert {:ok, :half_closed_remote} ==
+             stream
+             |> Stream.recv(%Headers{
+               stream_id: @stream_id,
+               flags: %Headers.Flags{end_stream: true}
+             })
+
+    assert {:ok, :half_closed_remote} ==
+             stream
+             |> Stream.send(%Headers{})
+  end
+
+  test "stream half_closed_remote to closed on sending rst_stream", %{stream: stream} do
+    assert {:ok, :half_closed_remote} ==
+             stream
+             |> Stream.recv(%Headers{
+               stream_id: @stream_id,
+               flags: %Headers.Flags{end_stream: true}
+             })
+
+    assert {:ok, :closed} ==
+             stream
+             |> Stream.send(%RstStream{})
+  end
+
+  test "stream half_closed_remote to closed on sending flag END_STREAM", %{stream: stream} do
+    assert {:ok, :half_closed_remote} ==
+             stream
+             |> Stream.recv(%Headers{
+               stream_id: @stream_id,
+               flags: %Headers.Flags{end_stream: true}
+             })
+
+    assert {:ok, :closed} ==
+             stream
+             |> Stream.send(%Headers{flags: %Headers.Flags{end_stream: true}})
+  end
+
+  test "stream half_closed_remote to closed on receiving rst_stream", %{stream: stream} do
+    assert {:ok, :half_closed_remote} ==
+             stream
+             |> Stream.recv(%Headers{
+               stream_id: @stream_id,
+               flags: %Headers.Flags{end_stream: true}
+             })
+
+    assert {:ok, :closed} ==
+             stream
+             |> Stream.recv(%RstStream{stream_id: @stream_id})
+  end
+
+  test "stream closed can send priority", %{stream: stream} do
+    assert {:ok, :half_closed_local} ==
+             stream
+             |> Stream.send(%Headers{flags: %Headers.Flags{end_stream: true}})
+
+    assert {:ok, :closed} ==
+             stream
+             |> Stream.recv(%Headers{
+               stream_id: @stream_id,
+               flags: %Headers.Flags{end_stream: true}
+             })
+
+    assert {:ok, :closed} ==
+             stream
+             |> Stream.send(%Priority{})
+  end
+
+  test "stream closed can receive window_update", %{stream: stream} do
+    assert {:ok, :half_closed_remote} ==
+             stream
+             |> Stream.recv(%Headers{
+               stream_id: @stream_id,
+               flags: %Headers.Flags{end_stream: true}
+             })
+
+    assert {:ok, :closed} ==
+             stream
+             |> Stream.send(%Headers{
+               flags: %Headers.Flags{end_stream: true}
+             })
+
+    assert {:ok, :closed} ==
+             stream
+             |> Stream.recv(%WindowUpdate{stream_id: @stream_id})
+  end
+
+  test "stream closed can receive rst_stream", %{stream: stream} do
+    assert {:ok, :half_closed_remote} ==
+             stream
+             |> Stream.recv(%Headers{
+               stream_id: @stream_id,
+               flags: %Headers.Flags{end_stream: true}
+             })
+
+    assert {:ok, :closed} ==
+             stream
+             |> Stream.send(%Headers{
+               flags: %Headers.Flags{end_stream: true}
+             })
+
+    assert {:ok, :closed} ==
+             stream
+             |> Stream.recv(%RstStream{stream_id: @stream_id})
   end
 end

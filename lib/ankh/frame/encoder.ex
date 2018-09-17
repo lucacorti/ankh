@@ -21,7 +21,7 @@ defprotocol Ankh.Frame.Encoder do
     - options: options to pass as context to the decoding function
   """
   @spec decode!(t, binary, options) :: t
-  def decode!(struct, binary, options)
+  def decode!(struct, binary, options \\ [])
 
   @doc """
   Encodes a conforming struct into binary
@@ -31,11 +31,13 @@ defprotocol Ankh.Frame.Encoder do
     - options: options to pass as context to the encoding function
   """
   @spec encode!(t, options) :: iodata
-  def encode!(struct, options)
+  def encode!(struct, options \\ [])
 end
 
 defimpl Ankh.Frame.Encoder, for: Any do
   alias Ankh.Frame.{Flags, Payload}
+
+  def decode!(frame, data, options \\ [])
 
   def decode!(frame, <<0::24, _type::8, flags::binary-size(1), 0::1, id::31>>, options) do
     flags = Flags.decode!(frame.flags, flags, options)
@@ -52,6 +54,8 @@ defimpl Ankh.Frame.Encoder, for: Any do
     payload = Payload.decode!(frame.payload, payload, payload_options)
     %{frame | length: length, stream_id: id, flags: flags, payload: payload}
   end
+
+  def encode!(frame, options \\ [])
 
   def encode!(%{type: type, flags: flags, stream_id: id, payload: nil}, options) do
     flags = Flags.encode!(flags, options)

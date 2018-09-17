@@ -4,7 +4,9 @@ defmodule Ankh.Stream do
   """
 
   alias Ankh.{Connection, Frame}
-  alias Frame.{Data, Continuation, Error, Headers, Priority, PushPromise, RstStream, WindowUpdate}
+  alias Frame.{Data, Continuation, Headers, Priority, PushPromise, RstStream, WindowUpdate}
+
+  use GenServer
   require Logger
 
   @typedoc "Stream states"
@@ -17,45 +19,14 @@ defmodule Ankh.Stream do
           | :reserved_remote
           | :reserved_local
 
-  @typedoc "Stream mode"
-  @type mode :: :reassemble | :streaming
-
   @typedoc "Stream HBF type"
   @type hbf_type :: :headers | :push_promise
 
-  @typedoc """
-  - id: stream id
-  - state: stream `state`
-  - mode: stream `mode`
-  - hbf_type: :headers | :push_promise, type of HBF being accumulated
-  - hbf: HBF accumulator, for reassembly
-  - data: DATA accumulator, for reassembly
-  - window_size: stream window size
-  """
-  @type t :: %__MODULE__{
-          id: Integer.t(),
-          connection: Connection.t(),
-          state: state,
-          mode: mode,
-          recv_hbf_type: hbf_type,
-          recv_hbf: iodata,
-          recv_data: iodata,
-          window_size: Integer.t()
-        }
+  @typedoc "Stream mode"
+  @type mode :: :reassemble | :streaming
 
-  defstruct id: 0,
-            connection: nil,
-            state: :idle,
-            mode: :reassemble,
-            recv_hbf_type: :headers,
-            recv_hbf: [],
-            recv_data: [],
-            window_size: 2_147_483_647
-
-  @typedoc """
-  Stream Error
-  """
-  @type error :: {:error, Error.t()}
+  @typedoc "Reserve mode"
+  @type reserve_mode :: :local | :remote
 
   @doc """
   Creates a new Stream
@@ -64,317 +35,559 @@ defmodule Ankh.Stream do
     - id: stream id
     - state: stream state
   """
-  @spec new(Connection.t(), Integer.t(), mode) :: t
-  def new(connection, id, mode \\ :reassemble) do
-    %__MODULE__{connection: connection, id: id, mode: mode}
+  @spec start_link(Connection.t(), Integer.t(), pid, mode) :: GenServer.on_start()
+  def start_link(connection, id, hpack_table, controlling_process \\ nil, mode \\ :reassemble) do
+    GenServer.start_link(
+      __MODULE__,
+      [connection: connection,
+      hpack_table: hpack_table,
+      controlling_process: controlling_process || self(),
+      id: id,
+      mode: mode],
+      name: {:via, Registry, {__MODULE__.Registry, {connection, id}}}
+    )
+  end
+
+  def init(
+        connection: connection,
+        hpack_table: hpack_table,
+        controlling_process: controlling_process,
+        id: id,
+        mode: mode
+      ) do
+    {:ok,
+     %{
+       id: id,
+       connection: connection,
+       controlling_process: controlling_process,
+       hpack_table: hpack_table,
+       state: :idle,
+       mode: mode,
+       recv_hbf_type: :headers,
+       recv_hbf: [],
+       recv_data: [],
+       window_size: 2_147_483_647
+     }}
   end
 
   @doc """
   Process the reception of a frame through the Stream state machine
   """
-  @spec recv(t, Frame.t()) :: {:ok, t} | error
+  @spec recv(Genserver.t(), Frame.t()) :: GenServer.on_call()
+  def recv(stream, frame), do: GenServer.call(stream, {:recv, frame})
 
-  def recv(%{id: id}, %{stream_id: stream_id}) when stream_id !== id do
-    raise "FATAL on stream #{id}: can't receive frame for stream #{stream_id}"
+  @doc """
+  Send one or more frames
+  """
+  @spec send(GenServer.t(), Frame.t() | list(Frame.t())) :: GenServer.on_call()
+  def send(stream, frame), do: GenServer.call(stream, {:send, frame})
+
+  @spec reserve(GenServer.t(), reserve_mode) :: GenServer.on_call()
+  def reserve(stream, mode), do: GenServer.call(stream, {:reserve, mode})
+
+  def handle_call({:reserve, :local}, _from, %{state: :idle} = state) do
+    {:reply, {:ok, :reserved_local}, %{state | state: :reserved_local}}
   end
 
-  def recv(%{id: id}, %{stream_id: stream_id}) when stream_id === 0 do
-    raise "FATAL on stream #{id}: stream #{stream_id} is reserved"
+  def handle_call({:reserve, :remote}, _from, %{state: :idle} = state) do
+    {:reply, {:ok, :reserved_remote}, %{state | state: :reserved_remote}}
+  end
+
+  def handle_call({:reserve, _mode}, _from, %{state: :idle} = state) do
+    {:stop, {:error, :invalid_reserve_mode}, state}
+  end
+
+  def handle_call({:reserve, _mode}, _from, state) do
+    {:stop, {:error, :stream_not_idle}, state}
+  end
+
+  def handle_call({:recv, frame}, _from, state) do
+    case recv_frame(state, frame) do
+      {:ok, %{state: stream_state} = state} ->
+        {:reply, {:ok, stream_state}, state}
+
+      {:error, _} = error ->
+        {:stop, :normal, error, state}
+    end
+  end
+
+  def handle_call({:send, frame}, _from, %{id: id} = state) do
+    case send_frame(state, %{frame | stream_id: id}) do
+      {:ok, %{state: stream_state} = new_state} ->
+        {:reply, {:ok, stream_state}, new_state}
+
+      {:error, _} = error ->
+        {:stop, :normal, error, state}
+    end
+  end
+
+  defp recv_frame(%{id: id}, %{stream_id: stream_id}) when stream_id !== id do
+    {:error, :stream_id_mismatch}
+  end
+
+  defp recv_frame(_stream, %{stream_id: stream_id}) when stream_id === 0 do
+    {:error, :stream_id_zero}
   end
 
   # IDLE
 
-  def recv(%{state: :idle, recv_hbf: recv_hbf} = stream, %Headers{payload: %{hbf: hbf}}) do
-    {:ok, %{stream | state: :open, recv_hbf_type: :headers, recv_hbf: [hbf | recv_hbf]}}
+  defp recv_frame(
+         %{
+           id: id,
+           state: :idle,
+           recv_hbf: recv_hbf,
+           controlling_process: controlling_process
+         } = state,
+         %Headers{
+           flags: %{end_headers: true, end_stream: true},
+           payload: %{hbf: hbf}
+         }
+       ) do
+    headers =
+      [hbf | recv_hbf]
+      |> process_headers(state)
+
+    Process.send(controlling_process, {:ankh, :headers, id, headers}, [])
+    {:ok, %{state | state: :half_closed_remote, recv_hbf_type: :headers, recv_hbf: []}}
+  end
+
+  defp recv_frame(
+         %{
+           id: id,
+           state: :idle,
+           recv_hbf: recv_hbf,
+           controlling_process: controlling_process
+         } = state,
+         %Headers{
+           flags: %{end_headers: true},
+           payload: %{hbf: hbf}
+         }
+       ) do
+    headers =
+      [hbf | recv_hbf]
+      |> process_headers(state)
+
+    Process.send(controlling_process, {:ankh, :headers, id, headers}, [])
+    {:ok, %{state | state: :open, recv_hbf_type: :headers, recv_hbf: []}}
+  end
+
+  defp recv_frame(%{state: :idle, recv_hbf: recv_hbf} = state, %Headers{
+         flags: %{end_stream: true},
+         payload: %{hbf: hbf}
+       }) do
+    {:ok,
+     %{state | state: :half_closed_remote, recv_hbf_type: :headers, recv_hbf: [hbf | recv_hbf]}}
+  end
+
+  defp recv_frame(%{state: :idle, recv_hbf: recv_hbf} = state, %Headers{payload: %{hbf: hbf}}) do
+    {:ok, %{state | state: :open, recv_hbf_type: :headers, recv_hbf: [hbf | recv_hbf]}}
   end
 
   # RESERVED_LOCAL
 
-  def recv(%{state: :reserved_local} = stream, %Priority{}), do: {:ok, stream}
+  defp recv_frame(%{state: :reserved_local} = state, %Priority{}), do: {:ok, state}
 
-  def recv(%{state: :reserved_local} = stream, %RstStream{}),
-    do: {:ok, %{stream | state: :closed}}
+  defp recv_frame(%{state: :reserved_local} = state, %RstStream{}),
+    do: {:ok, %{state | state: :closed}}
 
-  def recv(%{state: :reserved_local, window_size: window_size} = stream, %WindowUpdate{
-        payload: %{window_size_increment: increment}
-      }) do
-    {:ok, %{stream | window_size: window_size + increment}}
+  defp recv_frame(%{state: :reserved_local, window_size: window_size} = state, %WindowUpdate{
+         payload: %{window_size_increment: increment}
+       }) do
+    {:ok, %{state | window_size: window_size + increment}}
   end
 
   # RESERVED REMOTE
 
-  def recv(%{state: :reserved_remote, recv_hbf: recv_hbf} = stream, %Headers{payload: %{hbf: hbf}}) do
+  defp recv_frame(%{state: :reserved_remote, recv_hbf: recv_hbf} = state, %Headers{
+         payload: %{hbf: hbf}
+       }) do
     {:ok,
-     %{stream | state: :half_closed_local, recv_hbf_type: :headers, recv_hbf: [hbf | recv_hbf]}}
+     %{state | state: :half_closed_local, recv_hbf_type: :headers, recv_hbf: [hbf | recv_hbf]}}
   end
 
-  def recv(%{state: :reserved_remote} = stream, %Priority{}), do: {:ok, stream}
+  defp recv_frame(%{state: :reserved_remote} = state, %Priority{}), do: {:ok, state}
 
-  def recv(%{state: :reserved_remote} = stream, %RstStream{}),
-    do: {:ok, %{stream | state: :closed}}
+  defp recv_frame(%{state: :reserved_remote} = state, %RstStream{}),
+    do: {:ok, %{state | state: :closed}}
 
   # OPEN
 
-  def recv(%{state: :open, recv_hbf: recv_hbf} = stream, %Headers{
-        flags: %{end_stream: true},
-        payload: %{hbf: hbf}
-      }) do
-    recv_hbf = Enum.reverse([hbf | recv_hbf])
-    {:ok, %{stream | state: :half_closed_remote, recv_hbf_type: :headers, recv_hbf: recv_hbf}}
+  defp recv_frame(
+         %{
+           id: id,
+           state: :open,
+           controlling_process: controlling_process,
+           recv_hbf: recv_hbf
+         } = state,
+         %Headers{
+           flags: %{end_stream: true},
+           payload: %{hbf: hbf}
+         }
+       ) do
+    headers =
+      [hbf | recv_hbf]
+      |> process_headers(state)
+
+    Process.send(controlling_process, {:ankh, :headers, id, headers}, [])
+    {:ok, %{state | state: :half_closed_remote, recv_hbf_type: :headers, recv_hbf: []}}
   end
 
-  def recv(%{state: :open, recv_hbf: recv_hbf} = stream, %Headers{
-        flags: %{end_headers: true},
-        payload: %{hbf: hbf}
-      }) do
-    recv_hbf = Enum.reverse([hbf | recv_hbf])
-    {:ok, %{stream | recv_hbf_type: :headers, recv_hbf: recv_hbf}}
+  defp recv_frame(
+         %{
+           id: id,
+           state: :open,
+           controlling_process: controlling_process,
+           recv_hbf: recv_hbf
+         } = state,
+         %Headers{
+           flags: %{end_headers: true},
+           payload: %{hbf: hbf}
+         }
+       ) do
+    headers =
+      [hbf | recv_hbf]
+      |> process_headers(state)
+
+    Process.send(controlling_process, {:ankh, :headers, id, headers}, [])
+    {:ok, %{state | recv_hbf_type: :headers, recv_hbf: []}}
   end
 
-  def recv(%{state: :open, recv_hbf: recv_hbf} = stream, %PushPromise{
-        flags: %{end_stream: true},
-        payload: %{hbf: hbf}
-      }) do
-    recv_hbf = Enum.reverse([hbf | recv_hbf])
+  defp recv_frame(
+         %{
+           id: id,
+           state: :open,
+           controlling_process: controlling_process,
+           recv_hbf: recv_hbf
+         } = state,
+         %PushPromise{
+           flags: %{end_stream: true},
+           payload: %{hbf: hbf}
+         }
+       ) do
+    headers =
+      [hbf | recv_hbf]
+      |> process_headers(state)
 
-    {:ok,
-     %{stream | state: :half_closed_remote, recv_hbf_type: :push_promise, recv_hbf: recv_hbf}}
+    Process.send(controlling_process, {:ankh, :headers, id, headers}, [])
+    {:ok, %{state | state: :half_closed_remote, recv_hbf_type: :push_promise, recv_hbf: []}}
   end
 
-  def recv(%{state: :open, recv_hbf: recv_hbf} = stream, %PushPromise{
-        flags: %{end_headers: true},
-        payload: %{hbf: hbf}
-      }) do
-    recv_hbf = Enum.reverse([hbf | recv_hbf])
-    {:ok, %{stream | recv_hbf_type: :push_promise, recv_hbf: recv_hbf}}
+  defp recv_frame(
+         %{
+           id: id,
+           state: :open,
+           controlling_process: controlling_process,
+           recv_hbf: recv_hbf
+         } = state,
+         %PushPromise{
+           flags: %{end_headers: true},
+           payload: %{hbf: hbf}
+         }
+       ) do
+    headers =
+      [hbf | recv_hbf]
+      |> process_headers(state)
+
+    Process.send(controlling_process, {:ankh, :push_promise, id, headers}, [])
+    {:ok, %{state | recv_hbf_type: :push_promise, recv_hbf: []}}
   end
 
-  def recv(%{state: :open, recv_hbf: recv_hbf} = stream, %Continuation{
-        flags: %{end_stream: true},
-        payload: %{hbf: hbf}
-      }) do
-    recv_hbf = Enum.reverse([hbf | recv_hbf])
-    {:ok, %{stream | state: :half_closed_remote, recv_hbf: recv_hbf}}
+  defp recv_frame(
+         %{
+           id: id,
+           state: :open,
+           controlling_process: controlling_process,
+           recv_hbf: recv_hbf,
+           recv_hbf_type: hbf_type
+         } = state,
+         %Continuation{
+           flags: %{end_stream: true},
+           payload: %{hbf: hbf}
+         }
+       ) do
+    headers =
+      [hbf | recv_hbf]
+      |> process_headers(state)
+
+    Process.send(controlling_process, {:ankh, hbf_type, id, headers}, [])
+    {:ok, %{state | state: :half_closed_remote, recv_hbf: []}}
   end
 
-  def recv(%{state: :open, recv_hbf: recv_hbf} = stream, %Continuation{
-        flags: %{end_headers: true},
-        payload: %{hbf: hbf}
-      }) do
-    recv_hbf = Enum.reverse([hbf | recv_hbf])
-    {:ok, %{stream | recv_hbf: recv_hbf}}
+  defp recv_frame(
+         %{
+           id: id,
+           state: :open,
+           controlling_process: controlling_process,
+           recv_hbf: recv_hbf,
+           recv_hbf_type: hbf_type
+         } = state,
+         %Continuation{
+           flags: %{end_headers: true},
+           payload: %{hbf: hbf}
+         }
+       ) do
+    headers =
+      [hbf | recv_hbf]
+      |> process_headers(state)
+
+    Process.send(controlling_process, {:ankh, hbf_type, id, headers}, [])
+    {:ok, %{state | recv_hbf: []}}
   end
 
-  def recv(%{state: :open, recv_hbf: recv_hbf} = stream, %Continuation{
-        flags: %{end_headers: false},
-        payload: %{hbf: hbf}
-      }) do
-    {:ok, %{stream | recv_hbf: [hbf | recv_hbf]}}
+  defp recv_frame(%{state: :open, recv_hbf: recv_hbf} = state, %Continuation{
+         flags: %{end_headers: false},
+         payload: %{hbf: hbf}
+       }) do
+    {:ok, %{state | recv_hbf: [hbf | recv_hbf]}}
   end
 
-  def recv(%{state: :open, recv_data: recv_data} = stream, %Data{
-        flags: %{end_stream: true},
-        payload: %{data: data}
-      }) do
-    recv_data = Enum.reverse([data | recv_data])
-    {:ok, %{stream | state: :half_closed_remote, recv_data: recv_data}}
+  defp recv_frame(
+         %{
+           id: id,
+           state: :open,
+           controlling_process: controlling_process,
+           recv_data: recv_data
+         } = state,
+         %Data{
+           flags: %{end_stream: true},
+           payload: %{data: data}
+         }
+       ) do
+    data =
+      [data | recv_data]
+      |> Enum.reverse()
+
+    Process.send(controlling_process, {:ankh, :data, id, data}, [])
+    {:ok, %{state | state: :half_closed_remote, recv_data: []}}
   end
 
-  def recv(%{state: :open, recv_data: recv_data} = stream, %Data{
-        flags: %{end_stream: false},
-        payload: %{data: data}
-      }) do
-    {:ok, %{stream | recv_data: [data | recv_data]}}
+  defp recv_frame(%{state: :open, recv_data: recv_data} = state, %Data{
+         flags: %{end_stream: false},
+         payload: %{data: data}
+       }) do
+    {:ok, %{state | recv_data: [data | recv_data]}}
   end
 
-  def recv(%{state: :open} = stream, %RstStream{}), do: {:ok, %{stream | state: :closed}}
-  def recv(%{state: :open} = stream, _), do: {:ok, stream}
+  defp recv_frame(%{state: :open} = state, %RstStream{}), do: {:ok, %{state | state: :closed}}
+  defp recv_frame(%{state: :open} = state, _), do: {:ok, state}
 
   # HALF CLOSED LOCAL
 
-  def recv(%{state: :half_closed_local, recv_hbf: recv_hbf} = stream, %Headers{
-        flags: %{end_stream: true},
-        payload: %{hbf: hbf}
-      }) do
-    recv_hbf = Enum.reverse([hbf | recv_hbf])
-    {:ok, %{stream | state: :closed, recv_hbf_type: :headers, recv_hbf: recv_hbf}}
+  defp recv_frame(
+         %{
+           id: id,
+           state: :half_closed_local,
+           controlling_process: controlling_process,
+           recv_hbf: recv_hbf
+         } = state,
+         %Headers{
+           flags: %{end_stream: true},
+           payload: %{hbf: hbf}
+         }
+       ) do
+    headers =
+      [hbf | recv_hbf]
+      |> process_headers(state)
+
+    Process.send(controlling_process, {:ankh, :headers, id, headers}, [])
+    {:ok, %{state | state: :closed, recv_hbf_type: :headers, recv_hbf: []}}
   end
 
-  def recv(%{state: :half_closed_local, recv_data: recv_data} = stream, %Data{
-        flags: %{end_stream: true},
-        payload: %{data: data}
-      }) do
+  defp recv_frame(
+         %{
+           id: id,
+           state: :half_closed_local,
+           controlling_process: controlling_process,
+           recv_data: recv_data
+         } = state,
+         %Data{
+           flags: %{end_stream: true},
+           payload: %{data: data}
+         }
+       ) do
     recv_data = Enum.reverse([data | recv_data])
-    {:ok, %{stream | state: :closed, recv_data: recv_data}}
+    Process.send(controlling_process, {:ankh, :data, id, recv_data}, [])
+    {:ok, %{state | state: :closed, recv_data: []}}
   end
 
-  def recv(%{state: :half_closed_local} = stream, %RstStream{}),
-    do: {:ok, %{stream | state: :closed}}
+  defp recv_frame(%{state: :half_closed_local} = state, %RstStream{}),
+    do: {:ok, %{state | state: :closed}}
 
-  def recv(%{state: :half_closed_local} = stream, _), do: {:ok, stream}
+  defp recv_frame(%{state: :half_closed_local} = state, _), do: {:ok, state}
 
   # HALF CLOSED REMOTE
 
-  def recv(%{state: :half_closed_remote} = stream, %Priority{}), do: {:ok, stream}
+  defp recv_frame(%{state: :half_closed_remote} = state, %Priority{}), do: {:ok, state}
 
-  def recv(%{state: :half_closed_remote} = stream, %RstStream{}),
-    do: {:ok, %{stream | state: :closed}}
+  defp recv_frame(%{state: :half_closed_remote} = state, %RstStream{}),
+    do: {:ok, %{state | state: :closed}}
 
-  def recv(%{state: :half_closed_remote, window_size: window_size} = stream, %WindowUpdate{
-        payload: %{window_size_increment: increment}
-      }) do
-    {:ok, %{stream | window_size: window_size + increment}}
+  defp recv_frame(%{state: :half_closed_remote, window_size: window_size} = state, %WindowUpdate{
+         payload: %{window_size_increment: increment}
+       }) do
+    {:ok, %{state | window_size: window_size + increment}}
   end
 
-  def recv(%{state: :half_closed_remote}, _), do: {:error, :stream_closed}
+  defp recv_frame(%{state: :half_closed_remote}, _), do: {:error, :stream_closed}
 
   # CLOSED
 
-  def recv(%{state: :closed} = stream, %Priority{}), do: {:ok, stream}
-  def recv(%{state: :closed} = stream, %RstStream{}), do: {:ok, stream}
+  defp recv_frame(%{state: :closed} = state, %Priority{}), do: {:ok, state}
+  defp recv_frame(%{state: :closed} = state, %RstStream{}), do: {:ok, state}
 
-  def recv(%{state: :closed, window_size: window_size} = stream, %WindowUpdate{
-        payload: %{window_size_increment: increment}
-      }) do
-    {:ok, %{stream | window_size: window_size + increment}}
+  defp recv_frame(%{state: :closed, window_size: window_size} = state, %WindowUpdate{
+         payload: %{window_size_increment: increment}
+       }) do
+    {:ok, %{state | window_size: window_size + increment}}
   end
 
-  def recv(%{state: :closed}, _), do: {:error, :stream_closed}
+  defp recv_frame(%{state: :closed}, _), do: {:error, :stream_closed}
 
   # Stop on protocol error
 
-  def recv(%{}, _), do: {:error, :protocol_error}
+  defp recv_frame(%{}, _), do: {:error, :protocol_error}
 
-  @doc """
-  Process sending one or more frame through the Stream state machine
-  """
-  @spec send(t, Frame.t() | list(Frame.t())) :: {:ok, t} | error
-
-  def send(stream, frames) when is_list(frames) do
-    Enum.reduce_while(frames, {:ok, stream}, fn frame, _ ->
-      with {:ok, stream} <- __MODULE__.send(stream, frame) do
-        {:cont, {:ok, stream}}
-      else
-        error ->
-          {:halt, error}
-      end
-    end)
+  defp send_frame(%{id: id}, %{stream_id: stream_id}) when stream_id !== id do
+    {:error, :stream_id_mismatch}
   end
 
-  def send(%{id: id}, %{stream_id: stream_id}) when stream_id !== id do
-    raise "FATAL on stream #{id}: this frame was sent on #{stream_id}!"
-  end
-
-  def send(%{id: id}, %{stream_id: stream_id}) when stream_id === 0 do
-    raise "FATAL on stream #{id}: stream id #{stream_id} is reserved!"
+  defp send_frame(_state, %{stream_id: stream_id}) when stream_id === 0 do
+    {:error, :stream_id_zero}
   end
 
   # IDLE
 
-  def send(%{state: :idle} = stream, %Headers{} = frame) do
-    send_frame(%{stream | state: :open}, frame)
+  defp send_frame(%{state: :idle} = state, %Headers{flags: %{end_stream: true}} = frame) do
+    really_send_frame(%{state | state: :half_closed_local}, frame)
+  end
+
+  defp send_frame(%{state: :idle} = state, %Headers{} = frame) do
+    really_send_frame(%{state | state: :open}, frame)
+  end
+
+  defp send_frame(%{state: :idle} = state, %Continuation{flags: %{end_stream: true}} = frame) do
+    really_send_frame(%{state | state: :open}, frame)
+  end
+
+  defp send_frame(%{state: :idle} = state, %Continuation{} = frame) do
+    really_send_frame(state, frame)
   end
 
   # RESERVED LOCAL
 
-  def send(%{state: :reserved_local} = stream, %Headers{} = frame) do
-    send_frame(%{stream | state: :half_closed_remote}, frame)
+  defp send_frame(%{state: :reserved_local} = state, %Headers{} = frame) do
+    really_send_frame(%{state | state: :half_closed_remote}, frame)
   end
 
-  def send(%{state: :reserved_local} = stream, %Priority{} = frame) do
-    send_frame(stream, frame)
+  defp send_frame(%{state: :reserved_local} = state, %Priority{} = frame) do
+    really_send_frame(state, frame)
   end
 
-  def send(%{state: :reserved_local} = stream, %RstStream{} = frame) do
-    send_frame(%{stream | state: :closed}, frame)
+  defp send_frame(%{state: :reserved_local} = state, %RstStream{} = frame) do
+    really_send_frame(%{state | state: :closed}, frame)
   end
 
   # RESERVED REMOTE
 
-  def send(%{state: :reserved_remote} = stream, %Priority{} = frame) do
-    send_frame(stream, frame)
+  defp send_frame(%{state: :reserved_remote} = state, %Priority{} = frame) do
+    really_send_frame(state, frame)
   end
 
-  def send(%{state: :reserved_remote} = stream, %RstStream{} = frame) do
-    send_frame(%{stream | state: :closed}, frame)
+  defp send_frame(%{state: :reserved_remote} = state, %RstStream{} = frame) do
+    really_send_frame(%{state | state: :closed}, frame)
   end
 
-  def send(%{state: :reserved_remote} = stream, %WindowUpdate{} = frame) do
-    send_frame(stream, frame)
+  defp send_frame(%{state: :reserved_remote} = state, %WindowUpdate{} = frame) do
+    really_send_frame(state, frame)
   end
 
   # OPEN
 
-  def send(%{state: :open} = stream, %Data{flags: %{end_stream: true}} = frame) do
-    send_frame(%{stream | state: :half_closed_local}, frame)
+  defp send_frame(%{state: :open} = state, %Data{flags: %{end_stream: true}} = frame) do
+    really_send_frame(%{state | state: :half_closed_local}, frame)
   end
 
-  def send(%{state: :open} = stream, %Headers{flags: %{end_stream: true}} = frame) do
-    send_frame(%{stream | state: :half_closed_local}, frame)
+  defp send_frame(%{state: :open} = state, %Headers{flags: %{end_stream: true}} = frame) do
+    really_send_frame(%{state | state: :half_closed_local}, frame)
   end
 
-  def send(%{state: :open} = stream, %RstStream{} = frame) do
-    send_frame(%{stream | state: :closed}, frame)
+  defp send_frame(%{state: :open} = state, %RstStream{} = frame) do
+    really_send_frame(%{state | state: :closed}, frame)
   end
 
-  def send(%{state: :open} = stream, frame) do
-    send_frame(stream, frame)
+  defp send_frame(%{state: :open} = state, frame) do
+    really_send_frame(state, frame)
   end
 
   # HALF CLOSED LOCAL
 
-  def send(%{state: :half_closed_local} = stream, %Priority{} = frame) do
-    send_frame(stream, frame)
+  defp send_frame(%{state: :half_closed_local} = state, %Priority{} = frame) do
+    really_send_frame(state, frame)
   end
 
-  def send(%{state: :half_closed_local} = stream, %RstStream{} = frame) do
-    send_frame(%{stream | state: :closed}, frame)
+  defp send_frame(%{state: :half_closed_local} = state, %RstStream{} = frame) do
+    really_send_frame(%{state | state: :closed}, frame)
   end
 
-  def send(%{state: :half_closed_local} = stream, %WindowUpdate{} = frame) do
-    send_frame(stream, frame)
+  defp send_frame(%{state: :half_closed_local} = state, %WindowUpdate{} = frame) do
+    really_send_frame(state, frame)
   end
 
   # HALF CLOSED REMOTE
 
-  def send(%{state: :half_closed_remote} = stream, %Data{flags: %{end_stream: true}} = frame) do
-    send_frame(%{stream | state: :closed}, frame)
+  defp send_frame(
+         %{state: :half_closed_remote} = state,
+         %Data{flags: %{end_stream: true}} = frame
+       ) do
+    really_send_frame(%{state | state: :closed}, frame)
   end
 
-  def send(%{state: :half_closed_remote} = stream, %Headers{flags: %{end_stream: true}} = frame) do
-    send_frame(%{stream | state: :closed}, frame)
+  defp send_frame(
+         %{state: :half_closed_remote} = state,
+         %Headers{flags: %{end_stream: true}} = frame
+       ) do
+    really_send_frame(%{state | state: :closed}, frame)
   end
 
-  def send(%{state: :half_closed_remote} = stream, %RstStream{} = frame) do
-    send_frame(%{stream | state: :closed}, frame)
+  defp send_frame(%{state: :half_closed_remote} = state, %RstStream{} = frame) do
+    really_send_frame(%{state | state: :closed}, frame)
   end
 
-  def send(%{state: :half_closed_remote} = stream, frame) do
-    send_frame(stream, frame)
+  defp send_frame(%{state: :half_closed_remote} = state, frame) do
+    really_send_frame(state, frame)
   end
 
   # CLOSED
 
-  def send(%{state: :closed} = stream, %Priority{} = frame) do
-    send_frame(stream, frame)
+  defp send_frame(%{state: :closed} = state, %Priority{} = frame) do
+    really_send_frame(state, frame)
   end
 
   # Stop on protocol error
 
-  def send(%{}, _), do: {:error, :protocol_error}
+  defp send_frame(%{}, _), do: {:error, :protocol_error}
 
-  defp send_frame(%{connection: :ankh_test_mock_connection} = new_stream, _frame) do
-    {:ok, new_stream}
+  defp really_send_frame(%{connection: Ankh.Connection.Mock} = state, _frame) do
+    {:ok, state}
   end
 
-  defp send_frame(%{connection: connection, id: id} = new_stream, frame) do
-    case Connection.send(connection, %{frame | stream_id: id}) do
+  defp really_send_frame(%{connection: connection} = state, frame) do
+    case Connection.send(connection, frame) do
       :ok ->
-        Logger.debug(fn -> "SENT FRAME #{inspect(%{frame | stream_id: id})}" end)
-        {:ok, new_stream}
+        {:ok, state}
 
       error ->
         {:error, error}
     end
+  end
+
+  defp process_headers([<<>>], _state), do: %{}
+
+  defp process_headers(hbf, %{hpack_table: table}) do
+    hbf
+    |> Enum.reverse()
+    |> Enum.join()
+    |> HPack.decode(table)
+    |> Enum.into(%{})
   end
 end
