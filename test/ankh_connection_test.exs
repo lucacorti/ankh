@@ -48,30 +48,10 @@ defmodule AnkhTest.Connection do
     }
 
     assert :ok = Connection.send(pid, headers)
-
-    receive do
-      msg ->
-        assert {:ankh, :frame, %Settings{}} = msg
-    end
-
-    receive do
-      msg ->
-        assert {:ankh, :frame, %WindowUpdate{}} = msg
-    end
-
-    receive do
-      msg ->
-        assert {:ankh, :frame, %Settings{flags: %{ack: true}}} = msg
-    end
-
-    receive do
-      msg ->
-        assert {:ankh, :frame, %Headers{}} = msg
-    end
-
-    receive do
-      msg ->
-        assert {:ankh, :frame, %Data{}} = msg
-    end
+    assert_receive {:ankh, :frame, %Settings{}}
+    assert_receive {:ankh, :frame, %WindowUpdate{}}
+    assert_receive {:ankh, :frame, %Settings{flags: %{ack: true}}}
+    assert_receive {:ankh, :frame, %Headers{}}
+    assert_receive {:ankh, :frame, %Data{}}
   end
 end
