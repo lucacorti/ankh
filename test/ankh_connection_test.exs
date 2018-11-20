@@ -4,8 +4,8 @@ defmodule AnkhTest.Connection do
   alias HPack
   alias HPack.Table
 
-  alias Ankh.Frame.{Data, Headers, Settings, WindowUpdate}
-  alias Ankh.Connection
+  alias Ankh.{Connection, Frame}
+  alias Frame.{Data, Headers, Settings, WindowUpdate}
 
   alias AnkhTest.StreamGen
 

@@ -4,7 +4,7 @@ defmodule Ankh.Frame.Utils do
   """
 
   alias Ankh.Frame
-  alias Ankh.Frame.{Data, Continuation, Headers}
+  alias Frame.{Data, Continuation, Headers}
 
   @doc """
   Converts a boolean into the corresponding 0/1 integer values

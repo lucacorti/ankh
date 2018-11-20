@@ -24,9 +24,9 @@ defmodule Ankh.Connection do
 
   use GenServer
 
+  alias Ankh.Connection.Receiver
   alias Ankh.Frame
   alias Ankh.Frame.Encoder
-  alias Ankh.Connection.Receiver
 
   @default_ssl_opts binary: true,
                     active: false,
