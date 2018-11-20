@@ -1,7 +1,5 @@
 defmodule Ankh.Stream do
-  @moduledoc """
-  HTTP/2 Stream strucure
-  """
+  @moduledoc false
 
   alias Ankh.{Connection, Frame}
   alias Frame.{Data, Continuation, Headers, Priority, PushPromise, RstStream, WindowUpdate}
@@ -19,6 +17,9 @@ defmodule Ankh.Stream do
           | :reserved_remote
           | :reserved_local
 
+  @typedoc "Stream process"
+  @type t :: GenServer.server()
+
   @typedoc "Stream HBF type"
   @type hbf_type :: :headers | :push_promise
 
@@ -28,22 +29,17 @@ defmodule Ankh.Stream do
   @typedoc "Reserve mode"
   @type reserve_mode :: :local | :remote
 
-  @doc """
-  Creates a new Stream
-
-  Parameters:
-    - id: stream id
-    - state: stream state
-  """
   @spec start_link(Connection.t(), Integer.t(), pid, mode) :: GenServer.on_start()
   def start_link(connection, id, hpack_table, controlling_process \\ nil, mode \\ :reassemble) do
     GenServer.start_link(
       __MODULE__,
-      [connection: connection,
-      hpack_table: hpack_table,
-      controlling_process: controlling_process || self(),
-      id: id,
-      mode: mode],
+      [
+        connection: connection,
+        hpack_table: hpack_table,
+        controlling_process: controlling_process || self(),
+        id: id,
+        mode: mode
+      ],
       name: {:via, Registry, {__MODULE__.Registry, {connection, id}}}
     )
   end
@@ -70,19 +66,13 @@ defmodule Ankh.Stream do
      }}
   end
 
-  @doc """
-  Process the reception of a frame through the Stream state machine
-  """
-  @spec recv(Genserver.t(), Frame.t()) :: GenServer.on_call()
+  @spec recv(t(), Frame.t()) :: GenServer.on_call()
   def recv(stream, frame), do: GenServer.call(stream, {:recv, frame})
 
-  @doc """
-  Send one or more frames
-  """
-  @spec send(GenServer.t(), Frame.t() | list(Frame.t())) :: GenServer.on_call()
+  @spec send(t(), Frame.t() | list(Frame.t())) :: GenServer.on_call()
   def send(stream, frame), do: GenServer.call(stream, {:send, frame})
 
-  @spec reserve(GenServer.t(), reserve_mode) :: GenServer.on_call()
+  @spec reserve(t(), reserve_mode) :: GenServer.on_call()
   def reserve(stream, mode), do: GenServer.call(stream, {:reserve, mode})
 
   def handle_call({:reserve, :local}, _from, %{state: :idle} = state) do

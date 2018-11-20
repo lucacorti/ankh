@@ -39,9 +39,7 @@ defmodule Ankh.Connection do
 
   @preface "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
 
-  @typedoc """
-  Ankh Connection process
-  """
+  @typedoc "Connection process"
   @type connection :: GenServer.server()
 
   @typedoc """

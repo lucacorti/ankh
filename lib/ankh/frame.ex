@@ -31,6 +31,7 @@ defmodule Ankh.Frame do
                 flags: Flags.t(),
                 payload: Payload.t()
               }
+
         defstruct length: 0, type: type, stream_id: 0, flags: flags, payload: payload
       end
     else
