@@ -8,8 +8,8 @@ end
 defimpl Ankh.Frame.Payload, for: Ankh.Frame.RstStream.Payload do
   alias Ankh.Frame.Error
 
-  def decode!(struct, <<error::32>>, _) do
-    %{struct | error_code: Error.decode!(error)}
+  def decode!(payload, <<error::32>>, _) do
+    %{payload | error_code: Error.decode!(error)}
   end
 
   def encode!(%{error_code: error}, _), do: [Error.encode!(error)]

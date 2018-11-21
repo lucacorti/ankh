@@ -37,14 +37,14 @@ defimpl Ankh.Frame.Payload, for: Ankh.Frame.Headers.Payload do
   end
 
   def decode!(
-        struct,
+        payload,
         <<pl::8, ex::1, sd::31, wh::8, data::binary>>,
         flags: %{padded: true, priority: true}
       ) do
     hbf = binary_part(data, 0, byte_size(data) - pl)
 
     %{
-      struct
+      payload
       | pad_length: pl,
         exclusive: int_to_bool!(ex),
         weight: wh,
@@ -53,20 +53,20 @@ defimpl Ankh.Frame.Payload, for: Ankh.Frame.Headers.Payload do
     }
   end
 
-  def decode!(struct, <<pl::8, data::binary>>, flags: %{padded: true, priority: false}) do
+  def decode!(payload, <<pl::8, data::binary>>, flags: %{padded: true, priority: false}) do
     hbf = binary_part(data, 0, byte_size(data) - pl)
-    %{struct | pad_length: pl, hbf: hbf}
+    %{payload | pad_length: pl, hbf: hbf}
   end
 
   def decode!(
-        struct,
+        payload,
         <<ex::1, sd::31, wh::8, hbf::binary>>,
         flags: %{padded: false, priority: true}
       ) do
-    %{struct | exclusive: int_to_bool!(ex), weight: wh, stream_dependency: sd, hbf: hbf}
+    %{payload | exclusive: int_to_bool!(ex), weight: wh, stream_dependency: sd, hbf: hbf}
   end
 
-  def decode!(struct, <<hbf::binary>>, flags: %{padded: false, priority: false}) do
-    %{struct | hbf: hbf}
+  def decode!(payload, <<hbf::binary>>, flags: %{padded: false, priority: false}) do
+    %{payload | hbf: hbf}
   end
 end

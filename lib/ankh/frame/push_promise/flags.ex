@@ -8,8 +8,8 @@ end
 defimpl Ankh.Frame.Flags, for: Ankh.Frame.PushPromise.Flags do
   import Ankh.Frame.Utils
 
-  def decode!(struct, <<_::4, pa::1, eh::1, _::2>>, _) do
-    %{struct | end_headers: int_to_bool!(eh), padded: int_to_bool!(pa)}
+  def decode!(flags, <<_::4, pa::1, eh::1, _::2>>, _) do
+    %{flags | end_headers: int_to_bool!(eh), padded: int_to_bool!(pa)}
   end
 
   def encode!(%{end_headers: eh, padded: pa}, _) do

@@ -13,9 +13,9 @@ end
 defimpl Ankh.Frame.Flags, for: Ankh.Frame.Headers.Flags do
   import Ankh.Frame.Utils
 
-  def decode!(struct, <<_::2, pr::1, _::1, pa::1, eh::1, _::1, es::1>>, _) do
+  def decode!(flags, <<_::2, pr::1, _::1, pa::1, eh::1, _::1, es::1>>, _) do
     %{
-      struct
+      flags
       | end_stream: int_to_bool!(es),
         end_headers: int_to_bool!(eh),
         padded: int_to_bool!(pa),

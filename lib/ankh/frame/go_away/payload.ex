@@ -8,12 +8,12 @@ end
 defimpl Ankh.Frame.Payload, for: Ankh.Frame.GoAway.Payload do
   alias Ankh.Frame.Error
 
-  def decode!(struct, <<_::1, lsid::31, error::32>>, _) do
-    %{struct | last_stream_id: lsid, error_code: Error.decode!(error)}
+  def decode!(payload, <<_::1, lsid::31, error::32>>, _) do
+    %{payload | last_stream_id: lsid, error_code: Error.decode!(error)}
   end
 
-  def decode!(struct, <<_::1, lsid::31, error::32, data::binary>>, _) do
-    %{struct | last_stream_id: lsid, error_code: Error.decode!(error), data: data}
+  def decode!(payload, <<_::1, lsid::31, error::32, data::binary>>, _) do
+    %{payload | last_stream_id: lsid, error_code: Error.decode!(error), data: data}
   end
 
   def encode!(%{last_stream_id: lsid, error_code: error, data: data}, _) do

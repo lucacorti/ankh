@@ -8,8 +8,8 @@ end
 defimpl Ankh.Frame.Flags, for: Ankh.Frame.Continuation.Flags do
   import Ankh.Frame.Utils
 
-  def decode!(struct, <<_::5, eh::1, _::2>>, _) do
-    %{struct | end_headers: int_to_bool!(eh)}
+  def decode!(flags, <<_::5, eh::1, _::2>>, _) do
+    %{flags | end_headers: int_to_bool!(eh)}
   end
 
   def encode!(%{end_headers: eh}, _) do

@@ -7,5 +7,5 @@ end
 
 defimpl Ankh.Frame.Payload, for: Ankh.Frame.Continuation.Payload do
   def encode!(%{hbf: hbf}, _), do: [hbf]
-  def decode!(struct, data, _), do: %{struct | hbf: data}
+  def decode!(payload, data, _), do: %{payload | hbf: data}
 end

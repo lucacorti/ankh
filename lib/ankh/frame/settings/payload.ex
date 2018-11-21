@@ -27,10 +27,10 @@ defimpl Ankh.Frame.Payload, for: Ankh.Frame.Settings.Payload do
   @max_frame_size 0x5
   @max_header_list_size 0x6
 
-  def decode!(struct, binary, _) do
+  def decode!(payload, binary, _) do
     binary
     |> parse_settings_payload
-    |> Enum.reduce(struct, fn {key, value}, acc -> Map.put(acc, key, value) end)
+    |> Enum.reduce(payload, fn {key, value}, acc -> Map.put(acc, key, value) end)
   end
 
   def encode!(
