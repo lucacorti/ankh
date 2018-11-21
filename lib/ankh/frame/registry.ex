@@ -37,7 +37,12 @@ defmodule Ankh.Frame.Registry do
     Agent.get({:via, Registry, {__MODULE__, uri}}, &Map.get(&1, type))
   end
 
-  @spec register(uri :: URI.t(), type :: Integer.t(), frame :: Frame.t()) :: :ok
+  @doc """
+  Registers a custom Frame struct for the given HTTP/2 frame type code
+
+  Codes 0-9 are reserved for standard frame types.
+  """
+  @spec register(URI.t(), Integer.t(), Frame.t()) :: :ok
   def register(%URI{} = uri, type, frame)
       when is_integer(type) and type > 9 and type < 256 do
     Agent.update({:via, Registry, {__MODULE__, uri}}, &Map.put(&1, type, frame))
