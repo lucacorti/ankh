@@ -99,6 +99,7 @@ defmodule Ankh.Connection do
     GenServer.start_link(__MODULE__, args, options)
   end
 
+  @doc false
   def init(args) do
     controlling_process = Keyword.get(args, :controlling_process)
     uri = Keyword.get(args, :uri)

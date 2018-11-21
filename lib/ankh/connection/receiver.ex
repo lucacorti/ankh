@@ -1,7 +1,5 @@
 defmodule Ankh.Connection.Receiver do
-  @moduledoc """
-  Ankh Connection receiver preocess
-  """
+  @moduledoc false
   use GenServer
 
   alias Ankh.Frame.{Encoder, Registry}
@@ -35,7 +33,6 @@ defmodule Ankh.Connection.Receiver do
       ) do
     :ssl.setopts(socket, active: :once)
     {state, frames} = parse_frames(buffer <> data, state)
-
     for frame <- frames do
       Process.send(controlling_process, {:ankh, :frame, frame}, [])
     end
@@ -43,13 +40,9 @@ defmodule Ankh.Connection.Receiver do
     {:noreply, state}
   end
 
-  def handle_info({:ssl_closed, _socket}, state) do
-    {:stop, {:shutdown, :closed}, state}
-  end
+  def handle_info({:ssl_closed, _socket}, state), do: {:stop, {:shutdown, :closed}, state}
 
-  def handle_info({:ssl_error, _socket, reason}, state) do
-    {:stop, {:shutdown, reason}, state}
-  end
+  def handle_info({:ssl_error, _socket, reason}, state), do: {:stop, {:shutdown, reason}, state}
 
   defp parse_frames(<<payload_length::24, _::binary>> = data, state)
        when @frame_header_size + payload_length > byte_size(data) do

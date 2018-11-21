@@ -6,6 +6,8 @@ defmodule Ankh.Frame do
   `Ankh.Frame.Encoder` protocol.
   """
 
+  alias Ankh.Frame.{Flags, Payload}
+
   @doc """
   Injects the frame struct in a module.
 
@@ -13,7 +15,7 @@ defmodule Ankh.Frame do
   - flags: frame flags struct or nil for no flags
   - payload: frame payload struct or nil for no payload
   """
-  @spec __using__(type: Integer.t(), flags: struct, payload: struct) :: Macro.t()
+  @spec __using__(type: Integer.t(), flags: Flags.t, payload: Payload.t) :: Macro.t()
   defmacro __using__(args) do
     with {:ok, type} <- Keyword.fetch(args, :type),
          flags <- Keyword.get(args, :flags),

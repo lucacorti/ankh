@@ -1,7 +1,5 @@
 defmodule Ankh.Supervisor do
-  @moduledoc """
-  Ankh Supervisor
-  """
+  @moduledoc false
 
   def start_link do
     Supervisor.start_link(__MODULE__, [], name: __MODULE__)
