@@ -2,7 +2,7 @@ defmodule Ankh.Stream do
   @moduledoc false
 
   alias Ankh.{Connection, Frame}
-  alias Frame.{Data, Continuation, Headers, Priority, PushPromise, RstStream, WindowUpdate}
+  alias Ankh.Frame.{Data, Continuation, Headers, Priority, PushPromise, RstStream, WindowUpdate}
 
   use GenServer
   require Logger

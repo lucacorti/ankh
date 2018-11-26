@@ -34,6 +34,7 @@ defmodule Ankh.Connection.Receiver do
       ) do
     :ssl.setopts(socket, active: :once)
     {state, frames} = parse_frames(buffer <> data, state)
+
     for frame <- frames do
       Process.send(controlling_process, {:ankh, :frame, frame}, [])
     end

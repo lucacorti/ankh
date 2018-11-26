@@ -5,7 +5,7 @@ defmodule Ankh.Frame do
   The __using__ macro injects the frame struct needed by `Ankh.Frame`.
   """
 
-  alias Ankh.Frame.Encodable
+  alias Ankh.Frame.{Encodable, Utils}
 
   @typedoc "Struct injected by the `Ankh.Frame` __using__ macro."
   @type t :: term | nil
@@ -20,7 +20,7 @@ defmodule Ankh.Frame do
   - flags: frame flags struct or nil for no flags
   - payload: frame payload struct or nil for no payload
   """
-  @spec __using__(type: Integer.t(), flags: Encodable.t, payload: Encodable.t) :: Macro.t()
+  @spec __using__(type: Integer.t(), flags: Encodable.t(), payload: Encodable.t()) :: Macro.t()
   defmacro __using__(args) do
     with {:ok, type} <- Keyword.fetch(args, :type),
          flags <- Keyword.get(args, :flags),
@@ -102,4 +102,6 @@ defmodule Ankh.Frame do
     flags = Encodable.encode!(flags, options)
     [<<length::24, type::8>>, flags, <<0::1, id::31>> | payload]
   end
+
+  defdelegate split(frame, max_frame_size, end_stream \\ false), to: Utils
 end
