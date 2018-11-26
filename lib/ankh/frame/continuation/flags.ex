@@ -5,7 +5,7 @@ defmodule Ankh.Frame.Continuation.Flags do
   defstruct end_headers: false
 end
 
-defimpl Ankh.Frame.Flags, for: Ankh.Frame.Continuation.Flags do
+defimpl Ankh.Frame.Encodable, for: Ankh.Frame.Continuation.Flags do
   import Ankh.Frame.Utils
 
   def decode!(flags, <<_::5, eh::1, _::2>>, _) do

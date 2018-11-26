@@ -5,7 +5,7 @@ defmodule Ankh.Frame.Priority.Payload do
   defstruct exclusive: false, stream_dependency: 0, weight: 0
 end
 
-defimpl Ankh.Frame.Payload, for: Ankh.Frame.Priority.Payload do
+defimpl Ankh.Frame.Encodable, for: Ankh.Frame.Priority.Payload do
   import Ankh.Frame.Utils
 
   def encode!(%{exclusive: ex, stream_dependency: sd, weight: wh}, _) do

@@ -5,7 +5,7 @@ defmodule Ankh.Frame.Data.Payload do
   defstruct pad_length: 0, data: <<>>
 end
 
-defimpl Ankh.Frame.Payload, for: Ankh.Frame.Data.Payload do
+defimpl Ankh.Frame.Encodable, for: Ankh.Frame.Data.Payload do
   def decode!(payload, <<pad_length::8, padded_data::binary>>, flags: %{padded: true}) do
     data = binary_part(padded_data, 0, byte_size(padded_data) - pad_length)
     %{payload | pad_length: pad_length, data: data}

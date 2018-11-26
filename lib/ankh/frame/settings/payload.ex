@@ -17,7 +17,7 @@ defmodule Ankh.Frame.Settings.Payload do
             max_header_list_size: 128
 end
 
-defimpl Ankh.Frame.Payload, for: Ankh.Frame.Settings.Payload do
+defimpl Ankh.Frame.Encodable, for: Ankh.Frame.Settings.Payload do
   import Ankh.Frame.Utils
 
   @header_table_size 0x1

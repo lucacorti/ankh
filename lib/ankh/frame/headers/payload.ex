@@ -11,7 +11,7 @@ defmodule Ankh.Frame.Headers.Payload do
   defstruct pad_length: 0, exclusive: false, stream_dependency: 0, weight: 0, hbf: <<>>
 end
 
-defimpl Ankh.Frame.Payload, for: Ankh.Frame.Headers.Payload do
+defimpl Ankh.Frame.Encodable, for: Ankh.Frame.Headers.Payload do
   import Ankh.Frame.Utils
 
   def encode!(

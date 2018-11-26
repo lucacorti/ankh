@@ -10,7 +10,7 @@ defmodule Ankh.Frame.Headers.Flags do
   defstruct end_stream: false, end_headers: false, padded: false, priority: false
 end
 
-defimpl Ankh.Frame.Flags, for: Ankh.Frame.Headers.Flags do
+defimpl Ankh.Frame.Encodable, for: Ankh.Frame.Headers.Flags do
   import Ankh.Frame.Utils
 
   def decode!(flags, <<_::2, pr::1, _::1, pa::1, eh::1, _::1, es::1>>, _) do

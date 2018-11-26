@@ -5,7 +5,7 @@ defmodule Ankh.Frame.Data.Flags do
   defstruct end_stream: false, padded: false
 end
 
-defimpl Ankh.Frame.Flags, for: Ankh.Frame.Data.Flags do
+defimpl Ankh.Frame.Encodable, for: Ankh.Frame.Data.Flags do
   import Ankh.Frame.Utils
 
   def decode!(flags, <<_::4, pa::1, _::2, es::1>>, _) do

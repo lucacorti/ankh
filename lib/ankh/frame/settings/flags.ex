@@ -5,7 +5,7 @@ defmodule Ankh.Frame.Settings.Flags do
   defstruct ack: false
 end
 
-defimpl Ankh.Frame.Flags, for: Ankh.Frame.Settings.Flags do
+defimpl Ankh.Frame.Encodable, for: Ankh.Frame.Settings.Flags do
   import Ankh.Frame.Utils
 
   def decode!(flags, <<_::7, ack::1>>, _), do: %{flags | ack: int_to_bool!(ack)}
