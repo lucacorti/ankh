@@ -1,5 +1,9 @@
 defmodule Ankh.Stream do
-  @moduledoc false
+  @moduledoc """
+  HTTP/2 stream process
+
+  Process implementing the HTTP/2 stream state machine
+  """
 
   alias Ankh.{Connection, Frame}
 
@@ -39,6 +43,9 @@ defmodule Ankh.Stream do
   @typedoc "Reserve mode"
   @type reserve_mode :: :local | :remote
 
+  @doc """
+  Starts a new stream fot the provided connection
+  """
   @spec start_link(Connection.t(), Integer.t(), pid, pid, Integer.t(), pid | nil, mode) ::
           GenServer.on_start()
   def start_link(
@@ -65,6 +72,7 @@ defmodule Ankh.Stream do
     )
   end
 
+  @doc false
   def init(args) do
     {:ok,
      Enum.into(args, %{
@@ -76,12 +84,23 @@ defmodule Ankh.Stream do
      })}
   end
 
+  @doc """
+  Process a received frame for the stream
+  """
   @spec recv(t(), Frame.t()) :: GenServer.on_call()
   def recv(stream, frame), do: GenServer.call(stream, {:recv, frame})
 
+
+  @doc """
+  Process and send a frame on the stream
+  """
   @spec send(t(), Frame.t() | list(Frame.t())) :: GenServer.on_call()
   def send(stream, frame), do: GenServer.call(stream, {:send, frame})
 
+
+  @doc """
+  Reserves the stream for push_promise
+  """
   @spec reserve(t(), reserve_mode) :: GenServer.on_call()
   def reserve(stream, mode), do: GenServer.call(stream, {:reserve, mode})
 
