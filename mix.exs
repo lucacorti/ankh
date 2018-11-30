@@ -5,7 +5,7 @@ defmodule Ankh.Mixfile do
     [
       app: :ankh,
       version: "0.4.0",
-      elixir: "~> 1.5",
+      elixir: "~> 1.6",
       build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod,
       description: "Pure Elixir HTTP/2 implementation",
