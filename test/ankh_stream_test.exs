@@ -1,8 +1,9 @@
 defmodule AnkhTest.Stream do
   use ExUnit.Case, async: true
 
-  alias Ankh.Frame.{Data, Headers, Ping, Priority, RstStream, WindowUpdate}
+  alias Ankh.Frame.{Data, Headers, Ping, Priority, RstStream, Settings, WindowUpdate}
   alias Ankh.Stream
+  alias HPack.Table
 
   doctest Stream
 
@@ -13,8 +14,24 @@ defmodule AnkhTest.Stream do
   end
 
   setup do
-    {:ok, table} = HPack.Table.start_link(4096)
-    {:ok, stream} = Stream.start_link(Ankh.Connection.Mock, @stream_id, table, nil)
+    %{
+      header_table_size: header_table_size,
+      max_frame_size: max_frame_size
+    } = %Settings.Payload{}
+
+    {:ok, recv_table} = Table.start_link(header_table_size)
+    {:ok, send_table} = Table.start_link(header_table_size)
+
+    {:ok, stream} =
+      Stream.start_link(
+        Ankh.Connection.Mock,
+        @stream_id,
+        recv_table,
+        send_table,
+        max_frame_size,
+        nil
+      )
+
     %{stream: stream}
   end
 

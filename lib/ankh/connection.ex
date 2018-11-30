@@ -24,8 +24,12 @@ defmodule Ankh.Connection do
 
   use GenServer
 
+  require Logger
+
   alias Ankh.Connection.Receiver
-  alias Ankh.Frame
+  alias Ankh.{Frame, Stream}
+  alias Ankh.Frame.{GoAway, Settings}
+  alias HPack.Table
 
   @default_ssl_opts binary: true,
                     active: false,
@@ -37,6 +41,8 @@ defmodule Ankh.Connection do
                     cacerts: :certifi.cacerts()
 
   @preface "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
+
+  # @max_stream_id 2_147_483_647
 
   @typedoc "Connection process"
   @type connection :: GenServer.server()
@@ -101,12 +107,28 @@ defmodule Ankh.Connection do
   @doc false
   def init(args) do
     controlling_process = Keyword.get(args, :controlling_process)
+    settings = Keyword.get(args, :settings, %Settings.Payload{})
     uri = Keyword.get(args, :uri)
     ssl_opts = Keyword.get(args, :ssl_options, [])
 
-    with {:ok, receiver} <-
-           Receiver.start_link(uri: uri, controlling_process: controlling_process) do
-      {:ok, %{uri: uri, ssl_opts: ssl_opts, receiver: receiver, socket: nil}}
+    with %{header_table_size: header_table_size} <- settings,
+         {:ok, send_hpack} <- Table.start_link(header_table_size),
+         {:ok, recv_hpack} <- Table.start_link(header_table_size),
+         {:ok, receiver} <- Receiver.start_link(uri: uri) do
+      {:ok,
+       %{
+         controlling_process: controlling_process,
+         last_stream_id: 0,
+         uri: uri,
+         ssl_opts: ssl_opts,
+         receiver: receiver,
+         socket: nil,
+         recv_hpack: recv_hpack,
+         recv_settings: settings,
+         send_hpack: send_hpack,
+         send_settings: settings,
+         window_size: 0
+       }}
     else
       error ->
         {:error, error}
@@ -114,34 +136,47 @@ defmodule Ankh.Connection do
   end
 
   @doc """
-  Connects to a server via the specified URI
-
-  Parameters:
-    - connection: connection process
-    - uri: The server to connect to, scheme and authority are used
+  Connects to a server
   """
-  @spec connect(connection) :: :ok | {:error, atom}
+  @spec connect(connection) :: GenServer.on_call()
   def connect(connection), do: GenServer.call(connection, {:connect})
 
   @doc """
   Sends a frame over the connection
-
-  Parameters:
-    - connection: connection process
-    - frame: `Ankh.Frame` structure
   """
-  @spec send(connection, Frame.t()) :: :ok | {:error, atom}
+  @spec send(connection, Frame.t()) :: GenServer.on_call()
   def send(connection, frame) do
-    GenServer.call(connection, {:send, Frame.encode!(frame, [])})
+    GenServer.call(connection, {:send, frame})
+  end
+
+  @doc """
+  Starts a new stream on the connection
+  """
+  @spec start_stream(connection, Stream.mode()) :: GenServer.on_call()
+  def start_stream(connection, mode) do
+    GenServer.call(connection, {:start_stream, mode})
+  end
+
+  @doc """
+  Updates send settings for the connection
+  """
+  @spec send_settings(connection, Settings.Payload.t()) :: GenServer.on_call()
+  def send_settings(connection, settings) do
+    GenServer.call(connection, {:send_settings, settings})
+  end
+
+  @doc """
+  Updates the connection window_size with the provided increment
+  """
+  @spec window_update(connection, Integer.t()) :: GenServer.on_call()
+  def window_update(connection, increment) do
+    GenServer.call(connection, {:window_update, increment})
   end
 
   @doc """
   Closes the connection
 
   Before closing the TLS connection a GOAWAY frame is sent to the peer.
-
-  Parameters:
-    - connection: connection process
   """
   @spec close(connection) :: :closed
   def close(connection), do: GenServer.call(connection, {:close})
@@ -149,8 +184,13 @@ defmodule Ankh.Connection do
   def handle_call(
         {:connect},
         _from,
-        %{socket: nil, ssl_opts: ssl_opts, uri: %URI{host: host, port: port}, receiver: receiver} =
-          state
+        %{
+          socket: nil,
+          ssl_opts: ssl_opts,
+          uri: %URI{host: host, port: port},
+          recv_settings: recv_settings,
+          receiver: receiver
+        } = state
       ) do
     hostname = String.to_charlist(host)
     ssl_options = Keyword.merge(ssl_opts, @default_ssl_opts)
@@ -158,7 +198,8 @@ defmodule Ankh.Connection do
     with {:ok, socket} <- :ssl.connect(hostname, port, ssl_options),
          :ok <- :ssl.controlling_process(socket, receiver),
          :ok <- :ssl.setopts(socket, active: :once),
-         :ok <- :ssl.send(socket, @preface) do
+         :ok <- :ssl.send(socket, @preface),
+         :ok <- :ssl.send(socket, Frame.encode!(%Settings{payload: recv_settings})) do
       {:reply, :ok, %{state | socket: socket}}
     else
       error ->
@@ -175,7 +216,7 @@ defmodule Ankh.Connection do
   end
 
   def handle_call({:send, frame}, _from, %{socket: socket} = state) do
-    case :ssl.send(socket, frame) do
+    case :ssl.send(socket, Frame.encode!(frame)) do
       :ok ->
         {:reply, :ok, state}
 
@@ -185,14 +226,70 @@ defmodule Ankh.Connection do
   end
 
   def handle_call({:close}, _from, state) do
-    {:stop, :shutdown, state}
+    {:stop, :normal, :ok, state}
   end
 
-  def terminate(_reason, %{socket: nil, receiver: receiver}) do
+  def handle_call(
+        {:start_stream, mode},
+        _from,
+        %{
+          controlling_process: controlling_process,
+          last_stream_id: last_stream_id,
+          recv_hpack: recv_hpack,
+          send_hpack: send_hpack,
+          send_settings: %{max_frame_size: max_frame_size}
+        } = state
+      ) do
+    stream_id = last_stream_id + 1
+
+    {:ok, pid} =
+      Stream.start_link(
+        self(),
+        stream_id,
+        recv_hpack,
+        send_hpack,
+        max_frame_size,
+        controlling_process,
+        mode
+      )
+
+    {:reply, {:ok, pid}, %{state | last_stream_id: stream_id}}
+  end
+
+  def handle_call(
+        {:send_settings,
+         %{header_table_size: header_table_size, initial_window_size: window_size} = send_settings},
+        _from,
+        %{send_hpack: send_hpack} = state
+      ) do
+    :ok = Table.resize(header_table_size, send_hpack)
+    {:reply, :ok, %{state | send_settings: send_settings, window_size: window_size}}
+  end
+
+  def handle_call(
+        {:window_update, increment},
+        _from,
+        %{window_size: window_size} = state
+      ) do
+    {:reply, :ok, %{state | window_size: window_size + increment}}
+  end
+
+  def terminate(reason, %{socket: nil, receiver: receiver}) do
+    Logger.error("Connection terminate: #{inspect(reason)}")
     GenServer.stop(receiver)
   end
 
-  def terminate(reason, %{socket: socket} = state) do
+  def terminate(reason, %{socket: socket, last_stream_id: last_stream_id} = state) do
+    :ssl.send(
+      socket,
+      Frame.encode!(%GoAway{
+        payload: %GoAway.Payload{
+          last_stream_id: last_stream_id,
+          error_code: :no_error
+        }
+      })
+    )
+
     :ssl.close(socket)
     terminate(reason, %{state | socket: nil})
   end
