@@ -611,6 +611,8 @@ defmodule Ankh.Stream do
     end)
   end
 
+  defp process_recv_data(0, state), do: {:ok, state}
+
   defp process_recv_data(length, %{id: id} = state) do
     window_update = %WindowUpdate{
       payload: %WindowUpdate.Payload{
