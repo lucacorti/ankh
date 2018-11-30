@@ -2,7 +2,7 @@ defimpl Ankh.Frame.Splittable, for: Ankh.Frame.Data do
   alias Ankh.Frame.Data
 
   def split(%Data{} = frame, frame_size, end_stream),
-    do: do_split(frame, frame_size, [], end_stream)
+    do: do_split(frame, frame_size, end_stream, [])
 
   defp do_split(
          %Data{flags: flags, payload: %{data: data}} = frame,
