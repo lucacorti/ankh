@@ -94,7 +94,7 @@ defmodule Ankh.Stream do
   @doc """
   Process and send a frame on the stream
   """
-  @spec send(t(), Frame.t() | list(Frame.t())) :: GenServer.on_call()
+  @spec send(t(), Frame.t()) :: GenServer.on_call()
   def send(stream, frame), do: GenServer.call(stream, {:send, frame})
 
 
