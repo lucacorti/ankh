@@ -453,7 +453,32 @@ defmodule Ankh.Stream do
            payload: nil
          }
        ) do
-    Process.send(controlling_process, {:ankh, :data, id, recv_data, true}, [])
+    data =
+     recv_data
+     |> Enum.reverse()
+    Process.send(controlling_process, {:ankh, :data, id, data, true}, [])
+    {:ok, %{state | state: :closed, recv_data: []}}
+  end
+
+  defp recv_frame(
+         %{
+           id: id,
+           state: :half_closed_local,
+           controlling_process: controlling_process,
+           recv_data: recv_data
+         } = state,
+         %Data{
+           length: length,
+           flags: %{end_stream: true},
+           payload: %{data: data}
+         }
+       ) do
+     {:ok, state} = process_recv_data(length, state)
+
+     data =
+       [data | recv_data]
+       |> Enum.reverse()
+    Process.send(controlling_process, {:ankh, :data, id, data, true}, [])
     {:ok, %{state | state: :closed, recv_data: []}}
   end
 
