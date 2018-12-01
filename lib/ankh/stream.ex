@@ -5,6 +5,8 @@ defmodule Ankh.Stream do
   Process implementing the HTTP/2 stream state machine
   """
 
+  require Logger
+
   alias Ankh.{Connection, Frame}
 
   alias Ankh.Frame.{
@@ -19,7 +21,6 @@ defmodule Ankh.Stream do
   }
 
   use GenServer
-  require Logger
 
   @typedoc "Stream states"
   @type state ::
@@ -120,11 +121,10 @@ defmodule Ankh.Stream do
     {:stop, {:error, :stream_not_idle}, state}
   end
 
-  def handle_call({:recv, frame}, _from, %{id: id, state: old_state} = state) do
-    Logger.debug "STREAM #{id} RECEIVED #{inspect frame}"
+  def handle_call({:recv, frame}, _from, %{state: old_state} = state) do
     case recv_frame(state, frame) do
       {:ok, %{state: stream_state} = new_state} ->
-        Logger.debug "STREAM #{id} #{inspect old_state} -> #{inspect stream_state}"
+        Logger.debug "RECEIVED #{inspect frame}\nSTREAM #{inspect old_state} -> #{inspect stream_state}"
         {:reply, {:ok, stream_state}, new_state}
 
       {:error, _} = error ->
@@ -133,10 +133,10 @@ defmodule Ankh.Stream do
   end
 
   def handle_call({:send, frame}, _from, %{id: id, state: old_state} = state) do
-    Logger.debug "STREAM #{id} SENT #{inspect frame}"
-    case send_frame(state, %{frame | stream_id: id}) do
+    frame = %{frame | stream_id: id}
+    case send_frame(state, frame) do
       {:ok, %{state: stream_state} = new_state} ->
-        Logger.debug "STREAM #{id} #{inspect old_state} -> #{inspect stream_state}"
+        Logger.debug "SENT #{inspect frame}\nSTREAM #{inspect old_state} -> #{inspect stream_state}"
         {:reply, {:ok, stream_state}, new_state}
 
       {:error, _} = error ->
