@@ -216,7 +216,6 @@ defmodule Ankh.Connection do
   end
 
   def handle_call({:send, frame}, _from, %{socket: socket} = state) do
-    Logger.debug("Sending #{inspect frame}")
     case :ssl.send(socket, Frame.encode!(frame)) do
       :ok ->
         {:reply, :ok, state}
