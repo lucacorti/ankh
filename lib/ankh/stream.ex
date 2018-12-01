@@ -120,19 +120,23 @@ defmodule Ankh.Stream do
     {:stop, {:error, :stream_not_idle}, state}
   end
 
-  def handle_call({:recv, frame}, _from, state) do
+  def handle_call({:recv, frame}, _from, %{id: id, state: old_state} = state) do
+    Logger.debug "STREAM #{id} RECEIVED #{inspect frame}"
     case recv_frame(state, frame) do
-      {:ok, %{state: stream_state} = state} ->
-        {:reply, {:ok, stream_state}, state}
+      {:ok, %{state: stream_state} = new_state} ->
+        Logger.debug "STREAM #{id} #{inspect old_state} -> #{inspect stream_state}"
+        {:reply, {:ok, stream_state}, new_state}
 
       {:error, _} = error ->
         {:stop, :normal, error, state}
     end
   end
 
-  def handle_call({:send, frame}, _from, %{id: id} = state) do
+  def handle_call({:send, frame}, _from, %{id: id, state: old_state} = state) do
+    Logger.debug "STREAM #{id} SENT #{inspect frame}"
     case send_frame(state, %{frame | stream_id: id}) do
       {:ok, %{state: stream_state} = new_state} ->
+        Logger.debug "STREAM #{id} #{inspect old_state} -> #{inspect stream_state}"
         {:reply, {:ok, stream_state}, new_state}
 
       {:error, _} = error ->
