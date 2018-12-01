@@ -9,10 +9,6 @@ defmodule AnkhTest.Stream do
 
   @stream_id 1
 
-  setup_all do
-    :ok
-  end
-
   setup do
     %{
       header_table_size: header_table_size,

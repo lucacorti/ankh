@@ -4,12 +4,12 @@ defmodule AnkhTest.Connection do
   alias Ankh.{Connection, Frame, Stream}
   alias Frame.Headers
 
-  @hostname "https://www.google.com"
+  @address "https://www.google.com"
 
   doctest Connection
 
   setup do
-    uri = URI.parse(@hostname)
+    uri = URI.parse(@address)
     {:ok, [uri: uri]}
   end
 

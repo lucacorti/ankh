@@ -35,6 +35,9 @@ defmodule Ankh.Stream do
   @typedoc "Stream process"
   @type t :: GenServer.server()
 
+  @typedoc "Stream id"
+  @type id :: Integer.t
+
   @typedoc "Stream HBF type"
   @type hbf_type :: :headers | :push_promise
 
@@ -47,7 +50,7 @@ defmodule Ankh.Stream do
   @doc """
   Starts a new stream fot the provided connection
   """
-  @spec start_link(Connection.t(), Integer.t(), pid, pid, Integer.t(), pid | nil, mode) ::
+  @spec start_link(Connection.t(), id(), pid, pid, Integer.t(), pid | nil, mode) ::
           GenServer.on_start()
   def start_link(
         connection,
@@ -88,6 +91,12 @@ defmodule Ankh.Stream do
   @doc """
   Process a received frame for the stream
   """
+  @spec recv_raw(t(), Frame.type(), data :: binary) :: GenServer.on_call()
+  def recv_raw(stream, type, data), do: GenServer.call(stream, {:recv_raw, type, data})
+
+  @doc """
+  Process a received frame for the stream
+  """
   @spec recv(t(), Frame.t()) :: GenServer.on_call()
   def recv(stream, frame), do: GenServer.call(stream, {:recv, frame})
 
@@ -121,13 +130,22 @@ defmodule Ankh.Stream do
     {:stop, {:error, :stream_not_idle}, state}
   end
 
-  def handle_call({:recv, frame}, _from, %{state: old_state} = state) do
+  def handle_call({:recv_raw, type, data}, from, %{connection: connection} = state) do
+    frame = connection
+      |> Frame.Registry.frame_for_type(type)
+      |> struct()
+      |> Frame.decode!(data)
+    handle_call({:recv, frame}, from, state)
+  end
+
+  def handle_call({:recv, frame}, _from, %{id: id, state: old_state} = state) do
     case recv_frame(state, frame) do
       {:ok, %{state: stream_state} = new_state} ->
         Logger.debug "RECEIVED #{inspect frame}\nSTREAM #{inspect old_state} -> #{inspect stream_state}"
         {:reply, {:ok, stream_state}, new_state}
 
       {:error, _} = error ->
+        Logger.error("STREAM #{id} STATE #{old_state} RECEIVE ERROR #{inspect error} FRAME #{inspect frame}")
         {:stop, :normal, error, state}
     end
   end
@@ -140,8 +158,13 @@ defmodule Ankh.Stream do
         {:reply, {:ok, stream_state}, new_state}
 
       {:error, _} = error ->
+        Logger.error("STREAM #{id} STATE #{old_state} SEND ERROR #{inspect error} FRAME #{inspect frame}")
         {:stop, :normal, error, state}
     end
+  end
+
+  def terminate(reason, _state) do
+    Logger.error("Stream terminate: #{inspect(reason)}")
   end
 
   defp recv_frame(%{id: id}, %{stream_id: stream_id}) when stream_id !== id do
@@ -662,7 +685,7 @@ defmodule Ankh.Stream do
     |> process_send_headers(state)
     |> Splittable.split(max_frame_size)
     |> Enum.reduce_while({:ok, nil}, fn frame, _ ->
-      with :ok <- Connection.send(connection, frame) do
+      with :ok <- Connection.send(connection, Frame.encode!(frame)) do
         {:cont, {:ok, state}}
       else
         error ->

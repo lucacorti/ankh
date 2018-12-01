@@ -5,6 +5,8 @@ defmodule Ankh.Frame do
   The __using__ macro injects the frame struct needed by `Ankh.Frame`.
   """
 
+  require Logger
+
   alias Ankh.Frame.Encodable
 
   @typedoc "Struct injected by the `Ankh.Frame` __using__ macro."
@@ -102,4 +104,20 @@ defmodule Ankh.Frame do
     flags = Encodable.encode!(flags, options)
     [<<length::24, type::8>>, flags, <<0::1, id::31>> | payload]
   end
+
+  @frame_header_size 9
+
+  def peek_frames(data), do: do_peek_frames(data, [])
+
+  defp do_peek_frames(<<length::24, type::8, _flags::8, 0::1, id::31, rest::binary>> = data, frames)
+  when byte_size(rest) >= length do
+    frame_size = @frame_header_size + length
+    frame_data = binary_part(data, 0, frame_size)
+    rest_size = byte_size(data) - frame_size
+    rest_data = binary_part(data, frame_size, rest_size)
+
+    do_peek_frames(rest_data, [{length, type, id, frame_data} | frames])
+  end
+
+  defp do_peek_frames(buffer, frames), do: {buffer, Enum.reverse(frames)}
 end

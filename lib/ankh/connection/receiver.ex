@@ -7,14 +7,10 @@ defmodule Ankh.Connection.Receiver do
   alias Ankh.{Frame, Connection, Stream}
   alias Ankh.Frame.{Error, GoAway, Ping, Settings, WindowUpdate}
 
-  @frame_header_size 9
-
   @type receiver :: GenServer.server()
 
-  @type args :: [uri: URI.t(), connection: pid | nil]
-
-  @spec start_link(args, GenServer.options()) :: GenServer.on_start()
-  def start_link(args, options \\ []) do
+  @spec start_link(Keyword.t, GenServer.options()) :: GenServer.on_start()
+  def start_link(args \\ [], options \\ []) do
     GenServer.start_link(
       __MODULE__,
       Keyword.merge(args, connection: self()),
@@ -24,8 +20,7 @@ defmodule Ankh.Connection.Receiver do
 
   def init(args) do
     connection = Keyword.get(args, :connection)
-    {:ok, uri} = Keyword.fetch(args, :uri)
-    {:ok, %{buffer: <<>>, uri: uri, connection: connection}}
+    {:ok, %{buffer: <<>>, connection: connection}}
   end
 
   def handle_info(
@@ -33,47 +28,28 @@ defmodule Ankh.Connection.Receiver do
         %{buffer: buffer, connection: connection} = state
       ) do
     :ssl.setopts(socket, active: :once)
-    {state, frames} = parse_frames(buffer <> data, state)
+    {buffer, frames} = Frame.peek_frames(buffer <> data)
 
     for frame <- frames do
       case frame do
-        %{stream_id: 0} ->
-          :ok = handle_connection_frame(frame, state)
+        {_length, type, 0, data} ->
+          :ok = connection
+            |> Frame.Registry.frame_for_type(type)
+            |> struct()
+            |> Frame.decode!(data)
+            |> handle_connection_frame(state)
 
-        %{stream_id: id} ->
-          Stream.recv({:via, Registry, {Stream.Registry, {connection, id}}}, frame)
+        {_length, type, id, data} ->
+          Stream.recv_raw({:via, Registry, {Stream.Registry, {connection, id}}}, type, data)
       end
     end
 
-    {:noreply, state}
+    {:noreply, %{state | buffer: buffer}}
   end
 
   def handle_info({:ssl_closed, _socket}, state), do: {:stop, {:shutdown, :closed}, state}
 
   def handle_info({:ssl_error, _socket, reason}, state), do: {:stop, {:shutdown, reason}, state}
-
-  defp parse_frames(<<payload_length::24, _::binary>> = data, state)
-       when @frame_header_size + payload_length > byte_size(data) do
-    {%{state | buffer: data}, []}
-  end
-
-  defp parse_frames(<<payload_length::24, type::8, _::binary>> = data, %{uri: uri} = state) do
-    frame_size = @frame_header_size + payload_length
-    frame_data = binary_part(data, 0, frame_size)
-    rest_size = byte_size(data) - frame_size
-    rest_data = binary_part(data, frame_size, rest_size)
-
-    frame =
-      uri
-      |> Frame.Registry.frame_for_type(type)
-      |> struct()
-      |> Frame.decode!(frame_data, [])
-
-    {new_state, frames} = parse_frames(rest_data, state)
-    {new_state, [frame | frames]}
-  end
-
-  defp parse_frames(_, state), do: {%{state | buffer: <<>>}, []}
 
   defp handle_connection_frame(
          %Settings{stream_id: 0, flags: %{ack: false}, payload: payload} = frame,
@@ -81,14 +57,14 @@ defmodule Ankh.Connection.Receiver do
        ) do
     Logger.debug("STREAM 0 RECEIVED SETTINGS")
     :ok =
-      Connection.send(connection, %Settings{
+      Connection.send(connection, Frame.encode!(%Settings{
         frame
         | flags: %Settings.Flags{ack: true},
           payload: nil,
           length: 0
-      })
+      }))
 
-    Connection.send_settings(connection, payload)
+    :ok = Connection.send_settings(connection, payload)
   end
 
   defp handle_connection_frame(
@@ -104,13 +80,13 @@ defmodule Ankh.Connection.Receiver do
          %{connection: connection}
        ) do
     Logger.debug("STREAM 0 RECEIVED PING")
-    Connection.send(connection, %Ping{
+    Connection.send(connection, Frame.encode!(%Ping{
       frame
       | flags: %{
           flags
           | ack: true
         }
-    })
+    }))
   end
 
   defp handle_connection_frame(
@@ -131,5 +107,9 @@ defmodule Ankh.Connection.Receiver do
   defp handle_connection_frame(%GoAway{stream_id: 0, payload: %{error_code: code}}, _state) do
     Logger.debug("STREAM 0 RECEIVED GO_AWAY #{inspect code}: #{Error.format(code)}")
     {:error, code}
+  end
+
+  def terminate(reason, _state) do
+    Logger.error("Receiver terminate: #{inspect(reason)}")
   end
 end

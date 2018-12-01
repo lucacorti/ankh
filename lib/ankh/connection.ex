@@ -114,7 +114,7 @@ defmodule Ankh.Connection do
     with %{header_table_size: header_table_size} <- settings,
          {:ok, send_hpack} <- Table.start_link(header_table_size),
          {:ok, recv_hpack} <- Table.start_link(header_table_size),
-         {:ok, receiver} <- Receiver.start_link(uri: uri) do
+         {:ok, receiver} <- Receiver.start_link() do
       {:ok,
        %{
          controlling_process: controlling_process,
@@ -216,7 +216,7 @@ defmodule Ankh.Connection do
   end
 
   def handle_call({:send, frame}, _from, %{socket: socket} = state) do
-    case :ssl.send(socket, Frame.encode!(frame)) do
+    case :ssl.send(socket, frame) do
       :ok ->
         {:reply, :ok, state}
 
@@ -237,7 +237,7 @@ defmodule Ankh.Connection do
           last_stream_id: last_stream_id,
           recv_hpack: recv_hpack,
           send_hpack: send_hpack,
-          send_settings: %{max_frame_size: max_frame_size}
+          send_settings: %{max_frame_size: max_frame_size},
         } = state
       ) do
 
