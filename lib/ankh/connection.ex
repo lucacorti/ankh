@@ -200,7 +200,7 @@ defmodule Ankh.Connection do
          :ok <- :ssl.setopts(socket, active: :once),
          :ok <- :ssl.send(socket, @preface),
          :ok <- :ssl.send(socket, Frame.encode!(%Settings{payload: recv_settings})) do
-      {:reply, :ok, %{state | socket: socket}}
+      {:reply, :ok, %{state | last_stream_id: 1, socket: socket}}
     else
       error ->
         {:stop, :error, :ssl.format_error(error), state}
@@ -240,12 +240,11 @@ defmodule Ankh.Connection do
           send_settings: %{max_frame_size: max_frame_size}
         } = state
       ) do
-    stream_id = last_stream_id + 1
 
     {:ok, pid} =
       Stream.start_link(
         self(),
-        stream_id,
+        last_stream_id,
         recv_hpack,
         send_hpack,
         max_frame_size,
@@ -253,7 +252,7 @@ defmodule Ankh.Connection do
         mode
       )
 
-    {:reply, {:ok, pid}, %{state | last_stream_id: stream_id}}
+    {:reply, {:ok, pid}, %{state | last_stream_id: last_stream_id + 2}}
   end
 
   def handle_call(
