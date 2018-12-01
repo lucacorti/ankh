@@ -109,8 +109,11 @@ defmodule Ankh.Frame do
 
   def peek_frames(data), do: do_peek_frames(data, [])
 
-  defp do_peek_frames(<<length::24, type::8, _flags::8, 0::1, id::31, rest::binary>> = data, frames)
-  when byte_size(rest) >= length do
+  defp do_peek_frames(
+         <<length::24, type::8, _flags::8, 0::1, id::31, rest::binary>> = data,
+         frames
+       )
+       when byte_size(rest) >= length do
     frame_size = @frame_header_size + length
     frame_data = binary_part(data, 0, frame_size)
     rest_size = byte_size(data) - frame_size

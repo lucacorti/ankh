@@ -36,7 +36,7 @@ defmodule Ankh.Stream do
   @type t :: GenServer.server()
 
   @typedoc "Stream id"
-  @type id :: Integer.t
+  @type id :: Integer.t()
 
   @typedoc "Stream HBF type"
   @type hbf_type :: :headers | :push_promise
@@ -100,13 +100,11 @@ defmodule Ankh.Stream do
   @spec recv(t(), Frame.t()) :: GenServer.on_call()
   def recv(stream, frame), do: GenServer.call(stream, {:recv, frame})
 
-
   @doc """
   Process and send a frame on the stream
   """
   @spec send(t(), Frame.t()) :: GenServer.on_call()
   def send(stream, frame), do: GenServer.call(stream, {:send, frame})
-
 
   @doc """
   Reserves the stream for push_promise
@@ -131,34 +129,49 @@ defmodule Ankh.Stream do
   end
 
   def handle_call({:recv_raw, type, data}, from, %{connection: connection} = state) do
-    frame = connection
+    frame =
+      connection
       |> Frame.Registry.frame_for_type(type)
       |> struct()
       |> Frame.decode!(data)
+
     handle_call({:recv, frame}, from, state)
   end
 
   def handle_call({:recv, frame}, _from, %{id: id, state: old_state} = state) do
     case recv_frame(state, frame) do
       {:ok, %{state: stream_state} = new_state} ->
-        Logger.debug "RECEIVED #{inspect frame}\nSTREAM #{inspect old_state} -> #{inspect stream_state}"
+        Logger.debug(
+          "RECEIVED #{inspect(frame)}\nSTREAM #{inspect(old_state)} -> #{inspect(stream_state)}"
+        )
+
         {:reply, {:ok, stream_state}, new_state}
 
       {:error, _} = error ->
-        Logger.error("STREAM #{id} STATE #{old_state} RECEIVE ERROR #{inspect error} FRAME #{inspect frame}")
+        Logger.error(
+          "STREAM #{id} STATE #{old_state} RECEIVE ERROR #{inspect(error)} FRAME #{inspect(frame)}"
+        )
+
         {:stop, :normal, error, state}
     end
   end
 
   def handle_call({:send, frame}, _from, %{id: id, state: old_state} = state) do
     frame = %{frame | stream_id: id}
+
     case send_frame(state, frame) do
       {:ok, %{state: stream_state} = new_state} ->
-        Logger.debug "SENT #{inspect frame}\nSTREAM #{inspect old_state} -> #{inspect stream_state}"
+        Logger.debug(
+          "SENT #{inspect(frame)}\nSTREAM #{inspect(old_state)} -> #{inspect(stream_state)}"
+        )
+
         {:reply, {:ok, stream_state}, new_state}
 
       {:error, _} = error ->
-        Logger.error("STREAM #{id} STATE #{old_state} SEND ERROR #{inspect error} FRAME #{inspect frame}")
+        Logger.error(
+          "STREAM #{id} STATE #{old_state} SEND ERROR #{inspect(error)} FRAME #{inspect(frame)}"
+        )
+
         {:stop, :normal, error, state}
     end
   end
@@ -477,8 +490,9 @@ defmodule Ankh.Stream do
          }
        ) do
     data =
-     recv_data
-     |> Enum.reverse()
+      recv_data
+      |> Enum.reverse()
+
     Process.send(controlling_process, {:ankh, :data, id, data, true}, [])
     {:ok, %{state | state: :closed, recv_data: []}}
   end
@@ -496,11 +510,12 @@ defmodule Ankh.Stream do
            payload: %{data: data}
          }
        ) do
-     {:ok, state} = process_recv_data(length, state)
+    {:ok, state} = process_recv_data(length, state)
 
-     data =
-       [data | recv_data]
-       |> Enum.reverse()
+    data =
+      [data | recv_data]
+      |> Enum.reverse()
+
     Process.send(controlling_process, {:ankh, :data, id, data, true}, [])
     {:ok, %{state | state: :closed, recv_data: []}}
   end

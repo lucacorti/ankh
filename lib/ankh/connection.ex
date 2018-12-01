@@ -237,10 +237,9 @@ defmodule Ankh.Connection do
           last_stream_id: last_stream_id,
           recv_hpack: recv_hpack,
           send_hpack: send_hpack,
-          send_settings: %{max_frame_size: max_frame_size},
+          send_settings: %{max_frame_size: max_frame_size}
         } = state
       ) do
-
     {:ok, pid} =
       Stream.start_link(
         self(),

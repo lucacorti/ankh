@@ -9,7 +9,7 @@ defmodule Ankh.Connection.Receiver do
 
   @type receiver :: GenServer.server()
 
-  @spec start_link(Keyword.t, GenServer.options()) :: GenServer.on_start()
+  @spec start_link(Keyword.t(), GenServer.options()) :: GenServer.on_start()
   def start_link(args \\ [], options \\ []) do
     GenServer.start_link(
       __MODULE__,
@@ -33,7 +33,8 @@ defmodule Ankh.Connection.Receiver do
     for frame <- frames do
       case frame do
         {_length, type, 0, data} ->
-          :ok = connection
+          :ok =
+            connection
             |> Frame.Registry.frame_for_type(type)
             |> struct()
             |> Frame.decode!(data)
@@ -56,13 +57,17 @@ defmodule Ankh.Connection.Receiver do
          %{connection: connection}
        ) do
     Logger.debug("STREAM 0 RECEIVED SETTINGS")
+
     :ok =
-      Connection.send(connection, Frame.encode!(%Settings{
-        frame
-        | flags: %Settings.Flags{ack: true},
-          payload: nil,
-          length: 0
-      }))
+      Connection.send(
+        connection,
+        Frame.encode!(%Settings{
+          frame
+          | flags: %Settings.Flags{ack: true},
+            payload: nil,
+            length: 0
+        })
+      )
 
     :ok = Connection.send_settings(connection, payload)
   end
@@ -80,20 +85,24 @@ defmodule Ankh.Connection.Receiver do
          %{connection: connection}
        ) do
     Logger.debug("STREAM 0 RECEIVED PING")
-    Connection.send(connection, Frame.encode!(%Ping{
-      frame
-      | flags: %{
-          flags
-          | ack: true
-        }
-    }))
+
+    Connection.send(
+      connection,
+      Frame.encode!(%Ping{
+        frame
+        | flags: %{
+            flags
+            | ack: true
+          }
+      })
+    )
   end
 
   defp handle_connection_frame(
          %WindowUpdate{stream_id: 0, payload: %{window_size_increment: 0}},
          _state
        ) do
-     Logger.debug("STREAM 0 RECEIVED WINDOW_UPDATE with window_size increment 0")
+    Logger.debug("STREAM 0 RECEIVED WINDOW_UPDATE with window_size increment 0")
     {:error, :protocol_error}
   end
 
@@ -105,7 +114,7 @@ defmodule Ankh.Connection.Receiver do
   end
 
   defp handle_connection_frame(%GoAway{stream_id: 0, payload: %{error_code: code}}, _state) do
-    Logger.debug("STREAM 0 RECEIVED GO_AWAY #{inspect code}: #{Error.format(code)}")
+    Logger.debug("STREAM 0 RECEIVED GO_AWAY #{inspect(code)}: #{Error.format(code)}")
     {:error, code}
   end
 

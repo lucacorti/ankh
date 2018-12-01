@@ -19,7 +19,11 @@ defimpl Ankh.Frame.Splittable, for: Ankh.Frame.Headers do
     frames = [%{frame | payload: %{payload | hbf: chunk}}]
 
     do_split(
-      %{frame | flags: %{flags | end_stream: end_stream, end_headers: false}, payload: %{hbf: rest}},
+      %{
+        frame
+        | flags: %{flags | end_stream: end_stream, end_headers: false},
+          payload: %{hbf: rest}
+      },
       frame_size,
       frames
     )
@@ -46,10 +50,15 @@ defimpl Ankh.Frame.Splittable, for: Ankh.Frame.Headers do
          frames
        ) do
     <<chunk::size(frame_size), rest::binary>> = hbf
-    frames = [%Continuation{
-      stream_id: id,
-      payload: %Continuation.Payload{payload | hbf: chunk}
-    } | frames]
+
+    frames = [
+      %Continuation{
+        stream_id: id,
+        payload: %Continuation.Payload{payload | hbf: chunk}
+      }
+      | frames
+    ]
+
     do_split(%{frame | payload: %{hbf: rest}}, frame_size, frames)
   end
 end

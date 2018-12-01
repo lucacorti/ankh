@@ -4,6 +4,7 @@ defmodule Ankh.Frame.Registry do
   """
 
   alias Ankh.Connection
+
   alias Ankh.Frame.{
     Continuation,
     Data,
@@ -22,7 +23,7 @@ defmodule Ankh.Frame.Registry do
 
   Codes 0-9 are reserved for standard frame types.
   """
-  @spec frame_for_type(Connection.connection | nil, Integer.t()) :: Frame.t() | nil
+  @spec frame_for_type(Connection.connection() | nil, Integer.t()) :: Frame.t() | nil
   def frame_for_type(_, 0x0), do: Data
   def frame_for_type(_, 0x1), do: Headers
   def frame_for_type(_, 0x2), do: Priority

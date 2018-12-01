@@ -14,7 +14,11 @@ defimpl Ankh.Frame.Splittable, for: Ankh.Frame.Data do
 
   defp do_split(%{flags: flags, payload: %{data: data} = payload} = frame, frame_size, frames) do
     <<chunk::size(frame_size), rest::binary>> = data
-    frames = [%{frame | flags: %{flags | end_stream: false}, payload: %{payload | data: chunk}} | frames]
+
+    frames = [
+      %{frame | flags: %{flags | end_stream: false}, payload: %{payload | data: chunk}} | frames
+    ]
+
     do_split(%{frame | payload: %{payload | data: rest}}, frame_size, frames)
   end
 end
