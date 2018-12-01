@@ -14,10 +14,10 @@ defprotocol Ankh.Frame.Splittable do
   @doc """
   Returns N frames for `frame` with the specified `frame_size`.
   """
-  @spec split(frame :: t(), frame_size :: Integer.t(), end_stream :: boolean) :: [Frame.t()]
-  def split(frame, frame_size, end_stream \\ false)
+  @spec split(frame :: t(), frame_size :: Integer.t()) :: [Frame.t()]
+  def split(frame, frame_size)
 end
 
 defimpl Ankh.Frame.Splittable, for: Any do
-  def split(frame, _, _), do: [frame]
+  def split(frame, _), do: [frame]
 end
