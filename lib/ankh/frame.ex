@@ -9,8 +9,16 @@ defmodule Ankh.Frame do
 
   alias Ankh.Frame.Encodable
 
+  @frame_header_size 9
+
   @typedoc "Struct injected by the `Ankh.Frame` __using__ macro."
   @type t :: term | nil
+
+  @typedoc "Frame length"
+  @type length :: Integer.t
+
+  @typedoc "Frame type code"
+  @type type :: Integer.it
 
   @typedoc "Encode/Decode options"
   @type options :: Keyword.t()
@@ -22,7 +30,7 @@ defmodule Ankh.Frame do
   - flags: frame flags struct or nil for no flags
   - payload: frame payload struct or nil for no payload
   """
-  @spec __using__(type: Integer.t(), flags: Encodable.t(), payload: Encodable.t()) :: Macro.t()
+  @spec __using__(type: type, flags: Encodable.t(), payload: Encodable.t()) :: Macro.t()
   defmacro __using__(args) do
     with {:ok, type} <- Keyword.fetch(args, :type),
          flags <- Keyword.get(args, :flags),
@@ -105,8 +113,11 @@ defmodule Ankh.Frame do
     [<<length::24, type::8>>, flags, <<0::1, id::31>> | payload]
   end
 
-  @frame_header_size 9
-
+  @doc """
+  Peek frames from a buffer, returning the frame header information and
+  data (without decoding it) and the leftover buffer data.
+  """
+  @spec peek_frames(iodata) :: {iodata, [{length, type, Stream.id, iodata}]}
   def peek_frames(data), do: do_peek_frames(data, [])
 
   defp do_peek_frames(
