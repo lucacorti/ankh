@@ -5,7 +5,7 @@ defmodule Ankh.Connection.Receiver do
   require Logger
 
   alias Ankh.{Frame, Connection, Stream}
-  alias Ankh.Frame.{GoAway, Ping, Settings, WindowUpdate}
+  alias Ankh.Frame.{Error, GoAway, Ping, Settings, WindowUpdate}
 
   @frame_header_size 9
 
@@ -79,6 +79,7 @@ defmodule Ankh.Connection.Receiver do
          %Settings{stream_id: 0, flags: %{ack: false}, payload: payload} = frame,
          %{connection: connection}
        ) do
+    Logger.debug("STREAM 0 RECEIVED SETTINGS")
     :ok =
       Connection.send(connection, %Settings{
         frame
@@ -94,6 +95,7 @@ defmodule Ankh.Connection.Receiver do
          %Settings{stream_id: 0, flags: %{ack: true}},
          _state
        ) do
+    Logger.debug("STREAM 0 RECEIVED SETTINGS ACK")
     :ok
   end
 
@@ -101,6 +103,7 @@ defmodule Ankh.Connection.Receiver do
          %Ping{stream_id: 0, length: 8, flags: %{ack: false} = flags} = frame,
          %{connection: connection}
        ) do
+    Logger.debug("STREAM 0 RECEIVED PING")
     Connection.send(connection, %Ping{
       frame
       | flags: %{
@@ -114,6 +117,7 @@ defmodule Ankh.Connection.Receiver do
          %WindowUpdate{stream_id: 0, payload: %{window_size_increment: 0}},
          _state
        ) do
+     Logger.debug("STREAM 0 RECEIVED WINDOW_UPDATE with window_size increment 0")
     {:error, :protocol_error}
   end
 
@@ -125,6 +129,7 @@ defmodule Ankh.Connection.Receiver do
   end
 
   defp handle_connection_frame(%GoAway{stream_id: 0, payload: %{error_code: code}}, _state) do
+    Logger.debug("STREAM 0 RECEIVED GO_AWAY #{inspect code}: #{Error.format(code)}")
     {:error, code}
   end
 end
