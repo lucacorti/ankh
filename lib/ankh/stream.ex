@@ -405,6 +405,26 @@ defmodule Ankh.Stream do
            recv_hbf: recv_hbf
          } = state,
          %Headers{
+           flags: %{end_headers: true},
+           payload: %{hbf: hbf}
+         }
+       ) do
+    headers =
+      [hbf | recv_hbf]
+      |> process_recv_headers(state)
+
+    Process.send(controlling_process, {:ankh, :headers, id, headers}, [])
+    {:ok, %{state | state: :half_closed_local, recv_hbf_type: :headers, recv_hbf: []}}
+  end
+
+  defp recv_frame(
+         %{
+           id: id,
+           state: :half_closed_local,
+           controlling_process: controlling_process,
+           recv_hbf: recv_hbf
+         } = state,
+         %Headers{
            flags: %{end_stream: true},
            payload: %{hbf: hbf}
          }
@@ -425,15 +445,26 @@ defmodule Ankh.Stream do
            recv_data: recv_data
          } = state,
          %Data{
-           length: length,
            flags: %{end_stream: true},
+           payload: nil
+         }
+       ) do
+    Process.send(controlling_process, {:ankh, :data, id, recv_data, true}, [])
+    {:ok, %{state | state: :closed, recv_data: []}}
+  end
+
+  defp recv_frame(
+         %{
+           state: :half_closed_local,
+           recv_data: recv_data
+         } = state,
+         %Data{
+           length: length,
            payload: %{data: data}
          }
        ) do
     {:ok, state} = process_recv_data(length, state)
-    recv_data = Enum.reverse([data | recv_data])
-    Process.send(controlling_process, {:ankh, :data, id, recv_data, true}, [])
-    {:ok, %{state | state: :closed, recv_data: []}}
+    {:ok, %{state | state: :half_closed_local, recv_data: [data | recv_data]}}
   end
 
   defp recv_frame(%{state: :half_closed_local} = state, %RstStream{}),
