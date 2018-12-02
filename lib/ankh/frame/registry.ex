@@ -3,7 +3,7 @@ defmodule Ankh.Frame.Registry do
   Frame registry
   """
 
-  alias Ankh.Connection
+  alias Ankh.{Connection, Frame}
 
   alias Ankh.Frame.{
     Continuation,
@@ -23,7 +23,7 @@ defmodule Ankh.Frame.Registry do
 
   Codes 0-9 are reserved for standard frame types.
   """
-  @spec frame_for_type(Connection.connection() | nil, Integer.t()) :: Frame.t() | nil
+  @spec frame_for_type(Connection.connection() | nil, integer) :: Frame.t() | nil
   def frame_for_type(_, 0x0), do: Data
   def frame_for_type(_, 0x1), do: Headers
   def frame_for_type(_, 0x2), do: Priority
@@ -44,7 +44,7 @@ defmodule Ankh.Frame.Registry do
 
   Codes 0-9 are reserved for standard frame types.
   """
-  @spec register(URI.t(), Integer.t(), Frame.t()) :: :ok
+  @spec register(URI.t(), integer, Frame.t()) :: :ok
   def register(connection, type, frame)
       when is_integer(type) and type > 9 and type < 256 do
     Agent.update({:via, Registry, {__MODULE__, connection}}, &Map.put(&1, type, frame))

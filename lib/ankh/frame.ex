@@ -7,6 +7,7 @@ defmodule Ankh.Frame do
 
   require Logger
 
+  alias Ankh.Stream
   alias Ankh.Frame.Encodable
 
   @frame_header_size 9
@@ -15,10 +16,10 @@ defmodule Ankh.Frame do
   @type t :: term | nil
 
   @typedoc "Frame length"
-  @type length :: Integer.t
+  @type length :: integer
 
   @typedoc "Frame type code"
-  @type type :: Integer.it
+  @type type :: integer
 
   @typedoc "Encode/Decode options"
   @type options :: Keyword.t()
@@ -43,8 +44,8 @@ defmodule Ankh.Frame do
         - payload: data type implementing `Ankh.Frame.Encodable`
         """
         @type t :: %__MODULE__{
-                length: Integer.t(),
-                stream_id: Integer.t(),
+                length: integer,
+                stream_id: integer,
                 flags: Encodable.t(),
                 payload: Encodable.t()
               }
@@ -117,7 +118,7 @@ defmodule Ankh.Frame do
   Peek frames from a buffer, returning the frame header information and
   data (without decoding it) and the leftover buffer data.
   """
-  @spec peek_frames(iodata) :: {iodata, [{length, type, Stream.id, iodata}]}
+  @spec peek_frames(iodata) :: {iodata, [{length, type, Stream.id(), iodata}]}
   def peek_frames(data), do: do_peek_frames(data, [])
 
   defp do_peek_frames(

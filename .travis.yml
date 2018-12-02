@@ -1,7 +1,18 @@
 language: elixir
+
 elixir:
   - 1.6
   - 1.7
+
 otp_release:
   - 20.2
   - 21.1
+
+cache:
+  directories:
+    - ~/.mix
+    - _build/dev
+
+script:
+  - mix test
+  - mix dialyzer

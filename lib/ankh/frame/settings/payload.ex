@@ -2,12 +2,12 @@ defmodule Ankh.Frame.Settings.Payload do
   @moduledoc false
 
   @type t :: %__MODULE__{
-          header_table_size: Integer.t(),
+          header_table_size: integer,
           enable_push: boolean,
-          max_concurrent_streams: Integer.t(),
-          initial_window_size: Intger.t(),
-          max_frame_size: Integer.t(),
-          max_header_list_size: Integer.t()
+          max_concurrent_streams: integer,
+          initial_window_size: integer,
+          max_frame_size: integer,
+          max_header_list_size: integer
         }
   defstruct header_table_size: 4_096,
             enable_push: true,

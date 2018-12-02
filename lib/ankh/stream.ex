@@ -36,7 +36,7 @@ defmodule Ankh.Stream do
   @type t :: GenServer.server()
 
   @typedoc "Stream id"
-  @type id :: Integer.t()
+  @type id :: integer
 
   @typedoc "Stream HBF type"
   @type hbf_type :: :headers | :push_promise
@@ -50,7 +50,7 @@ defmodule Ankh.Stream do
   @doc """
   Starts a new stream fot the provided connection
   """
-  @spec start_link(Connection.t(), id(), pid, pid, Integer.t(), pid | nil, mode) ::
+  @spec start_link(Connection.connection(), id(), pid, pid, integer, pid | nil, mode) ::
           GenServer.on_start()
   def start_link(
         connection,
@@ -91,25 +91,25 @@ defmodule Ankh.Stream do
   @doc """
   Process a received frame for the stream
   """
-  @spec recv_raw(t(), Frame.type(), data :: binary) :: GenServer.on_call()
+  @spec recv_raw(t(), Frame.type(), data :: binary) :: term
   def recv_raw(stream, type, data), do: GenServer.call(stream, {:recv_raw, type, data})
 
   @doc """
   Process a received frame for the stream
   """
-  @spec recv(t(), Frame.t()) :: GenServer.on_call()
+  @spec recv(t(), Frame.t()) :: term
   def recv(stream, frame), do: GenServer.call(stream, {:recv, frame})
 
   @doc """
   Process and send a frame on the stream
   """
-  @spec send(t(), Frame.t()) :: GenServer.on_call()
+  @spec send(t(), Frame.t()) :: term
   def send(stream, frame), do: GenServer.call(stream, {:send, frame})
 
   @doc """
   Reserves the stream for push_promise
   """
-  @spec reserve(t(), reserve_mode) :: GenServer.on_call()
+  @spec reserve(t(), reserve_mode) :: term
   def reserve(stream, mode), do: GenServer.call(stream, {:reserve, mode})
 
   def handle_call({:reserve, :local}, _from, %{state: :idle} = state) do

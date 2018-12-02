@@ -3,6 +3,8 @@ defprotocol Ankh.Frame.Splittable do
   Protocol for splitting frames after encoding to wire format
   """
 
+  alias Ankh.Frame
+
   @fallback_to_any true
 
   @typedoc "Data type conforming to the `Ankh.Frame.Splittable` protocol"
@@ -14,7 +16,7 @@ defprotocol Ankh.Frame.Splittable do
   @doc """
   Returns N frames for `frame` with the specified `frame_size`.
   """
-  @spec split(frame :: t(), frame_size :: Integer.t()) :: [Frame.t()]
+  @spec split(frame :: t(), frame_size :: integer) :: [Frame.t()]
   def split(frame, frame_size)
 end
 

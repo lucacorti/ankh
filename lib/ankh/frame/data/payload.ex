@@ -1,7 +1,7 @@
 defmodule Ankh.Frame.Data.Payload do
   @moduledoc false
 
-  @type t :: %__MODULE__{pad_length: Integer.t(), data: binary}
+  @type t :: %__MODULE__{pad_length: integer, data: binary}
   defstruct pad_length: 0, data: <<>>
 end
 

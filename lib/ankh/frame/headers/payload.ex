@@ -2,10 +2,10 @@ defmodule Ankh.Frame.Headers.Payload do
   @moduledoc false
 
   @type t :: %__MODULE__{
-          pad_length: Integer.t(),
+          pad_length: integer,
           exclusive: boolean,
-          stream_dependency: Integer.t(),
-          weight: Integer.t(),
+          stream_dependency: integer,
+          weight: integer,
           hbf: binary
         }
   defstruct pad_length: 0, exclusive: false, stream_dependency: 0, weight: 0, hbf: <<>>

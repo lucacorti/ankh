@@ -52,28 +52,28 @@ defmodule Ankh.Connection do
 
   `{:ankh, :data, stream_id, data}`
   """
-  @type data_msg :: {:ankh, :data, Integer.t(), binary}
+  @type data_msg :: {:ankh, :data, integer, binary}
 
   @typedoc """
   Ankh DATA frame (streaming mode)
 
   `{:ankh, :stream_data, stream_id, data}`
   """
-  @type streaming_data_msg :: {:ankh, :stream_data, Integer.t(), binary}
+  @type streaming_data_msg :: {:ankh, :stream_data, integer, binary}
 
   @typedoc """
   Ankh HEADERS message
 
   `{:ankh, :headers, stream_id, headers}`
   """
-  @type headers_msg :: {:ankh, :headers, Integer.t(), Keyword.t()}
+  @type headers_msg :: {:ankh, :headers, integer, Keyword.t()}
 
   @typedoc """
   Ankh PUSH_PROMISE message
 
   `{:ankh, :headers, stream_id, promised_stream_id, headers}`
   """
-  @type push_promise_msg :: {:ankh, :push_promise, Integer.t(), Integer.t(), Keyword.t()}
+  @type push_promise_msg :: {:ankh, :push_promise, integer, integer, Keyword.t()}
 
   @typedoc """
   Startup options:
@@ -138,13 +138,13 @@ defmodule Ankh.Connection do
   @doc """
   Connects to a server
   """
-  @spec connect(connection) :: GenServer.on_call()
+  @spec connect(connection) :: term
   def connect(connection), do: GenServer.call(connection, {:connect})
 
   @doc """
   Sends a frame over the connection
   """
-  @spec send(connection, Frame.t()) :: GenServer.on_call()
+  @spec send(connection, Frame.t()) :: term
   def send(connection, frame) do
     GenServer.call(connection, {:send, frame})
   end
@@ -152,7 +152,7 @@ defmodule Ankh.Connection do
   @doc """
   Starts a new stream on the connection
   """
-  @spec start_stream(connection, Stream.mode()) :: GenServer.on_call()
+  @spec start_stream(connection, Stream.mode()) :: term
   def start_stream(connection, mode) do
     GenServer.call(connection, {:start_stream, mode})
   end
@@ -160,7 +160,7 @@ defmodule Ankh.Connection do
   @doc """
   Updates send settings for the connection
   """
-  @spec send_settings(connection, Settings.Payload.t()) :: GenServer.on_call()
+  @spec send_settings(connection, Settings.Payload.t()) :: term
   def send_settings(connection, settings) do
     GenServer.call(connection, {:send_settings, settings})
   end
@@ -168,7 +168,7 @@ defmodule Ankh.Connection do
   @doc """
   Updates the connection window_size with the provided increment
   """
-  @spec window_update(connection, Integer.t()) :: GenServer.on_call()
+  @spec window_update(connection, integer) :: term
   def window_update(connection, increment) do
     GenServer.call(connection, {:window_update, increment})
   end
