@@ -29,23 +29,24 @@ defmodule Ankh.Connection.Receiver do
       ) do
     :ssl.setopts(socket, active: :once)
     {buffer, frames} = Frame.peek_frames(buffer <> data)
+    state = %{state | buffer: buffer}
 
-    for frame <- frames do
-      case frame do
-        {_length, type, 0, data} ->
-          :ok =
-            connection
-            |> Frame.Registry.frame_for_type(type)
-            |> struct()
-            |> Frame.decode!(data)
-            |> handle_connection_frame(state)
+    frames
+    |> Enum.reduce_while({:noreply, state}, fn
+      {_length, type, 0, data}, acc ->
+        with frame <- Frame.Registry.frame_for_type(connection, type),
+             frame <- Frame.decode!(struct(frame), data),
+             :ok <- handle_connection_frame(frame, state) do
+          {:cont, acc}
+        else
+          error ->
+            {:halt, {:stop, error, state}}
+        end
 
-        {_length, type, id, data} ->
-          Stream.recv_raw({:via, Registry, {Stream.Registry, {connection, id}}}, type, data)
-      end
-    end
-
-    {:noreply, %{state | buffer: buffer}}
+      {_length, type, id, data}, acc ->
+        Stream.recv_raw({:via, Registry, {Stream.Registry, {connection, id}}}, type, data)
+        {:cont, acc}
+    end)
   end
 
   def handle_info({:ssl_closed, _socket}, state) do
@@ -123,6 +124,7 @@ defmodule Ankh.Connection.Receiver do
     Logger.debug(fn ->
       "STREAM 0 RECEIVED GO_AWAY #{inspect(code)}: #{Error.format(code)}"
     end)
+
     {:error, code}
   end
 end

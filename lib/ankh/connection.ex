@@ -235,6 +235,7 @@ defmodule Ankh.Connection do
         }
       })
     )
+
     :ssl.close(socket)
     {:stop, :normal, :ok, %{state | socket: nil}}
   end

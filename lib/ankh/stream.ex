@@ -8,6 +8,7 @@ defmodule Ankh.Stream do
   require Logger
 
   alias Ankh.{Connection, Frame}
+
   alias Ankh.Frame.{
     Data,
     Continuation,
@@ -151,12 +152,14 @@ defmodule Ankh.Stream do
         Logger.debug(fn ->
           "RECEIVED #{inspect(frame)}\nSTREAM #{inspect(old_state)} -> #{inspect(stream_state)}"
         end)
+
         {:reply, {:ok, stream_state}, new_state}
 
       {:error, _} = error ->
         Logger.debug(fn ->
           "STREAM #{id} STATE #{old_state} RECEIVE #{inspect(error)} FRAME #{inspect(frame)}"
         end)
+
         {:stop, error, error, state}
     end
   end
@@ -169,12 +172,14 @@ defmodule Ankh.Stream do
         Logger.debug(fn ->
           "SENT #{inspect(frame)}\nSTREAM #{inspect(old_state)} -> #{inspect(stream_state)}"
         end)
+
         {:reply, {:ok, stream_state}, new_state}
 
       {:error, _} = error ->
         Logger.debug(fn ->
           "STREAM #{id} STATE #{old_state} SEND #{inspect(error)} FRAME #{inspect(frame)}"
         end)
+
         {:stop, error, error, state}
     end
   end
