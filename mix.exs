@@ -11,7 +11,10 @@ defmodule Ankh.Mixfile do
       description: "Pure Elixir HTTP/2 implementation",
       package: package(),
       deps: deps(),
-      dialyzer: [plt_add_deps: :project, ignore_warnings: ".dialyzer.ignore-warnings"]
+      dialyzer: [
+        plt_add_deps: :project,
+        ignore_warnings: ".dialyzer.ignore-warnings"
+      ]
     ]
   end
 
