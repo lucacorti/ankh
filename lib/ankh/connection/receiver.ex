@@ -4,7 +4,7 @@ defmodule Ankh.Connection.Receiver do
 
   require Logger
 
-  alias Ankh.{Frame, Connection, Stream}
+  alias Ankh.{Connection, Frame, Stream}
   alias Ankh.Frame.{Error, GoAway, Ping, Settings, WindowUpdate}
 
   @type receiver :: GenServer.server()
@@ -114,7 +114,9 @@ defmodule Ankh.Connection.Receiver do
   end
 
   defp handle_connection_frame(%GoAway{stream_id: 0, payload: %{error_code: code}}, _state) do
-    Logger.debug("STREAM 0 RECEIVED GO_AWAY #{inspect(code)}: #{Error.format(code)}")
+    Logger.debug(fn ->
+      "STREAM 0 RECEIVED GO_AWAY #{inspect(code)}: #{Error.format(code)}"
+    end)
     {:error, code}
   end
 

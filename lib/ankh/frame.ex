@@ -7,8 +7,8 @@ defmodule Ankh.Frame do
 
   require Logger
 
-  alias Ankh.Stream
   alias Ankh.Frame.Encodable
+  alias Ankh.Stream
 
   @frame_header_size 9
 

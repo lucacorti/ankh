@@ -8,7 +8,6 @@ defmodule Ankh.Stream do
   require Logger
 
   alias Ankh.{Connection, Frame}
-
   alias Ankh.Frame.{
     Data,
     Continuation,
@@ -141,16 +140,14 @@ defmodule Ankh.Stream do
   def handle_call({:recv, frame}, _from, %{id: id, state: old_state} = state) do
     case recv_frame(state, frame) do
       {:ok, %{state: stream_state} = new_state} ->
-        Logger.debug(
+        Logger.debug(fn ->
           "RECEIVED #{inspect(frame)}\nSTREAM #{inspect(old_state)} -> #{inspect(stream_state)}"
-        )
+        end)
 
         {:reply, {:ok, stream_state}, new_state}
 
       {:error, _} = error ->
-        Logger.error(
-          "STREAM #{id} STATE #{old_state} RECEIVE ERROR #{inspect(error)} FRAME #{inspect(frame)}"
-        )
+        Logger.error("STREAM #{id} STATE #{old_state} RECEIVE ERROR #{inspect(error)} FRAME #{inspect(frame)}")
 
         {:stop, :normal, error, state}
     end
@@ -161,9 +158,9 @@ defmodule Ankh.Stream do
 
     case send_frame(state, frame) do
       {:ok, %{state: stream_state} = new_state} ->
-        Logger.debug(
+        Logger.debug(fn ->
           "SENT #{inspect(frame)}\nSTREAM #{inspect(old_state)} -> #{inspect(stream_state)}"
-        )
+        end)
 
         {:reply, {:ok, stream_state}, new_state}
 
