@@ -48,9 +48,15 @@ defmodule Ankh.Connection.Receiver do
     {:noreply, %{state | buffer: buffer}}
   end
 
-  def handle_info({:ssl_closed, _socket}, state), do: {:stop, {:shutdown, :closed}, state}
+  def handle_info({:ssl_closed, _socket}, state) do
+    error = {:error, "SSL closed"}
+    {:stop, error, error, state}
+  end
 
-  def handle_info({:ssl_error, _socket, reason}, state), do: {:stop, {:shutdown, reason}, state}
+  def handle_info({:ssl_error, _socket, reason}, state) do
+    error = {:error, :ssl.format_error(reason)}
+    {:stop, error, error, state}
+  end
 
   defp handle_connection_frame(
          %Settings{stream_id: 0, flags: %{ack: false}, payload: payload} = frame,
@@ -118,9 +124,5 @@ defmodule Ankh.Connection.Receiver do
       "STREAM 0 RECEIVED GO_AWAY #{inspect(code)}: #{Error.format(code)}"
     end)
     {:error, code}
-  end
-
-  def terminate(reason, _state) do
-    Logger.error("Receiver terminate: #{inspect(reason)}")
   end
 end

@@ -24,8 +24,6 @@ defmodule Ankh.Connection do
 
   use GenServer
 
-  require Logger
-
   alias Ankh.Connection.Receiver
   alias Ankh.{Frame, Stream}
   alias Ankh.Frame.{GoAway, Settings}
@@ -202,8 +200,9 @@ defmodule Ankh.Connection do
          :ok <- :ssl.send(socket, Frame.encode!(%Settings{payload: recv_settings})) do
       {:reply, :ok, %{state | last_stream_id: 1, socket: socket}}
     else
-      error ->
-        {:stop, :error, :ssl.format_error(error), state}
+      {:error, reason} ->
+        error = {:error, :ssl.format_error(reason)}
+        {:stop, error, error, state}
     end
   end
 
@@ -220,13 +219,24 @@ defmodule Ankh.Connection do
       :ok ->
         {:reply, :ok, state}
 
-      error ->
-        {:stop, :ssl.format_error(error), state}
+      {:error, reason} ->
+        error = {:error, :ssl.format_error(reason)}
+        {:stop, error, error, state}
     end
   end
 
-  def handle_call({:close}, _from, state) do
-    {:stop, :normal, :ok, state}
+  def handle_call({:close}, _from, %{last_stream_id: last_stream_id, socket: socket} = state) do
+    :ssl.send(
+      socket,
+      Frame.encode!(%GoAway{
+        payload: %GoAway.Payload{
+          last_stream_id: last_stream_id,
+          error_code: :no_error
+        }
+      })
+    )
+    :ssl.close(socket)
+    {:stop, :normal, :ok, %{state | socket: nil}}
   end
 
   def handle_call(
@@ -270,25 +280,5 @@ defmodule Ankh.Connection do
         %{window_size: window_size} = state
       ) do
     {:reply, :ok, %{state | window_size: window_size + increment}}
-  end
-
-  def terminate(reason, %{socket: nil, receiver: receiver}) do
-    Logger.error("Connection terminate: #{inspect(reason)}")
-    GenServer.stop(receiver)
-  end
-
-  def terminate(reason, %{socket: socket, last_stream_id: last_stream_id} = state) do
-    :ssl.send(
-      socket,
-      Frame.encode!(%GoAway{
-        payload: %GoAway.Payload{
-          last_stream_id: last_stream_id,
-          error_code: :no_error
-        }
-      })
-    )
-
-    :ssl.close(socket)
-    terminate(reason, %{state | socket: nil})
   end
 end

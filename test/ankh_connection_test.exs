@@ -36,6 +36,9 @@ defmodule AnkhTest.Connection do
 
     assert_receive {:ankh, :headers, _, _}, 1_000
     receive_data()
+
+    assert :ok = Stream.close(stream)
+    assert :ok = Connection.close(connection)
   end
 
   defp receive_data do

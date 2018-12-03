@@ -111,6 +111,12 @@ defmodule Ankh.Stream do
   @spec reserve(t(), reserve_mode) :: term
   def reserve(stream, mode), do: GenServer.call(stream, {:reserve, mode})
 
+  @doc """
+  Closes the stream
+  """
+  @spec close(t()) :: term
+  def close(stream), do: GenServer.call(stream, {:close})
+
   def handle_call({:reserve, :local}, _from, %{state: :idle} = state) do
     {:reply, {:ok, :reserved_local}, %{state | state: :reserved_local}}
   end
@@ -120,11 +126,13 @@ defmodule Ankh.Stream do
   end
 
   def handle_call({:reserve, _mode}, _from, %{state: :idle} = state) do
-    {:stop, {:error, :invalid_reserve_mode}, state}
+    error = {:error, :invalid_reserve_mode}
+    {:stop, error, error, state}
   end
 
   def handle_call({:reserve, _mode}, _from, state) do
-    {:stop, {:error, :stream_not_idle}, state}
+    error = {:error, :stream_not_idle}
+    {:stop, error, error, state}
   end
 
   def handle_call({:recv_raw, type, data}, from, %{connection: connection} = state) do
@@ -143,13 +151,13 @@ defmodule Ankh.Stream do
         Logger.debug(fn ->
           "RECEIVED #{inspect(frame)}\nSTREAM #{inspect(old_state)} -> #{inspect(stream_state)}"
         end)
-
         {:reply, {:ok, stream_state}, new_state}
 
       {:error, _} = error ->
-        Logger.error("STREAM #{id} STATE #{old_state} RECEIVE ERROR #{inspect(error)} FRAME #{inspect(frame)}")
-
-        {:stop, :normal, error, state}
+        Logger.debug(fn ->
+          "STREAM #{id} STATE #{old_state} RECEIVE #{inspect(error)} FRAME #{inspect(frame)}"
+        end)
+        {:stop, error, error, state}
     end
   end
 
@@ -161,20 +169,18 @@ defmodule Ankh.Stream do
         Logger.debug(fn ->
           "SENT #{inspect(frame)}\nSTREAM #{inspect(old_state)} -> #{inspect(stream_state)}"
         end)
-
         {:reply, {:ok, stream_state}, new_state}
 
       {:error, _} = error ->
-        Logger.error(
-          "STREAM #{id} STATE #{old_state} SEND ERROR #{inspect(error)} FRAME #{inspect(frame)}"
-        )
-
-        {:stop, :normal, error, state}
+        Logger.debug(fn ->
+          "STREAM #{id} STATE #{old_state} SEND #{inspect(error)} FRAME #{inspect(frame)}"
+        end)
+        {:stop, error, error, state}
     end
   end
 
-  def terminate(reason, _state) do
-    Logger.error("Stream terminate: #{inspect(reason)}")
+  def handle_call({:close}, _from, state) do
+    {:stop, :normal, :ok, state}
   end
 
   defp recv_frame(%{id: id}, %{stream_id: stream_id}) when stream_id !== id do
