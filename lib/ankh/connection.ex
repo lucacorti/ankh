@@ -11,13 +11,8 @@ defmodule Ankh.Connection do
   Separate messages are sent for HEADERS, PUSH_PROMISE and DATA frames.
 
   Headers are always reassembled and sent back in one message to the controlling_process.
-  For data frames, the `stream` startup otion toggles streaming mode:
-
-  If `true` (streaming mode) a `stream_data` msg is sent for each received DATA
+  For data frames a `stream_data` msg is sent for each received DATA
   frame, and it is the controlling_process responsibility to reassemble incoming data.
-
-  If `false` (full mode), DATA frames are accumulated until a complete response
-  is received and then the complete data is sent to the controlling_process as `data` msg.
 
   See typespecs below for message types and formats.
   """
@@ -139,7 +134,7 @@ defmodule Ankh.Connection do
   """
   @spec start_stream(connection, Keyword.t) :: term
   def start_stream(connection, options \\ []) do
-    options = [controlling_process: self(), mode: :reassemble]
+    options = [controlling_process: self()]
       |> Keyword.merge(options)
 
     GenServer.call(connection, {:start_stream, options})
@@ -247,8 +242,7 @@ defmodule Ankh.Connection do
         recv_hpack,
         send_hpack,
         max_frame_size,
-        Keyword.get(options, :controlling_process),
-        Keyword.get(options, :mode)
+        Keyword.get(options, :controlling_process)
       )
 
     {:reply, {:ok, pid}, %{state | last_stream_id: last_stream_id + 2}}

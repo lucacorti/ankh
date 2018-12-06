@@ -25,8 +25,7 @@ defmodule AnkhTest.Stream do
         recv_table,
         send_table,
         max_frame_size,
-        self(),
-        :reassemble
+        self()
       )
 
     %{stream: stream}
