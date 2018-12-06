@@ -75,11 +75,9 @@ defmodule Ankh.Connection do
 
   @typedoc """
   Startup options:
-    - controlling_process: pid of the process to send received frames to.
-    Messages are shipped to the calling process if nil.
     - ssl_options: SSL connection options, for the Erlang `:ssl` module
   """
-  @type args :: [uri: URI.t(), controlling_process: pid | nil, ssl_options: Keyword.t()]
+  @type args :: [uri: URI.t(), ssl_options: Keyword.t()]
 
   @doc """
   Start the connection process for the specified `URI`.
@@ -90,21 +88,11 @@ defmodule Ankh.Connection do
   """
   @spec start_link(args, GenServer.options()) :: GenServer.on_start()
   def start_link(args, options \\ []) do
-    {_, args} =
-      Keyword.get_and_update(args, :controlling_process, fn
-        nil ->
-          {self(), self()}
-
-        value ->
-          {value, value}
-      end)
-
     GenServer.start_link(__MODULE__, args, options)
   end
 
   @doc false
   def init(args) do
-    controlling_process = Keyword.get(args, :controlling_process)
     settings = Keyword.get(args, :settings, %Settings.Payload{})
     uri = Keyword.get(args, :uri)
     ssl_opts = Keyword.get(args, :ssl_options, [])
@@ -115,7 +103,6 @@ defmodule Ankh.Connection do
          {:ok, receiver} <- Receiver.start_link() do
       {:ok,
        %{
-         controlling_process: controlling_process,
          last_stream_id: 0,
          uri: uri,
          ssl_opts: ssl_opts,
@@ -150,9 +137,12 @@ defmodule Ankh.Connection do
   @doc """
   Starts a new stream on the connection
   """
-  @spec start_stream(connection, Stream.mode()) :: term
-  def start_stream(connection, mode) do
-    GenServer.call(connection, {:start_stream, mode})
+  @spec start_stream(connection, Keyword.t) :: term
+  def start_stream(connection, options \\ []) do
+    options = [controlling_process: self(), mode: :reassemble]
+      |> Keyword.merge(options)
+
+    GenServer.call(connection, {:start_stream, options})
   end
 
   @doc """
@@ -241,10 +231,9 @@ defmodule Ankh.Connection do
   end
 
   def handle_call(
-        {:start_stream, mode},
+        {:start_stream, options},
         _from,
         %{
-          controlling_process: controlling_process,
           last_stream_id: last_stream_id,
           recv_hpack: recv_hpack,
           send_hpack: send_hpack,
@@ -258,8 +247,8 @@ defmodule Ankh.Connection do
         recv_hpack,
         send_hpack,
         max_frame_size,
-        controlling_process,
-        mode
+        Keyword.get(options, :controlling_process),
+        Keyword.get(options, :mode)
       )
 
     {:reply, {:ok, pid}, %{state | last_stream_id: last_stream_id + 2}}

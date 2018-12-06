@@ -18,12 +18,7 @@ defmodule AnkhTest.Connection do
   } do
     assert {:ok, connection} = Connection.start_link(uri: uri)
     assert :ok = Connection.connect(connection)
-
-    assert {:ok, stream} =
-             Connection.start_stream(
-               connection,
-               :reassemble
-             )
+    assert {:ok, stream} = Connection.start_stream(connection)
 
     headers = %Headers{
       flags: %Headers.Flags{end_headers: true},

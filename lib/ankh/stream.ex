@@ -50,7 +50,7 @@ defmodule Ankh.Stream do
   @doc """
   Starts a new stream fot the provided connection
   """
-  @spec start_link(Connection.connection(), id(), pid, pid, integer, pid | nil, mode) ::
+  @spec start_link(Connection.connection(), id(), pid, pid, integer, pid, mode) ::
           GenServer.on_start()
   def start_link(
         connection,
@@ -58,8 +58,8 @@ defmodule Ankh.Stream do
         recv_table,
         send_table,
         max_frame_size,
-        controlling_process \\ nil,
-        mode \\ :reassemble
+        controlling_process,
+        mode
       ) do
     GenServer.start_link(
       __MODULE__,
@@ -68,7 +68,7 @@ defmodule Ankh.Stream do
         recv_table: recv_table,
         send_table: send_table,
         max_frame_size: max_frame_size,
-        controlling_process: controlling_process || self(),
+        controlling_process: controlling_process,
         id: id,
         mode: mode
       ],
