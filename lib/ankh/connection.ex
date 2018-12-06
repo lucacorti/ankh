@@ -118,13 +118,13 @@ defmodule Ankh.Connection do
   @doc """
   Connects to a server
   """
-  @spec connect(connection) :: term
+  @spec connect(connection) :: :ok | {:error, term}
   def connect(connection), do: GenServer.call(connection, {:connect})
 
   @doc """
   Sends a frame over the connection
   """
-  @spec send(connection, Frame.t()) :: term
+  @spec send(connection, Frame.t()) :: :ok | {:error, term}
   def send(connection, frame) do
     GenServer.call(connection, {:send, frame})
   end
@@ -132,7 +132,7 @@ defmodule Ankh.Connection do
   @doc """
   Starts a new stream on the connection
   """
-  @spec start_stream(connection, Keyword.t) :: term
+  @spec start_stream(connection, Keyword.t) :: {:ok, Stream.id, pid} | {:error, term}
   def start_stream(connection, options \\ []) do
     options = [controlling_process: self()]
       |> Keyword.merge(options)
@@ -143,7 +143,7 @@ defmodule Ankh.Connection do
   @doc """
   Updates send settings for the connection
   """
-  @spec send_settings(connection, Settings.Payload.t()) :: term
+  @spec send_settings(connection, Settings.Payload.t()) :: :ok | {:error, term}
   def send_settings(connection, settings) do
     GenServer.call(connection, {:send_settings, settings})
   end
@@ -151,7 +151,7 @@ defmodule Ankh.Connection do
   @doc """
   Updates the connection window_size with the provided increment
   """
-  @spec window_update(connection, integer) :: term
+  @spec window_update(connection, integer) :: :ok | {:error, term}
   def window_update(connection, increment) do
     GenServer.call(connection, {:window_update, increment})
   end
@@ -161,7 +161,7 @@ defmodule Ankh.Connection do
 
   Before closing the TLS connection a GOAWAY frame is sent to the peer.
   """
-  @spec close(connection) :: :closed
+  @spec close(connection) :: :ok | {:error, term}
   def close(connection), do: GenServer.call(connection, {:close})
 
   def handle_call(
@@ -235,7 +235,8 @@ defmodule Ankh.Connection do
           send_settings: %{max_frame_size: max_frame_size}
         } = state
       ) do
-    {:ok, pid} =
+
+    with {:ok, pid} <-
       Stream.start_link(
         self(),
         last_stream_id,
@@ -243,9 +244,12 @@ defmodule Ankh.Connection do
         send_hpack,
         max_frame_size,
         Keyword.get(options, :controlling_process)
-      )
-
-    {:reply, {:ok, pid}, %{state | last_stream_id: last_stream_id + 2}}
+      ) do
+      {:reply, {:ok, last_stream_id, pid}, %{state | last_stream_id: last_stream_id + 2}}
+    else
+      error ->
+        {:reply, error, state}
+    end
   end
 
   def handle_call(
