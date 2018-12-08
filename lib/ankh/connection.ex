@@ -61,7 +61,7 @@ defmodule Ankh.Connection do
 
   `{:anhk, :stream, stream_id, state}`
   """
-  @type stream_msg :: {:ankh, :headers, integer, Stream.state}
+  @type stream_msg :: {:ankh, :headers, integer, Stream.state()}
 
   @typedoc """
   Ankh PUSH_PROMISE message

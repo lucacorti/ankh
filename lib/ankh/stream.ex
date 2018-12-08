@@ -247,7 +247,10 @@ defmodule Ankh.Stream do
 
   defp recv_frame(%{state: :reserved_local} = state, %Priority{}), do: {:ok, state}
 
-  defp recv_frame(%{state: :reserved_local, id: id, controlling_process: controlling_process} = state, %RstStream{}) do
+  defp recv_frame(
+         %{state: :reserved_local, id: id, controlling_process: controlling_process} = state,
+         %RstStream{}
+       ) do
     Process.send(controlling_process, {:ankh, :stream, id, :closed}, [])
     {:ok, %{state | state: :closed}}
   end
@@ -269,7 +272,10 @@ defmodule Ankh.Stream do
 
   defp recv_frame(%{state: :reserved_remote} = state, %Priority{}), do: {:ok, state}
 
-  defp recv_frame(%{state: :reserved_remote, id: id, controlling_process: controlling_process} = state, %RstStream{}) do
+  defp recv_frame(
+         %{state: :reserved_remote, id: id, controlling_process: controlling_process} = state,
+         %RstStream{}
+       ) do
     Process.send(controlling_process, {:ankh, :stream, id, :closed}, [])
     {:ok, %{state | state: :closed}}
   end
@@ -430,7 +436,10 @@ defmodule Ankh.Stream do
     process_recv_data(length, state)
   end
 
-  defp recv_frame(%{state: :open, id: id, controlling_process: controlling_process} = state, %RstStream{}) do
+  defp recv_frame(
+         %{state: :open, id: id, controlling_process: controlling_process} = state,
+         %RstStream{}
+       ) do
     Process.send(controlling_process, {:ankh, :stream, id, :closed}, [])
     {:ok, %{state | state: :closed}}
   end
@@ -531,7 +540,10 @@ defmodule Ankh.Stream do
     {:ok, %{state | state: :half_closed_local}}
   end
 
-  defp recv_frame(%{state: :half_closed_local, id: id, controlling_process: controlling_process} = state, %RstStream{}) do
+  defp recv_frame(
+         %{state: :half_closed_local, id: id, controlling_process: controlling_process} = state,
+         %RstStream{}
+       ) do
     Process.send(controlling_process, {:ankh, :stream, id, :closed}, [])
     {:ok, %{state | state: :closed}}
   end
@@ -542,7 +554,10 @@ defmodule Ankh.Stream do
 
   defp recv_frame(%{state: :half_closed_remote} = state, %Priority{}), do: {:ok, state}
 
-  defp recv_frame(%{state: :half_closed_remote, id: id, controlling_process: controlling_process} = state, %RstStream{}) do
+  defp recv_frame(
+         %{state: :half_closed_remote, id: id, controlling_process: controlling_process} = state,
+         %RstStream{}
+       ) do
     Process.send(controlling_process, {:ankh, :stream, id, :closed}, [])
     {:ok, %{state | state: :closed}}
   end
