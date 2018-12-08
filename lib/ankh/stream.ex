@@ -455,7 +455,7 @@ defmodule Ankh.Stream do
            recv_hbf: recv_hbf
          } = state,
          %Headers{
-           flags: %{end_headers: true, end_stream: false},
+           flags: %{end_headers: end_headers, end_stream: false},
            payload: %{hbf: hbf}
          }
        ) do
@@ -463,7 +463,9 @@ defmodule Ankh.Stream do
       [hbf | recv_hbf]
       |> process_recv_headers(state)
 
-    Process.send(controlling_process, {:ankh, :headers, id, headers}, [])
+    if end_headers do
+      Process.send(controlling_process, {:ankh, :headers, id, headers}, [])
+    end
     {:ok, %{state | state: :half_closed_local, recv_hbf_type: :headers, recv_hbf: []}}
   end
 
@@ -475,7 +477,7 @@ defmodule Ankh.Stream do
            recv_hbf: recv_hbf
          } = state,
          %Headers{
-           flags: %{end_headers: true, end_stream: true},
+           flags: %{end_headers: end_headers, end_stream: true},
            payload: %{hbf: hbf}
          }
        ) do
@@ -483,7 +485,9 @@ defmodule Ankh.Stream do
       [hbf | recv_hbf]
       |> process_recv_headers(state)
 
-    Process.send(controlling_process, {:ankh, :headers, id, headers}, [])
+    if end_headers do
+      Process.send(controlling_process, {:ankh, :headers, id, headers}, [])
+    end
     Process.send(controlling_process, {:ankh, :stream, id, :closed}, [])
     {:ok, %{state | state: :closed, recv_hbf_type: :headers, recv_hbf: []}}
   end
