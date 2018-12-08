@@ -11,7 +11,7 @@ defmodule Ankh.Connection do
   Separate messages are sent for HEADERS, PUSH_PROMISE and DATA frames.
 
   Headers are always reassembled and sent back in one message to the controlling_process.
-  For data frames a `stream_data` msg is sent for each received DATA
+  For data frames a `data` msg is sent for each received DATA
   frame, and it is the controlling_process responsibility to reassemble incoming data.
 
   See typespecs below for message types and formats.
@@ -46,13 +46,6 @@ defmodule Ankh.Connection do
   `{:ankh, :data, stream_id, data}`
   """
   @type data_msg :: {:ankh, :data, integer, binary}
-
-  @typedoc """
-  Ankh DATA frame (streaming mode)
-
-  `{:ankh, :stream_data, stream_id, data}`
-  """
-  @type streaming_data_msg :: {:ankh, :stream_data, integer, binary}
 
   @typedoc """
   Ankh HEADERS message
