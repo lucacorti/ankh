@@ -247,8 +247,10 @@ defmodule Ankh.Stream do
 
   defp recv_frame(%{state: :reserved_local} = state, %Priority{}), do: {:ok, state}
 
-  defp recv_frame(%{state: :reserved_local} = state, %RstStream{}),
-    do: {:ok, %{state | state: :closed}}
+  defp recv_frame(%{state: :reserved_local, id: id, controlling_process: controlling_process} = state, %RstStream{}) do
+    Process.send(controlling_process, {:ankh, :stream, id, :closed}, [])
+    {:ok, %{state | state: :closed}}
+  end
 
   defp recv_frame(%{state: :reserved_local, window_size: window_size} = state, %WindowUpdate{
          payload: %{window_size_increment: increment}
@@ -267,8 +269,10 @@ defmodule Ankh.Stream do
 
   defp recv_frame(%{state: :reserved_remote} = state, %Priority{}), do: {:ok, state}
 
-  defp recv_frame(%{state: :reserved_remote} = state, %RstStream{}),
-    do: {:ok, %{state | state: :closed}}
+  defp recv_frame(%{state: :reserved_remote, id: id, controlling_process: controlling_process} = state, %RstStream{}) do
+    Process.send(controlling_process, {:ankh, :stream, id, :closed}, [])
+    {:ok, %{state | state: :closed}}
+  end
 
   # OPEN
 
@@ -426,7 +430,11 @@ defmodule Ankh.Stream do
     process_recv_data(length, state)
   end
 
-  defp recv_frame(%{state: :open} = state, %RstStream{}), do: {:ok, %{state | state: :closed}}
+  defp recv_frame(%{state: :open, id: id, controlling_process: controlling_process} = state, %RstStream{}) do
+    Process.send(controlling_process, {:ankh, :stream, id, :closed}, [])
+    {:ok, %{state | state: :closed}}
+  end
+
   defp recv_frame(%{state: :open} = state, _), do: {:ok, state}
 
   # HALF CLOSED LOCAL
@@ -468,6 +476,7 @@ defmodule Ankh.Stream do
       |> process_recv_headers(state)
 
     Process.send(controlling_process, {:ankh, :headers, id, headers}, [])
+    Process.send(controlling_process, {:ankh, :stream, id, :closed}, [])
     {:ok, %{state | state: :closed, recv_hbf_type: :headers, recv_hbf: []}}
   end
 
@@ -484,6 +493,7 @@ defmodule Ankh.Stream do
        ) do
     {:ok, state} = process_recv_data(length, state)
     Process.send(controlling_process, {:ankh, :data, id, "", end_stream}, [])
+    Process.send(controlling_process, {:ankh, :stream, id, :closed}, [])
     {:ok, %{state | state: :closed}}
   end
 
@@ -501,6 +511,7 @@ defmodule Ankh.Stream do
        ) do
     {:ok, state} = process_recv_data(length, state)
     Process.send(controlling_process, {:ankh, :data, id, data, end_stream}, [])
+    Process.send(controlling_process, {:ankh, :stream, id, :closed}, [])
     {:ok, %{state | state: :closed}}
   end
 
@@ -520,8 +531,10 @@ defmodule Ankh.Stream do
     {:ok, %{state | state: :half_closed_local}}
   end
 
-  defp recv_frame(%{state: :half_closed_local} = state, %RstStream{}),
-    do: {:ok, %{state | state: :closed}}
+  defp recv_frame(%{state: :half_closed_local, id: id, controlling_process: controlling_process} = state, %RstStream{}) do
+    Process.send(controlling_process, {:ankh, :stream, id, :closed}, [])
+    {:ok, %{state | state: :closed}}
+  end
 
   defp recv_frame(%{state: :half_closed_local} = state, _), do: {:ok, state}
 
@@ -529,8 +542,10 @@ defmodule Ankh.Stream do
 
   defp recv_frame(%{state: :half_closed_remote} = state, %Priority{}), do: {:ok, state}
 
-  defp recv_frame(%{state: :half_closed_remote} = state, %RstStream{}),
-    do: {:ok, %{state | state: :closed}}
+  defp recv_frame(%{state: :half_closed_remote, id: id, controlling_process: controlling_process} = state, %RstStream{}) do
+    Process.send(controlling_process, {:ankh, :stream, id, :closed}, [])
+    {:ok, %{state | state: :closed}}
+  end
 
   defp recv_frame(%{state: :half_closed_remote, window_size: window_size} = state, %WindowUpdate{
          payload: %{window_size_increment: increment}

@@ -1,5 +1,5 @@
 defmodule AnkhTest.Connection do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
 
   alias Ankh.{Connection, Frame, Stream}
   alias Frame.Headers
@@ -18,7 +18,7 @@ defmodule AnkhTest.Connection do
   } do
     assert {:ok, connection} = Connection.start_link(uri: uri)
     assert :ok = Connection.connect(connection)
-    assert {:ok, _id, stream} = Connection.start_stream(connection)
+    assert {:ok, stream_id, stream} = Connection.start_stream(connection)
 
     headers = %Headers{
       flags: %Headers.Flags{end_headers: true},
@@ -29,15 +29,24 @@ defmodule AnkhTest.Connection do
 
     assert {:ok, state} = Stream.send(stream, headers)
 
-    assert_receive {:ankh, :headers, _, _}, 1_000
-    receive_data()
+    receive_headers(stream_id)
+    receive_data(stream_id)
+    receive_closed(stream_id)
   end
 
-  defp receive_data do
-    assert_receive {:ankh, :data, _, _, end_stream}, 1_000
+  defp receive_headers(stream_id) do
+    assert_receive {:ankh, :headers, ^stream_id, _headers}, 1_000
+  end
+
+  defp receive_data(stream_id) do
+    assert_receive {:ankh, :data, ^stream_id, _data, end_stream}, 1_000
 
     unless end_stream do
-      receive_data()
+      receive_data(stream_id)
     end
+  end
+
+  defp receive_closed(stream_id) do
+    assert_receive {:ankh, :stream, ^stream_id, :closed}, 1_000
   end
 end

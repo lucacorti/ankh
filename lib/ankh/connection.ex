@@ -14,6 +14,8 @@ defmodule Ankh.Connection do
   For data frames a `data` msg is sent for each received DATA
   frame, and it is the controlling_process responsibility to reassemble incoming data.
 
+  A `stream` msg is sent to signal stream end.
+
   See typespecs below for message types and formats.
   """
 
@@ -53,6 +55,13 @@ defmodule Ankh.Connection do
   `{:ankh, :headers, stream_id, headers}`
   """
   @type headers_msg :: {:ankh, :headers, integer, Keyword.t()}
+
+  @typedoc """
+  Ankh STREAM message
+
+  `{:anhk, :stream, stream_id, state}`
+  """
+  @type stream_msg :: {:ankh, :headers, integer, Stream.state}
 
   @typedoc """
   Ankh PUSH_PROMISE message
