@@ -47,8 +47,7 @@ defmodule Ankh.Stream do
   @doc """
   Starts a new stream fot the provided connection
   """
-  @spec start_link(Connection.connection(), id(), pid, pid, integer, pid) ::
-          GenServer.on_start()
+  @spec start_link(Connection.connection(), id(), pid, pid, integer, pid) :: GenServer.on_start()
   def start_link(
         connection,
         id,
@@ -78,7 +77,6 @@ defmodule Ankh.Stream do
        state: :idle,
        recv_hbf_type: :headers,
        recv_hbf: [],
-       recv_data: [],
        window_size: 2_147_483_647
      })}
   end
@@ -404,35 +402,28 @@ defmodule Ankh.Stream do
   end
 
   defp recv_frame(
-         %{
-           id: id,
-           state: :open,
-           controlling_process: controlling_process,
-           recv_data: recv_data
-         } = state,
+         %{id: id, state: :open, controlling_process: controlling_process} = state,
          %Data{
            length: length,
-           flags: %{end_stream: true},
+           flags: %{end_stream: true = end_stream},
            payload: %{data: data}
          }
        ) do
     {:ok, state} = process_recv_data(length, state)
-
-    data =
-      [data | recv_data]
-      |> Enum.reverse()
-
-    Process.send(controlling_process, {:ankh, :data, id, data, true}, [])
-    {:ok, %{state | state: :half_closed_remote, recv_data: []}}
+    Process.send(controlling_process, {:ankh, :data, id, data, end_stream}, [])
+    {:ok, %{state | state: :half_closed_remote}}
   end
 
-  defp recv_frame(%{state: :open, recv_data: recv_data} = state, %Data{
-         length: length,
-         flags: %{end_stream: false},
-         payload: %{data: data}
-       }) do
-    {:ok, state} = process_recv_data(length, state)
-    {:ok, %{state | recv_data: [data | recv_data]}}
+  defp recv_frame(
+         %{id: id, state: :open, controlling_process: controlling_process} = state,
+         %Data{
+           length: length,
+           flags: %{end_stream: false = end_stream},
+           payload: %{data: data}
+         }
+       ) do
+    Process.send(controlling_process, {:ankh, :data, id, data, end_stream}, [])
+    process_recv_data(length, state)
   end
 
   defp recv_frame(%{state: :open} = state, %RstStream{}), do: {:ok, %{state | state: :closed}}
@@ -484,49 +475,40 @@ defmodule Ankh.Stream do
          %{
            id: id,
            state: :half_closed_local,
-           controlling_process: controlling_process,
-           recv_data: recv_data
+           controlling_process: controlling_process
          } = state,
          %Data{
-           flags: %{end_stream: true},
-           payload: nil
+           length: 0 = length,
+           flags: %{end_stream: true = end_stream}
          }
        ) do
-    data =
-      recv_data
-      |> Enum.reverse()
-
-    Process.send(controlling_process, {:ankh, :data, id, data, true}, [])
-    {:ok, %{state | state: :closed, recv_data: []}}
+    {:ok, state} = process_recv_data(length, state)
+    Process.send(controlling_process, {:ankh, :data, id, "", end_stream}, [])
+    {:ok, %{state | state: :closed}}
   end
 
   defp recv_frame(
          %{
            id: id,
            state: :half_closed_local,
-           controlling_process: controlling_process,
-           recv_data: recv_data
+           controlling_process: controlling_process
          } = state,
          %Data{
            length: length,
-           flags: %{end_stream: true},
+           flags: %{end_stream: true = end_stream},
            payload: %{data: data}
          }
        ) do
     {:ok, state} = process_recv_data(length, state)
-
-    data =
-      [data | recv_data]
-      |> Enum.reverse()
-
-    Process.send(controlling_process, {:ankh, :data, id, data, true}, [])
-    {:ok, %{state | state: :closed, recv_data: []}}
+    Process.send(controlling_process, {:ankh, :data, id, data, end_stream}, [])
+    {:ok, %{state | state: :closed}}
   end
 
   defp recv_frame(
          %{
            state: :half_closed_local,
-           recv_data: recv_data
+           id: id,
+           controlling_process: controlling_process
          } = state,
          %Data{
            length: length,
@@ -534,7 +516,8 @@ defmodule Ankh.Stream do
          }
        ) do
     {:ok, state} = process_recv_data(length, state)
-    {:ok, %{state | state: :half_closed_local, recv_data: [data | recv_data]}}
+    Process.send(controlling_process, {:ankh, :data, id, data, false}, [])
+    {:ok, %{state | state: :half_closed_local}}
   end
 
   defp recv_frame(%{state: :half_closed_local} = state, %RstStream{}),

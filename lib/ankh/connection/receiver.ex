@@ -103,6 +103,8 @@ defmodule Ankh.Connection.Receiver do
           }
       })
     )
+
+    Logger.debug("STREAM 0 ACK PING")
   end
 
   defp handle_connection_frame(

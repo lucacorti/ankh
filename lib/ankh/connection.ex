@@ -132,9 +132,10 @@ defmodule Ankh.Connection do
   @doc """
   Starts a new stream on the connection
   """
-  @spec start_stream(connection, Keyword.t) :: {:ok, Stream.id, pid} | {:error, term}
+  @spec start_stream(connection, Keyword.t()) :: {:ok, Stream.id(), pid} | {:error, term}
   def start_stream(connection, options \\ []) do
-    options = [controlling_process: self()]
+    options =
+      [controlling_process: self()]
       |> Keyword.merge(options)
 
     GenServer.call(connection, {:start_stream, options})
@@ -235,16 +236,15 @@ defmodule Ankh.Connection do
           send_settings: %{max_frame_size: max_frame_size}
         } = state
       ) do
-
     with {:ok, pid} <-
-      Stream.start_link(
-        self(),
-        last_stream_id,
-        recv_hpack,
-        send_hpack,
-        max_frame_size,
-        Keyword.get(options, :controlling_process)
-      ) do
+           Stream.start_link(
+             self(),
+             last_stream_id,
+             recv_hpack,
+             send_hpack,
+             max_frame_size,
+             Keyword.get(options, :controlling_process)
+           ) do
       {:reply, {:ok, last_stream_id, pid}, %{state | last_stream_id: last_stream_id + 2}}
     else
       error ->
