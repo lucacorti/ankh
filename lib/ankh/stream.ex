@@ -163,9 +163,8 @@ defmodule Ankh.Stream do
     case send_frame(state, frame) do
       {:ok, %{state: stream_state} = new_state} ->
         Logger.debug(fn ->
-          "SENT #{inspect(frame)}\nSTREAM #{inspect(old_state)} -> #{inspect(stream_state)}"
+          "STREAM #{id}: #{inspect(old_state)} -> #{inspect(stream_state)}"
         end)
-
         {:reply, {:ok, stream_state}, new_state}
 
       {:error, _} = error ->
@@ -456,7 +455,7 @@ defmodule Ankh.Stream do
            recv_hbf: recv_hbf
          } = state,
          %Headers{
-           flags: %{end_headers: true},
+           flags: %{end_headers: true, end_stream: false},
            payload: %{hbf: hbf}
          }
        ) do
@@ -476,7 +475,7 @@ defmodule Ankh.Stream do
            recv_hbf: recv_hbf
          } = state,
          %Headers{
-           flags: %{end_stream: true},
+           flags: %{end_headers: true, end_stream: true},
            payload: %{hbf: hbf}
          }
        ) do
@@ -717,6 +716,9 @@ defmodule Ankh.Stream do
     |> Splittable.split(max_frame_size)
     |> Enum.reduce_while({:ok, nil}, fn frame, _ ->
       with :ok <- Connection.send(connection, Frame.encode!(frame)) do
+        Logger.debug(fn ->
+          "SENT #{inspect(frame)}"
+        end)
         {:cont, {:ok, state}}
       else
         error ->
