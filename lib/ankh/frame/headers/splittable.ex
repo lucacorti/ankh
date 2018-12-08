@@ -1,7 +1,10 @@
 defimpl Ankh.Frame.Splittable, for: Ankh.Frame.Headers do
   alias Ankh.Frame.Continuation
 
-  def split(%{flags: %{end_stream: end_stream} = flags, payload: %{hbf: hbf}} = frame, frame_size)
+  def split(
+        %{flags: %{end_stream: end_stream} = flags, payload: %{hbf: hbf}} = frame,
+        frame_size
+      )
       when byte_size(hbf) <= frame_size do
     [%{frame | flags: %{flags | end_headers: true, end_stream: end_stream}}]
   end
