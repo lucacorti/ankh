@@ -9,23 +9,27 @@ defmodule Ankh.Connection.Receiver do
 
   @type receiver :: GenServer.server()
 
-  @spec start_link(Keyword.t(), GenServer.options()) :: GenServer.on_start()
-  def start_link(args \\ [], options \\ []) do
+  @spec start_link(Connection.connection, pid, GenServer.options()) :: GenServer.on_start()
+  def start_link(connection, controlling_process, options \\ []) do
     GenServer.start_link(
       __MODULE__,
-      Keyword.merge(args, connection: self()),
+      [
+        connection: connection,
+        controlling_process: controlling_process
+      ],
       options
     )
   end
 
   def init(args) do
     connection = Keyword.get(args, :connection)
-    {:ok, %{buffer: <<>>, connection: connection}}
+    controlling_process = Keyword.get(args, :controlling_process)
+    {:ok, %{buffer: <<>>, connection: connection, controlling_process: controlling_process}}
   end
 
   def handle_info(
         {:ssl, socket, data},
-        %{buffer: buffer, connection: connection} = state
+        %{buffer: buffer, connection: connection, controlling_process: controlling_process} = state
       ) do
     :ssl.setopts(socket, active: :once)
     {buffer, frames} = Frame.peek_frames(buffer <> data)
@@ -36,10 +40,11 @@ defmodule Ankh.Connection.Receiver do
       {_length, type, 0, data}, acc ->
         with frame <- Frame.Registry.frame_for_type(connection, type),
              frame <- Frame.decode!(struct(frame), data),
-             :ok <- handle_connection_frame(frame, state) do
+             :ok <- recv_connection_frame(frame, state) do
           {:cont, acc}
         else
           error ->
+            Process.send(controlling_process, {:ankh, :error, 0, error}, [])
             {:halt, {:stop, error, state}}
         end
 
@@ -59,7 +64,7 @@ defmodule Ankh.Connection.Receiver do
     {:stop, error, error, state}
   end
 
-  defp handle_connection_frame(
+  defp recv_connection_frame(
          %Settings{stream_id: 0, flags: %{ack: false}, payload: payload} = frame,
          %{connection: connection}
        ) do
@@ -79,7 +84,7 @@ defmodule Ankh.Connection.Receiver do
     :ok = Connection.send_settings(connection, payload)
   end
 
-  defp handle_connection_frame(
+  defp recv_connection_frame(
          %Settings{stream_id: 0, flags: %{ack: true}},
          _state
        ) do
@@ -87,7 +92,7 @@ defmodule Ankh.Connection.Receiver do
     :ok
   end
 
-  defp handle_connection_frame(
+  defp recv_connection_frame(
          %Ping{stream_id: 0, length: 8, flags: %{ack: false} = flags} = frame,
          %{connection: connection}
        ) do
@@ -107,7 +112,7 @@ defmodule Ankh.Connection.Receiver do
     Logger.debug("STREAM 0 ACK PING")
   end
 
-  defp handle_connection_frame(
+  defp recv_connection_frame(
          %WindowUpdate{stream_id: 0, payload: %{window_size_increment: 0}},
          _state
        ) do
@@ -115,14 +120,14 @@ defmodule Ankh.Connection.Receiver do
     {:error, :protocol_error}
   end
 
-  defp handle_connection_frame(
+  defp recv_connection_frame(
          %WindowUpdate{stream_id: 0, payload: %{window_size_increment: increment}},
          %{connection: connection}
        ) do
     Connection.window_update(connection, increment)
   end
 
-  defp handle_connection_frame(%GoAway{stream_id: 0, payload: %{error_code: code}}, _state) do
+  defp recv_connection_frame(%GoAway{stream_id: 0, payload: %{error_code: code}}, _state) do
     Logger.debug(fn ->
       "STREAM 0 RECEIVED GO_AWAY #{inspect(code)}: #{Error.format(code)}"
     end)

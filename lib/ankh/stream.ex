@@ -139,39 +139,54 @@ defmodule Ankh.Stream do
     handle_call({:recv, frame}, from, state)
   end
 
-  def handle_call({:recv, frame}, _from, %{id: id, state: old_state} = state) do
+  def handle_call(
+        {:recv, frame},
+        _from,
+        %{id: id, state: old_stream_state, controlling_process: controlling_process} = state
+      ) do
     case recv_frame(state, frame) do
-      {:ok, %{state: stream_state} = new_state} ->
+      {:ok, %{state: new_stream_state} = state} ->
         Logger.debug(fn ->
-          "RECEIVED #{inspect(frame)}\nSTREAM #{inspect(old_state)} -> #{inspect(stream_state)}"
+          "RECEIVED #{inspect(frame)}\nSTREAM #{inspect(old_stream_state)} -> #{
+            inspect(new_stream_state)
+          }"
         end)
 
-        {:reply, {:ok, stream_state}, new_state}
+        {:reply, {:ok, new_stream_state}, state}
 
       {:error, _} = error ->
         Logger.debug(fn ->
-          "STREAM #{id} STATE #{old_state} RECEIVE #{inspect(error)} FRAME #{inspect(frame)}"
+          "STREAM #{id} STATE #{old_stream_state} RECEIVE #{inspect(error)} FRAME #{
+            inspect(frame)
+          }"
         end)
 
+        Process.send(controlling_process, {:ankh, :error, id, error}, [])
         {:stop, error, error, state}
     end
   end
 
-  def handle_call({:send, frame}, _from, %{id: id, state: old_state} = state) do
+  def handle_call(
+        {:send, frame},
+        _from,
+        %{id: id, state: old_stream_state, controlling_process: controlling_process} = state
+      ) do
     frame = %{frame | stream_id: id}
 
     case send_frame(state, frame) do
-      {:ok, %{state: stream_state} = new_state} ->
+      {:ok, %{state: new_stream_state} = state} ->
         Logger.debug(fn ->
-          "STREAM #{id}: #{inspect(old_state)} -> #{inspect(stream_state)}"
+          "STREAM #{id}: #{inspect(old_stream_state)} -> #{inspect(new_stream_state)}"
         end)
-        {:reply, {:ok, stream_state}, new_state}
+
+        {:reply, {:ok, new_stream_state}, state}
 
       {:error, _} = error ->
         Logger.debug(fn ->
-          "STREAM #{id} STATE #{old_state} SEND #{inspect(error)} FRAME #{inspect(frame)}"
+          "STREAM #{id} STATE #{old_stream_state} SEND #{inspect(error)} FRAME #{inspect(frame)}"
         end)
 
+        Process.send(controlling_process, {:ankh, :error, id, error}, [])
         {:stop, error, error, state}
     end
   end
@@ -466,6 +481,7 @@ defmodule Ankh.Stream do
     if end_headers do
       Process.send(controlling_process, {:ankh, :headers, id, headers}, [])
     end
+
     {:ok, %{state | state: :half_closed_local, recv_hbf_type: :headers, recv_hbf: []}}
   end
 
@@ -488,6 +504,7 @@ defmodule Ankh.Stream do
     if end_headers do
       Process.send(controlling_process, {:ankh, :headers, id, headers}, [])
     end
+
     Process.send(controlling_process, {:ankh, :stream, id, :closed}, [])
     {:ok, %{state | state: :closed, recv_hbf_type: :headers, recv_hbf: []}}
   end
@@ -723,6 +740,7 @@ defmodule Ankh.Stream do
         Logger.debug(fn ->
           "SENT #{inspect(frame)}"
         end)
+
         {:cont, {:ok, state}}
       else
         error ->

@@ -14,7 +14,9 @@ defmodule Ankh.Connection do
   For data frames a `data` msg is sent for each received DATA
   frame, and it is the controlling_process responsibility to reassemble incoming data.
 
-  A `stream` msg is sent to signal stream end.
+  A `stream` msg is sent to signal stream state changes.
+
+  Errors are reported via `error` msg.
 
   See typespecs below for message types and formats.
   """
@@ -43,7 +45,14 @@ defmodule Ankh.Connection do
   @type connection :: GenServer.server()
 
   @typedoc """
-  Ankh DATA message (full mode)
+  Ankh ERROR message
+
+  `{:ankh, :error, stream_id, error}`
+  """
+  @type error_msg :: {:ankh, :data, integer, term}
+
+  @typedoc """
+  Ankh DATA message
 
   `{:ankh, :data, stream_id, data}`
   """
@@ -85,19 +94,20 @@ defmodule Ankh.Connection do
   """
   @spec start_link(args, GenServer.options()) :: GenServer.on_start()
   def start_link(args, options \\ []) do
-    GenServer.start_link(__MODULE__, args, options)
+    GenServer.start_link(__MODULE__, Keyword.put(args, :controlling_process, self()), options)
   end
 
   @doc false
   def init(args) do
     settings = Keyword.get(args, :settings, %Settings.Payload{})
+    controlling_process = Keyword.get(args, :controlling_process)
     uri = Keyword.get(args, :uri)
     ssl_opts = Keyword.get(args, :ssl_options, [])
 
     with %{header_table_size: header_table_size} <- settings,
          {:ok, send_hpack} <- Table.start_link(header_table_size),
          {:ok, recv_hpack} <- Table.start_link(header_table_size),
-         {:ok, receiver} <- Receiver.start_link() do
+         {:ok, receiver} <- Receiver.start_link(self(), controlling_process) do
       {:ok,
        %{
          last_stream_id: 0,
