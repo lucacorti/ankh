@@ -29,28 +29,28 @@ defmodule Ankh.Connection.Receiver do
 
   def handle_info(
         {:ssl, socket, data},
-        %{buffer: buffer, connection: connection, controlling_process: controlling_process} = state
+        %{buffer: buffer, connection: connection, controlling_process: controlling_process} =
+          state
       ) do
     :ssl.setopts(socket, active: :once)
-    {buffer, frames} = Frame.peek_frames(buffer <> data)
-    state = %{state | buffer: buffer}
 
-    frames
-    |> Enum.reduce_while({:noreply, state}, fn
-      {_length, type, 0, data}, acc ->
+    (buffer <> data)
+    |> Frame.stream_frames()
+    |> Enum.reduce_while({:noreply, %{state | buffer: buffer <> data}}, fn
+      {rest, {_length, type, 0, data}}, {:noreply, state} ->
         with frame <- Frame.Registry.frame_for_type(connection, type),
              frame <- Frame.decode!(struct(frame), data),
              :ok <- recv_connection_frame(frame, state) do
-          {:cont, acc}
+          {:cont, {:noreply, %{state | buffer: rest}}}
         else
           error ->
             Process.send(controlling_process, {:ankh, :error, 0, error}, [])
-            {:halt, {:stop, error, state}}
+            {:halt, {:stop, error, %{state | buffer: rest}}}
         end
 
-      {_length, type, id, data}, acc ->
+      {rest, {_length, type, id, data}}, {:noreply, state} ->
         Stream.recv_raw({:via, Registry, {Stream.Registry, {connection, id}}}, type, data)
-        {:cont, acc}
+        {:cont, {:noreply, %{state | buffer: rest}}}
     end)
   end
 

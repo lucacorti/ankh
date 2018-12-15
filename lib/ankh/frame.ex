@@ -8,7 +8,6 @@ defmodule Ankh.Frame do
   require Logger
 
   alias Ankh.Frame.Encodable
-  alias Ankh.Stream
 
   @frame_header_size 9
 
@@ -115,24 +114,23 @@ defmodule Ankh.Frame do
   end
 
   @doc """
-  Peek frames from a buffer, returning the frame header information and
-  data (without decoding it) and the leftover buffer data.
+  Stream frames from a buffer, returning the leftover buffer data and the frame
+  header information and data (without decoding it) in a tuple:
+  {remaining_buffer, {length, type, id, frame_data}}
   """
-  @spec peek_frames(iodata) :: {iodata, [{length, type, Stream.id(), iodata}]}
-  def peek_frames(data), do: do_peek_frames(data, [])
+  @spec stream_frames(iodata) :: Stream.t()
+  def stream_frames(data) do
+    Stream.unfold(data, fn
+      <<length::24, type::8, _flags::8, 0::1, id::31, rest::binary>> = data
+      when byte_size(rest) >= length ->
+        frame_size = @frame_header_size + length
+        frame_data = binary_part(data, 0, frame_size)
+        rest_size = byte_size(data) - frame_size
+        rest_data = binary_part(data, frame_size, rest_size)
+        {{rest_data, {length, type, id, frame_data}}, rest_data}
 
-  defp do_peek_frames(
-         <<length::24, type::8, _flags::8, 0::1, id::31, rest::binary>> = data,
-         frames
-       )
-       when byte_size(rest) >= length do
-    frame_size = @frame_header_size + length
-    frame_data = binary_part(data, 0, frame_size)
-    rest_size = byte_size(data) - frame_size
-    rest_data = binary_part(data, frame_size, rest_size)
-
-    do_peek_frames(rest_data, [{length, type, id, frame_data} | frames])
+      _data ->
+        nil
+    end)
   end
-
-  defp do_peek_frames(buffer, frames), do: {buffer, Enum.reverse(frames)}
 end
