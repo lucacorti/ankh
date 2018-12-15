@@ -118,7 +118,7 @@ defmodule Ankh.Frame do
   header information and data (without decoding it) in a tuple:
   {remaining_buffer, {length, type, id, frame_data}}
   """
-  @spec stream_frames(iodata) :: Stream.t()
+  @spec stream_frames(iodata) :: Enumerable.t()
   def stream_frames(data) do
     Stream.unfold(data, fn
       <<length::24, type::8, _flags::8, 0::1, id::31, rest::binary>> = data
