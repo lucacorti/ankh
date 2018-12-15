@@ -18,23 +18,29 @@ defmodule AnkhTest.Stream do
     {:ok, recv_table} = Table.start_link(header_table_size)
     {:ok, send_table} = Table.start_link(header_table_size)
 
-    {:ok, stream} =
-      Stream.start_link(
-        Ankh.Connection.Mock,
-        @stream_id,
-        recv_table,
-        send_table,
-        max_frame_size,
-        self()
-      )
+    Process.flag(:trap_exit, true)
+
+    {:ok, stream} = Stream.start_link(
+      Ankh.Connection.Mock,
+      @stream_id,
+      recv_table,
+      send_table,
+      max_frame_size,
+      self()
+    )
 
     %{stream: stream}
+  end
+
+  defp assert_down(pid) do
+    assert_receive {:EXIT, ^pid, _}
   end
 
   test "receiving frame on the wrong stream raises", %{stream: stream} do
     assert {:error, :stream_id_mismatch} ==
              stream
              |> Stream.recv(%Headers{stream_id: 3})
+    assert_down(stream)
   end
 
   test "stream idle to open on receiving headers", %{stream: stream} do
@@ -47,6 +53,7 @@ defmodule AnkhTest.Stream do
     assert {:error, :protocol_error} ==
              stream
              |> Stream.recv(%Ping{stream_id: @stream_id})
+    assert_down(stream)
   end
 
   test "stream idle to open on sending headers", %{stream: stream} do
@@ -123,7 +130,8 @@ defmodule AnkhTest.Stream do
     assert {:error, :protocol_error} ==
              stream
              |> Stream.recv(%Ping{stream_id: @stream_id})
-  end
+    assert_down(stream)
+end
 
   test "stream reserved_remote to half_closed_remote on receiving headers", %{stream: stream} do
     assert {:ok, :reserved_remote} ==
@@ -183,6 +191,7 @@ defmodule AnkhTest.Stream do
     assert {:error, :protocol_error} ==
              stream
              |> Stream.recv(%Ping{stream_id: @stream_id})
+    assert_down(stream)
   end
 
   test "stream open can receive and send any frame type", %{stream: stream} do
@@ -340,6 +349,7 @@ defmodule AnkhTest.Stream do
     assert {:error, :stream_closed} ==
              stream
              |> Stream.recv(%Headers{stream_id: @stream_id})
+    assert_down(stream)
   end
 
   test "stream half_closed_remote can send any frame type", %{stream: stream} do
