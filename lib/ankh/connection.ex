@@ -255,7 +255,8 @@ defmodule Ankh.Connection do
              recv_hpack,
              send_hpack,
              max_frame_size,
-             Keyword.get(options, :controlling_process)
+             Keyword.get(options, :controlling_process),
+             name: {:via, Registry, {Stream.Registry, {self(), last_stream_id}}}
            ) do
       {:reply, {:ok, last_stream_id, pid}, %{state | last_stream_id: last_stream_id + 2}}
     else
