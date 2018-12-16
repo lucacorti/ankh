@@ -39,7 +39,7 @@ defmodule Ankh.Connection do
 
   @preface "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
 
-  # @max_stream_id 2_147_483_647
+  @max_stream_id 2_147_483_647
 
   @typedoc "Connection process"
   @type connection :: GenServer.server()
@@ -236,6 +236,12 @@ defmodule Ankh.Connection do
 
     :ssl.close(socket)
     {:stop, :normal, :ok, %{state | socket: nil}}
+  end
+
+  def handle_call({:start_stream, _options}, _from, %{last_stream_id: last_stream_id} = state)
+  when last_stream_id >= @max_stream_id do
+    error = {:error, :stream_limit_reached}
+    {:stop, error, error, state}
   end
 
   def handle_call(
