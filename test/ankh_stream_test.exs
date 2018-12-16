@@ -32,15 +32,15 @@ defmodule AnkhTest.Stream do
     %{stream: stream}
   end
 
-  defp assert_down(pid) do
-    assert_receive {:EXIT, ^pid, _}
+  defp assert_down(pid, reason) do
+    assert_receive {:EXIT, ^pid, ^reason}
   end
 
   test "receiving frame on the wrong stream raises", %{stream: stream} do
     assert {:error, :stream_id_mismatch} ==
              stream
              |> Stream.recv(%Headers{stream_id: 3})
-    assert_down(stream)
+    assert_down(stream, {:error, :stream_id_mismatch})
   end
 
   test "stream idle to open on receiving headers", %{stream: stream} do
@@ -53,7 +53,7 @@ defmodule AnkhTest.Stream do
     assert {:error, :protocol_error} ==
              stream
              |> Stream.recv(%Ping{stream_id: @stream_id})
-    assert_down(stream)
+    assert_down(stream, {:error, :protocol_error})
   end
 
   test "stream idle to open on sending headers", %{stream: stream} do
@@ -130,7 +130,7 @@ defmodule AnkhTest.Stream do
     assert {:error, :protocol_error} ==
              stream
              |> Stream.recv(%Ping{stream_id: @stream_id})
-    assert_down(stream)
+    assert_down(stream, {:error, :protocol_error})
 end
 
   test "stream reserved_remote to half_closed_remote on receiving headers", %{stream: stream} do
@@ -191,7 +191,7 @@ end
     assert {:error, :protocol_error} ==
              stream
              |> Stream.recv(%Ping{stream_id: @stream_id})
-    assert_down(stream)
+    assert_down(stream, {:error, :protocol_error})
   end
 
   test "stream open can receive and send any frame type", %{stream: stream} do
@@ -349,7 +349,7 @@ end
     assert {:error, :stream_closed} ==
              stream
              |> Stream.recv(%Headers{stream_id: @stream_id})
-    assert_down(stream)
+    assert_down(stream, {:error, :stream_closed})
   end
 
   test "stream half_closed_remote can send any frame type", %{stream: stream} do
