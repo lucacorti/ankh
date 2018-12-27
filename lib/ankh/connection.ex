@@ -128,6 +128,12 @@ defmodule Ankh.Connection do
   end
 
   @doc """
+  Accepts a client connection
+  """
+  @spec accept(connection, pid) :: :ok | {:error, term}
+  def accept(connection, socket), do: GenServer.call(connection, {:accept, socket})
+
+  @doc """
   Connects to a server
   """
   @spec connect(connection) :: :ok | {:error, term}
@@ -176,6 +182,33 @@ defmodule Ankh.Connection do
   """
   @spec close(connection) :: :ok | {:error, term}
   def close(connection), do: GenServer.call(connection, {:close})
+
+  def handle_call(
+        {:accept, socket},
+        _from,
+        %{
+          socket: nil,
+          ssl_opts: _ssl_opts,
+          send_settings: send_settings,
+          receiver: receiver
+        } = state
+      ) do
+    preface = @preface
+    with {:ok, ^preface} <- :ssl.recv(socket, 24),
+         :ok <- :ssl.controlling_process(socket, receiver),
+         :ok <- :ssl.setopts(socket, active: :once),
+         :ok <- :ssl.send(socket, Frame.encode!(%Settings{payload: send_settings})) do
+      {:reply, :ok, %{state | last_stream_id: 2, socket: socket}}
+    else
+      {:error, reason} ->
+        error = {:error, :ssl.format_error(reason)}
+        {:stop, error, error, state}
+    end
+  end
+
+  def handle_call({:sccept, _socket}, _from, state) do
+    {:reply, {:error, :connected}, state}
+  end
 
   def handle_call(
         {:connect},
