@@ -56,12 +56,12 @@ defmodule Ankh.Connection.Receiver do
 
   def handle_info({:ssl_closed, _socket}, state) do
     error = {:error, "SSL closed"}
-    {:stop, error, error, state}
+    {:stop, error, state}
   end
 
   def handle_info({:ssl_error, _socket, reason}, state) do
     error = {:error, :ssl.format_error(reason)}
-    {:stop, error, error, state}
+    {:stop, error, state}
   end
 
   defp recv_connection_frame(
