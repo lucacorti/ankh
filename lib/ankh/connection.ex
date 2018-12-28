@@ -150,13 +150,16 @@ defmodule Ankh.Connection do
   @doc """
   Starts a new stream on the connection
   """
-  @spec start_stream(connection, Keyword.t()) :: {:ok, Stream.id(), pid} | {:error, term}
-  def start_stream(connection, options \\ []) do
-    options =
-      [controlling_process: self()]
-      |> Keyword.merge(options)
+  @spec start_stream(connection, integer | nil, pid | nil) :: {:ok, Stream.id(), pid} | {:error, term}
+  def start_stream(connection, id \\ nil, controlling_process \\ nil)
 
-    GenServer.call(connection, {:start_stream, options})
+  def start_stream(connection, id, controlling_process)
+  when is_nil(controlling_process) do
+    GenServer.call(connection, {:start_stream, id, self()})
+  end
+
+  def start_stream(connection, id, controlling_process) do
+    GenServer.call(connection, {:start_stream, id, controlling_process})
   end
 
   @doc """
@@ -271,14 +274,14 @@ defmodule Ankh.Connection do
     {:stop, :normal, :ok, %{state | socket: nil}}
   end
 
-  def handle_call({:start_stream, _options}, _from, %{last_stream_id: last_stream_id} = state)
-  when last_stream_id >= @max_stream_id do
+  def handle_call({:start_stream, id, _controlling_process}, _from, %{last_stream_id: last_stream_id} = state)
+  when (not is_nil(id) and id >= @max_stream_id) or last_stream_id >= @max_stream_id do
     error = {:error, :stream_limit_reached}
     {:stop, error, error, state}
   end
 
   def handle_call(
-        {:start_stream, options},
+        {:start_stream, nil, controlling_process},
         _from,
         %{
           last_stream_id: last_stream_id,
@@ -294,11 +297,41 @@ defmodule Ankh.Connection do
              recv_hpack,
              send_hpack,
              max_frame_size,
-             Keyword.get(options, :controlling_process),
+             controlling_process,
              name: {:via, Registry, {Stream.Registry, {self(), last_stream_id}}}
            ) do
       {:reply, {:ok, last_stream_id, pid}, %{state | last_stream_id: last_stream_id + 2}}
     else
+      {:error, {:already_started, pid}} ->
+        {:reply, {:ok, last_stream_id, pid}, state}
+      error ->
+        {:reply, error, state}
+    end
+  end
+
+  def handle_call(
+        {:start_stream, id, controlling_process},
+        _from,
+        %{
+          recv_hpack: recv_hpack,
+          send_hpack: send_hpack,
+          send_settings: %{max_frame_size: max_frame_size}
+        } = state
+      ) do
+    with {:ok, pid} <-
+           Stream.start_link(
+             self(),
+             id,
+             recv_hpack,
+             send_hpack,
+             max_frame_size,
+             controlling_process,
+             name: {:via, Registry, {Stream.Registry, {self(), id}}}
+           ) do
+      {:reply, {:ok, id, pid}, state}
+    else
+      {:error, {:already_started, pid}} ->
+        {:reply, {:ok, id, pid}, state}
       error ->
         {:reply, error, state}
     end

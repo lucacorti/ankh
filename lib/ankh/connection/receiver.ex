@@ -49,7 +49,8 @@ defmodule Ankh.Connection.Receiver do
         end
 
       {rest, {_length, type, id, data}}, {:noreply, state} ->
-        Stream.recv_raw({:via, Registry, {Stream.Registry, {connection, id}}}, type, data)
+        {:ok, ^id, stream} = Connection.start_stream(connection, id, controlling_process)
+        {:ok, _stream_state} = Stream.recv_raw(stream, type, data)
         {:cont, {:noreply, %{state | buffer: rest}}}
     end)
   end
