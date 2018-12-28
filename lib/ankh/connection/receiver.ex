@@ -9,7 +9,7 @@ defmodule Ankh.Connection.Receiver do
 
   @type receiver :: GenServer.server()
 
-  @spec start_link(Connection.connection, pid, GenServer.options()) :: GenServer.on_start()
+  @spec start_link(Connection.connection(), pid, GenServer.options()) :: GenServer.on_start()
   def start_link(connection, controlling_process, options \\ []) do
     GenServer.start_link(
       __MODULE__,

@@ -20,14 +20,15 @@ defmodule AnkhTest.Stream do
 
     Process.flag(:trap_exit, true)
 
-    {:ok, stream} = Stream.start_link(
-      Ankh.Connection.Mock,
-      @stream_id,
-      recv_table,
-      send_table,
-      max_frame_size,
-      self()
-    )
+    {:ok, stream} =
+      Stream.start_link(
+        Ankh.Connection.Mock,
+        @stream_id,
+        recv_table,
+        send_table,
+        max_frame_size,
+        self()
+      )
 
     %{stream: stream}
   end
@@ -40,6 +41,7 @@ defmodule AnkhTest.Stream do
     assert {:error, :stream_id_mismatch} ==
              stream
              |> Stream.recv(%Headers{stream_id: 3})
+
     assert_down(stream, {:error, :stream_id_mismatch})
   end
 
@@ -53,6 +55,7 @@ defmodule AnkhTest.Stream do
     assert {:error, :protocol_error} ==
              stream
              |> Stream.recv(%Ping{stream_id: @stream_id})
+
     assert_down(stream, {:error, :protocol_error})
   end
 
@@ -130,8 +133,9 @@ defmodule AnkhTest.Stream do
     assert {:error, :protocol_error} ==
              stream
              |> Stream.recv(%Ping{stream_id: @stream_id})
+
     assert_down(stream, {:error, :protocol_error})
-end
+  end
 
   test "stream reserved_remote to half_closed_remote on receiving headers", %{stream: stream} do
     assert {:ok, :reserved_remote} ==
@@ -191,6 +195,7 @@ end
     assert {:error, :protocol_error} ==
              stream
              |> Stream.recv(%Ping{stream_id: @stream_id})
+
     assert_down(stream, {:error, :protocol_error})
   end
 
@@ -349,6 +354,7 @@ end
     assert {:error, :stream_closed} ==
              stream
              |> Stream.recv(%Headers{stream_id: @stream_id})
+
     assert_down(stream, {:error, :stream_closed})
   end
 

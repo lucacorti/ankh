@@ -28,14 +28,18 @@ defmodule AnkhTest.Connection do
     }
 
     assert {:ok, state} = Stream.send(stream, headers)
+    receive_all(stream_id)
+  end
 
-    receive_headers(stream_id)
-    receive_data(stream_id)
-    receive_closed(stream_id)
+  defp receive_all(stream_id) do
+    unless receive_headers(stream_id) do
+      receive_data(stream_id)
+    end
   end
 
   defp receive_headers(stream_id) do
-    assert_receive {:ankh, :headers, ^stream_id, _headers}, 1_000
+    assert_receive {:ankh, :headers, ^stream_id, _headers, end_stream}, 1_000
+    end_stream
   end
 
   defp receive_data(stream_id) do
@@ -44,9 +48,5 @@ defmodule AnkhTest.Connection do
     unless end_stream do
       receive_data(stream_id)
     end
-  end
-
-  defp receive_closed(stream_id) do
-    assert_receive {:ankh, :stream, ^stream_id, :closed}, 1_000
   end
 end

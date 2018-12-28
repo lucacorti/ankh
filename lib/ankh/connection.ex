@@ -14,7 +14,8 @@ defmodule Ankh.Connection do
   For data frames a `data` msg is sent for each received DATA
   frame, and it is the controlling_process responsibility to reassemble incoming data.
 
-  A `stream` msg is sent to signal stream state changes.
+  For both HEADERS and DATA FRAMES the end_stream flag signals if the peer is
+  done with the stream or more DATA/HEADERS blocks are going to be transmitted.
 
   Errors are reported via `error` msg.
 
@@ -64,13 +65,6 @@ defmodule Ankh.Connection do
   `{:ankh, :headers, stream_id, headers}`
   """
   @type headers_msg :: {:ankh, :headers, integer, Keyword.t()}
-
-  @typedoc """
-  Ankh STREAM message
-
-  `{:anhk, :stream, stream_id, state}`
-  """
-  @type stream_msg :: {:ankh, :headers, integer, Stream.state()}
 
   @typedoc """
   Ankh PUSH_PROMISE message
@@ -150,11 +144,12 @@ defmodule Ankh.Connection do
   @doc """
   Starts a new stream on the connection
   """
-  @spec start_stream(connection, integer | nil, pid | nil) :: {:ok, Stream.id(), pid} | {:error, term}
+  @spec start_stream(connection, integer | nil, pid | nil) ::
+          {:ok, Stream.id(), pid} | {:error, term}
   def start_stream(connection, id \\ nil, controlling_process \\ nil)
 
   def start_stream(connection, id, controlling_process)
-  when is_nil(controlling_process) do
+      when is_nil(controlling_process) do
     GenServer.call(connection, {:start_stream, id, self()})
   end
 
@@ -197,6 +192,7 @@ defmodule Ankh.Connection do
         } = state
       ) do
     preface = @preface
+
     with {:ok, ^preface} <- :ssl.recv(socket, 24),
          :ok <- :ssl.controlling_process(socket, receiver),
          :ok <- :ssl.setopts(socket, active: :once),
@@ -274,8 +270,12 @@ defmodule Ankh.Connection do
     {:stop, :normal, :ok, %{state | socket: nil}}
   end
 
-  def handle_call({:start_stream, id, _controlling_process}, _from, %{last_stream_id: last_stream_id} = state)
-  when (not is_nil(id) and id >= @max_stream_id) or last_stream_id >= @max_stream_id do
+  def handle_call(
+        {:start_stream, id, _controlling_process},
+        _from,
+        %{last_stream_id: last_stream_id} = state
+      )
+      when (not is_nil(id) and id >= @max_stream_id) or last_stream_id >= @max_stream_id do
     error = {:error, :stream_limit_reached}
     {:stop, error, error, state}
   end
@@ -304,6 +304,7 @@ defmodule Ankh.Connection do
     else
       {:error, {:already_started, pid}} ->
         {:reply, {:ok, last_stream_id, pid}, state}
+
       error ->
         {:reply, error, state}
     end
@@ -332,6 +333,7 @@ defmodule Ankh.Connection do
     else
       {:error, {:already_started, pid}} ->
         {:reply, {:ok, id, pid}, state}
+
       error ->
         {:reply, error, state}
     end
