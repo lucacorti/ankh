@@ -85,19 +85,19 @@ defmodule Ankh.Stream do
   @doc """
   Process a received frame for the stream
   """
-  @spec recv_raw(t(), Frame.type(), data :: binary) :: term
+  @spec recv_raw(t(), Frame.type(), data :: binary) :: {:ok, state()} | {:error, term}
   def recv_raw(stream, type, data), do: GenServer.call(stream, {:recv_raw, type, data})
 
   @doc """
   Process a received frame for the stream
   """
-  @spec recv(t(), Frame.t()) :: term
+  @spec recv(t(), Frame.t()) :: {:ok, state()} | {:error, term}
   def recv(stream, frame), do: GenServer.call(stream, {:recv, frame})
 
   @doc """
   Process and send a frame on the stream
   """
-  @spec send(t(), Frame.t()) :: term
+  @spec send(t(), Frame.t()) :: {:ok, state()} | {:error, term}
   def send(stream, frame), do: GenServer.call(stream, {:send, frame})
 
   @doc """
