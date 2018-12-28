@@ -208,6 +208,8 @@ defmodule Ankh.Stream do
 
   # IDLE
 
+  defp recv_frame(%{state: :idle} = state, %Priority{}), do: {:ok, state}
+
   defp recv_frame(
          %{
            id: id,
