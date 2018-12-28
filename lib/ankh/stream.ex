@@ -386,27 +386,6 @@ defmodule Ankh.Stream do
            recv_hbf_type: hbf_type
          } = state,
          %Continuation{
-           flags: %{end_stream: true},
-           payload: %{hbf: hbf}
-         }
-       ) do
-    headers =
-      [hbf | recv_hbf]
-      |> process_recv_headers(state)
-
-    Process.send(controlling_process, {:ankh, hbf_type, id, headers}, [])
-    {:ok, %{state | state: :half_closed_remote, recv_hbf: []}}
-  end
-
-  defp recv_frame(
-         %{
-           id: id,
-           state: :open,
-           controlling_process: controlling_process,
-           recv_hbf: recv_hbf,
-           recv_hbf_type: hbf_type
-         } = state,
-         %Continuation{
            flags: %{end_headers: true},
            payload: %{hbf: hbf}
          }
