@@ -513,7 +513,7 @@ defmodule Ankh.Stream do
 
         Process.send(
           controlling_process,
-          {:ankh, recv_hbf_type, id, headers, recv_hbf_es} |> IO.inspect(),
+          {:ankh, recv_hbf_type, id, headers, recv_hbf_es},
           []
         )
 
