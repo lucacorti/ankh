@@ -30,7 +30,7 @@ defmodule Ankh.Frame do
   - flags: frame flags struct or nil for no flags
   - payload: frame payload struct or nil for no payload
   """
-  @spec __using__(type: type, flags: Encodable.t(), payload: Encodable.t()) :: Macro.t()
+  @spec __using__(type: type, flags: atom | nil, payload: atom | nil) :: Macro.t()
   defmacro __using__(args) do
     with {:ok, type} <- Keyword.fetch(args, :type),
          flags <- Keyword.get(args, :flags),
@@ -45,11 +45,16 @@ defmodule Ankh.Frame do
         @type t :: %__MODULE__{
                 length: integer,
                 stream_id: integer,
-                flags: Encodable.t(),
-                payload: Encodable.t()
+                flags: Encodable.t() | nil,
+                payload: Encodable.t() | nil
               }
-
-        defstruct length: 0, type: type, stream_id: 0, flags: flags, payload: payload
+        flags = if flags, do: struct(flags), else: nil
+        payload = if payload, do: struct(payload), else: nil
+        defstruct length: 0,
+                  type: type,
+                  stream_id: 0,
+                  flags: flags,
+                  payload: payload
       end
     else
       :error ->

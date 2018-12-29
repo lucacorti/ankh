@@ -6,7 +6,7 @@ defprotocol Ankh.Frame.Encodable do
   @fallback_to_any true
 
   @typedoc "Data type conforming to the `Ankh.Frame.Encodable` protocol"
-  @type t :: term | nil
+  @type t :: term
 
   @typedoc "Encode/Decode options"
   @type options :: Keyword.t()
