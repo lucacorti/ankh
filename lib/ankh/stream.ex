@@ -210,6 +210,11 @@ defmodule Ankh.Stream do
     {:error, :stream_id_zero}
   end
 
+  defp recv_frame(%{max_frame_size: max_frame_size}, %{length: length})
+    when length > max_frame_size do
+    {:error, :frame_size_error}
+  end
+
   # IDLE
 
   defp recv_frame(%{state: :idle} = state, %Priority{}), do: {:ok, state}
