@@ -53,7 +53,7 @@ defmodule Ankh.Connection.Receiver do
 
       {rest, {_length, type, id, data}}, {:noreply, state} ->
         with {:ok, ^id, stream} <- Connection.start_stream(connection, id, controlling_process),
-             {:ok, _stream_state} = Stream.recv_raw(stream, type, data) do
+             {:ok, _stream_state} <- Stream.recv_raw(stream, type, data) do
           {:cont, {:noreply, %{state | buffer: rest}}}
         else
           {:error, error} ->
