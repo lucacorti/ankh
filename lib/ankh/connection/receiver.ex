@@ -90,11 +90,19 @@ defmodule Ankh.Connection.Receiver do
   end
 
   defp recv_connection_frame(
-         %Settings{stream_id: 0, flags: %{ack: true}},
+         %Settings{stream_id: 0, flags: %{ack: true}, payload: nil},
          _state
        ) do
     Logger.debug("STREAM 0 RECEIVED SETTINGS ACK")
     :ok
+  end
+
+  defp recv_connection_frame(
+         %Settings{stream_id: 0, flags: %{ack: true}},
+         _state
+       ) do
+    Logger.debug("STREAM 0 ERROR RECEIVED SETTINGS ACK WITH PAYLOAD")
+    {:error, :frame_size_error}
   end
 
   defp recv_connection_frame(
