@@ -6,13 +6,23 @@ defmodule Ankh.Frame.Priority.Payload do
 end
 
 defimpl Ankh.Frame.Encodable, for: Ankh.Frame.Priority.Payload do
-  import Ankh.Frame.Utils
-
-  def encode!(%{exclusive: ex, stream_dependency: sd, weight: wh}, _) do
-    [<<bool_to_int!(ex)::1, sd::31, wh::8>>]
+  def decode(payload, <<1::1, sd::31, wh::8>>, _) do
+    {:ok, %{payload | exclusive: true, stream_dependency: sd, weight: wh}}
   end
 
-  def decode!(payload, <<ex::1, sd::31, wh::8>>, _) do
-    %{payload | exclusive: int_to_bool!(ex), stream_dependency: sd, weight: wh}
+  def decode(payload, <<0::1, sd::31, wh::8>>, _) do
+    {:ok, %{payload | exclusive: false, stream_dependency: sd, weight: wh}}
   end
+
+  def decode(_payload, _data, _options), do: {:error, :decode_error}
+
+  def encode(%{exclusive: true, stream_dependency: sd, weight: wh}, _) do
+    {:ok, [<<1::1, sd::31, wh::8>>]}
+  end
+
+  def encode(%{exclusive: false, stream_dependency: sd, weight: wh}, _) do
+    {:ok, [<<0, sd::31, wh::8>>]}
+  end
+
+  def encode(_payload, _options), do: {:error, :encode_error}
 end

@@ -12,61 +12,97 @@ defmodule Ankh.Frame.Headers.Payload do
 end
 
 defimpl Ankh.Frame.Encodable, for: Ankh.Frame.Headers.Payload do
-  import Ankh.Frame.Utils
-
-  def encode!(
-        %{pad_length: pad_length, exclusive: ex, stream_dependency: sd, weight: wh, hbf: hbf},
-        flags: %{padded: true, priority: true}
-      ) do
-    [<<pad_length::8, bool_to_int!(ex)::1, sd::31, wh::8>>, hbf, :binary.copy(<<0>>, pad_length)]
-  end
-
-  def encode!(%{pad_length: pad_length, hbf: hbf}, flags: %{padded: true, priority: false}) do
-    [<<pad_length::8>>, hbf, :binary.copy(<<0>>, pad_length)]
-  end
-
-  def encode!(
-        %{exclusive: ex, stream_dependency: sd, weight: wh, hbf: hbf},
-        flags: %{padded: false, priority: true}
-      ) do
-    [<<bool_to_int!(ex)::1>>, <<sd::31>>, <<wh::8>>, hbf]
-  end
-
-  def encode!(%{hbf: hbf}, flags: %{padded: false, priority: false}) do
-    [hbf]
-  end
-
-  def decode!(
+  def decode(
         payload,
-        <<pl::8, ex::1, sd::31, wh::8, data::binary>>,
+        <<pl::8, 1::1, sd::31, wh::8, data::binary>>,
         flags: %{padded: true, priority: true}
       ) do
-    hbf = binary_part(data, 0, byte_size(data) - pl)
-
-    %{
+    {:ok, %{
       payload
       | pad_length: pl,
-        exclusive: int_to_bool!(ex),
+        exclusive: true,
         weight: wh,
         stream_dependency: sd,
-        hbf: hbf
-    }
+        hbf: binary_part(data, 0, byte_size(data) - pl)
+    }}
   end
 
-  def decode!(payload, <<pl::8, data::binary>>, flags: %{padded: true, priority: false}) do
-    hbf = binary_part(data, 0, byte_size(data) - pl)
-    %{payload | pad_length: pl, hbf: hbf}
-  end
-
-  def decode!(
+  def decode(
         payload,
-        <<ex::1, sd::31, wh::8, hbf::binary>>,
+        <<pl::8, 0::1, sd::31, wh::8, data::binary>>,
+        flags: %{padded: true, priority: true}
+      ) do
+    {:ok, %{
+      payload
+      | pad_length: pl,
+        exclusive: false,
+        weight: wh,
+        stream_dependency: sd,
+        hbf: binary_part(data, 0, byte_size(data) - pl)
+    }}
+  end
+
+  def decode(payload, <<pl::8, data::binary>>, flags: %{padded: true, priority: false}) do
+    {:ok, %{payload | pad_length: pl, hbf: binary_part(data, 0, byte_size(data) - pl)}}
+  end
+
+  def decode(
+        payload,
+        <<1::1, sd::31, wh::8, hbf::binary>>,
         flags: %{padded: false, priority: true}
       ) do
-    %{payload | exclusive: int_to_bool!(ex), weight: wh, stream_dependency: sd, hbf: hbf}
+    {:ok, %{payload | exclusive: true, weight: wh, stream_dependency: sd, hbf: hbf}}
   end
 
-  def decode!(payload, <<hbf::binary>>, flags: %{padded: false, priority: false}) do
-    %{payload | hbf: hbf}
+  def decode(
+        payload,
+        <<0::1, sd::31, wh::8, hbf::binary>>,
+        flags: %{padded: false, priority: true}
+      ) do
+    {:ok, %{payload | exclusive: false, weight: wh, stream_dependency: sd, hbf: hbf}}
   end
+
+  def decode(payload, <<hbf::binary>>, flags: %{padded: false, priority: false}) do
+    {:ok, %{payload | hbf: hbf}}
+  end
+
+  def decode(_payload, _data, _options), do: {:error, :decode_error}
+
+  def encode(
+        %{pad_length: pad_length, exclusive: true, stream_dependency: sd, weight: wh, hbf: hbf},
+        flags: %{padded: true, priority: true}
+      ) do
+    {:ok, [<<pad_length::8, 1::1, sd::31, wh::8>>, hbf, :binary.copy(<<0>>, pad_length)]}
+  end
+
+  def encode(
+        %{pad_length: pad_length, exclusive: false, stream_dependency: sd, weight: wh, hbf: hbf},
+        flags: %{padded: true, priority: true}
+      ) do
+    {:ok, [<<pad_length::8, 0::1, sd::31, wh::8>>, hbf, :binary.copy(<<0>>, pad_length)]}
+  end
+
+  def encode(%{pad_length: pad_length, hbf: hbf}, flags: %{padded: true, priority: false}) do
+    {:ok, [<<pad_length::8>>, hbf, :binary.copy(<<0>>, pad_length)]}
+  end
+
+  def encode(
+        %{exclusive: true, stream_dependency: sd, weight: wh, hbf: hbf},
+        flags: %{padded: false, priority: true}
+      ) do
+    {:ok, [<<1::1, sd::31, wh::8>>, hbf]}
+  end
+
+  def encode(
+        %{exclusive: false, stream_dependency: sd, weight: wh, hbf: hbf},
+        flags: %{padded: false, priority: true}
+      ) do
+    {:ok, [<<0::1, sd::31, wh::8>>, hbf]}
+  end
+
+  def encode(%{hbf: hbf}, flags: %{padded: false, priority: false}) do
+    {:ok, [hbf]}
+  end
+
+  def encode(_payload, _options), do: {:error, :encode_error}
 end

@@ -6,13 +6,39 @@ defmodule Ankh.Frame.PushPromise.Flags do
 end
 
 defimpl Ankh.Frame.Encodable, for: Ankh.Frame.PushPromise.Flags do
-  import Ankh.Frame.Utils
-
-  def decode!(flags, <<_::4, pa::1, eh::1, _::2>>, _) do
-    %{flags | end_headers: int_to_bool!(eh), padded: int_to_bool!(pa)}
+  def decode(flags, <<_::4, 1::1, 1::1, _::2>>, _) do
+    {:ok, %{flags | end_headers: true, padded: true}}
   end
 
-  def encode!(%{end_headers: eh, padded: pa}, _) do
-    <<0::4, bool_to_int!(pa)::1, bool_to_int!(eh)::1, 0::2>>
+  def decode(flags, <<_::4, 1::1, 0::1, _::2>>, _) do
+    {:ok, %{flags | end_headers: false, padded: true}}
   end
+
+  def decode(flags, <<_::4, 0::1, 1::1, _::2>>, _) do
+    {:ok, %{flags | end_headers: true, padded: false}}
+  end
+
+  def decode(flags, <<_::4, 0::1, 0::1, _::2>>, _) do
+    {:ok, %{flags | end_headers: false, padded: false}}
+  end
+
+  def decode(_flags, _data, _options), do: {:error, :decode_error}
+
+  def encode(%{end_headers: true, padded: true}, _) do
+    {:ok, <<0::4, 1::1, 1::1, 0::2>>}
+  end
+
+  def encode(%{end_headers: true, padded: false}, _) do
+    {:ok, <<0::4, 0::1, 1::1, 0::2>>}
+  end
+
+  def encode(%{end_headers: false, padded: true}, _) do
+    {:ok, <<0::4, 1::1, 0::1, 0::2>>}
+  end
+
+  def encode(%{end_headers: false, padded: false}, _) do
+    {:ok, <<0::4, 0::1, 0::1, 0::2>>}
+  end
+
+  def encode(_flags, _options), do: {:error, :encode_error}
 end

@@ -6,13 +6,23 @@ defmodule Ankh.Frame.Continuation.Flags do
 end
 
 defimpl Ankh.Frame.Encodable, for: Ankh.Frame.Continuation.Flags do
-  import Ankh.Frame.Utils
-
-  def decode!(flags, <<_::5, eh::1, _::2>>, _) do
-    %{flags | end_headers: int_to_bool!(eh)}
+  def decode(flags, <<_::5, 0::1, _::2>>, _) do
+    {:ok, %{flags | end_headers: false}}
   end
 
-  def encode!(%{end_headers: eh}, _) do
-    <<0::5, bool_to_int!(eh)::1, 0::2>>
+  def decode(flags, <<_::5, 1::1, _::2>>, _) do
+    {:ok, %{flags | end_headers: true}}
   end
+
+  def decode(_flags, _data, _options), do: {:error, :decode_error}
+
+  def encode(%{end_headers: true}, _) do
+    {:ok, <<0::5, 1::1, 0::2>>}
+  end
+
+  def encode(%{end_headers: false}, _) do
+    {:ok, <<0::5, 0::1, 0::2>>}
+  end
+
+  def encode(_flags, _options), do: {:error, :encode_error}
 end

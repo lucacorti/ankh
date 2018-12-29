@@ -19,8 +19,8 @@ defprotocol Ankh.Frame.Encodable do
     - binary: data to decode into the struct
     - options: options to pass as context to the decoding function
   """
-  @spec decode!(t, binary, options) :: t
-  def decode!(struct, binary, options \\ [])
+  @spec decode(t, binary, options) :: {:ok, t} | {:error, term}
+  def decode(struct, binary, options \\ [])
 
   @doc """
   Encodes an `Ankh.Frame.Encodable` conforming data type into an IO list
@@ -29,11 +29,11 @@ defprotocol Ankh.Frame.Encodable do
     - data: data type conforming to the `Ankh.Frame.Encodable` protocol
     - options: options to pass as context to the encoding function
   """
-  @spec encode!(t, options) :: iodata
-  def encode!(data, options \\ [])
+  @spec encode(t, options) :: {:ok, iodata} | {:error, term}
+  def encode(data, options \\ [])
 end
 
 defimpl Ankh.Frame.Encodable, for: Any do
-  def decode!(_, _, _), do: nil
-  def encode!(_, _), do: <<>>
+  def decode(_, _, _), do: {:ok, nil}
+  def encode(_, _), do: {:ok, <<>>}
 end

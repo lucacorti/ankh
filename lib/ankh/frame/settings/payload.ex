@@ -18,8 +18,6 @@ defmodule Ankh.Frame.Settings.Payload do
 end
 
 defimpl Ankh.Frame.Encodable, for: Ankh.Frame.Settings.Payload do
-  import Ankh.Frame.Utils
-
   @header_table_size 0x1
   @enable_push 0x2
   @max_concurrent_streams 0x3
@@ -27,16 +25,21 @@ defimpl Ankh.Frame.Encodable, for: Ankh.Frame.Settings.Payload do
   @max_frame_size 0x5
   @max_header_list_size 0x6
 
-  def decode!(payload, binary, _) do
-    binary
-    |> parse_settings_payload
-    |> Enum.reduce(payload, fn {key, value}, acc -> Map.put(acc, key, value) end)
+  def decode(payload, data, _) when is_binary(data) do
+    payload =
+      data
+      |> parse_settings_payload
+      |> Enum.reduce(payload, fn {key, value}, acc -> Map.put(acc, key, value) end)
+
+    {:ok, payload}
   end
 
-  def encode!(
+  def decode(_payload, _data, _options), do: {:error, :decode_error}
+
+  def encode(
         %{
           header_table_size: hts,
-          enable_push: ep,
+          enable_push: true,
           max_concurrent_streams: mcs,
           initial_window_size: iws,
           max_frame_size: mfs,
@@ -44,11 +47,11 @@ defimpl Ankh.Frame.Encodable, for: Ankh.Frame.Settings.Payload do
         },
         _
       ) do
-    [
+    {:ok, [
       <<@header_table_size::16>>,
       <<hts::32>>,
       <<@enable_push::16>>,
-      <<bool_to_int!(ep)::32>>,
+      <<1::32>>,
       <<@max_concurrent_streams::16>>,
       <<mcs::32>>,
       <<@initial_window_size::16>>,
@@ -57,8 +60,37 @@ defimpl Ankh.Frame.Encodable, for: Ankh.Frame.Settings.Payload do
       <<mfs::32>>,
       <<@max_header_list_size::16>>,
       <<mhls::32>>
-    ]
+    ]}
   end
+
+  def encode(
+        %{
+          header_table_size: hts,
+          enable_push: false,
+          max_concurrent_streams: mcs,
+          initial_window_size: iws,
+          max_frame_size: mfs,
+          max_header_list_size: mhls
+        },
+        _
+      ) do
+    {:ok, [
+      <<@header_table_size::16>>,
+      <<hts::32>>,
+      <<@enable_push::16>>,
+      <<0::32>>,
+      <<@max_concurrent_streams::16>>,
+      <<mcs::32>>,
+      <<@initial_window_size::16>>,
+      <<iws::32>>,
+      <<@max_frame_size::16>>,
+      <<mfs::32>>,
+      <<@max_header_list_size::16>>,
+      <<mhls::32>>
+    ]}
+  end
+
+  def encode(_payload, _options), do: {:error, :encode_error}
 
   defp parse_settings_payload(<<@header_table_size::16, value::32, rest::binary>>) do
     [{:header_table_size, value} | parse_settings_payload(rest)]

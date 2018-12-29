@@ -8,15 +8,19 @@ end
 defimpl Ankh.Frame.Encodable, for: Ankh.Frame.GoAway.Payload do
   alias Ankh.Error
 
-  def decode!(payload, <<_::1, lsid::31, error::32>>, _) do
-    %{payload | last_stream_id: lsid, error_code: Error.decode!(error)}
+  def decode(payload, <<_::1, lsid::31, error::32>>, _) do
+    {:ok, %{payload | last_stream_id: lsid, error_code: Error.decode!(error)}}
   end
 
-  def decode!(payload, <<_::1, lsid::31, error::32, data::binary>>, _) do
-    %{payload | last_stream_id: lsid, error_code: Error.decode!(error), data: data}
+  def decode(payload, <<_::1, lsid::31, error::32, data::binary>>, _) do
+    {:ok, %{payload | last_stream_id: lsid, error_code: Error.decode!(error), data: data}}
   end
 
-  def encode!(%{last_stream_id: lsid, error_code: error, data: data}, _) do
-    [<<0::1, lsid::31>>, Error.encode!(error), data]
+  def decode(_payload, _data, _options), do: {:error, :decode_error}
+
+  def encode(%{last_stream_id: lsid, error_code: error, data: data}, _) do
+    {:ok, [<<0::1, lsid::31>>, Error.encode!(error), data]}
   end
+
+  def encode(_payload, _options), do: {:error, :encode_error}
 end

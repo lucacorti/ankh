@@ -6,6 +6,9 @@ defmodule Ankh.Frame.Ping.Payload do
 end
 
 defimpl Ankh.Frame.Encodable, for: Ankh.Frame.Ping.Payload do
-  def encode!(%{data: data}, _) when is_binary(data), do: [data]
-  def decode!(payload, data, _) when is_binary(data), do: %{payload | data: data}
+  def decode(payload, data, _) when is_binary(data), do: {:ok, %{payload | data: data}}
+  def decode(_payload, _data, _options), do: {:error, :decode_error}
+
+  def encode(%{data: data}, _) when is_binary(data), do: {:ok, [data]}
+  def encode(_payload, _options), do: {:error, :encode_error}
 end
