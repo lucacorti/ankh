@@ -77,18 +77,16 @@ defmodule Ankh.Connection.Receiver do
        ) do
     Logger.debug("STREAM 0 RECEIVED SETTINGS")
 
-    :ok =
-      Connection.send(
-        connection,
-        Frame.encode!(%Settings{
-          frame
-          | flags: %Settings.Flags{ack: true},
-            payload: nil,
-            length: 0
-        })
-      )
+    settings = Frame.encode!(%Settings{
+      frame
+      | flags: %Settings.Flags{ack: true},
+        payload: nil,
+        length: 0
+    })
 
-    :ok = Connection.send_settings(connection, payload)
+    with :ok <- Connection.send(connection, settings),
+         :ok <- Connection.send_settings(connection, payload),
+      do: :ok
   end
 
   defp recv_connection_frame(
@@ -100,23 +98,29 @@ defmodule Ankh.Connection.Receiver do
   end
 
   defp recv_connection_frame(
+         %Ping{stream_id: 0, flags: %{ack: true}},
+         _state
+       ) do
+    Logger.debug("STREAM 0 RECEIVED PING ACK")
+    :ok
+  end
+
+  defp recv_connection_frame(
          %Ping{stream_id: 0, length: 8, flags: %{ack: false} = flags} = frame,
          %{connection: connection}
        ) do
     Logger.debug("STREAM 0 RECEIVED PING")
 
-    Connection.send(
-      connection,
-      Frame.encode!(%Ping{
-        frame
-        | flags: %{
-            flags
-            | ack: true
-          }
-      })
-    )
+    ping = Frame.encode!(%Ping{
+      frame
+      | flags: %{
+          flags
+          | ack: true
+        }
+    })
 
-    Logger.debug("STREAM 0 ACK PING")
+    with :ok <- Connection.send(connection, ping),
+      do: :ok
   end
 
   defp recv_connection_frame(
@@ -131,7 +135,8 @@ defmodule Ankh.Connection.Receiver do
          %WindowUpdate{stream_id: 0, payload: %{window_size_increment: increment}},
          %{connection: connection}
        ) do
-    Connection.window_update(connection, increment)
+    with :ok <- Connection.window_update(connection, increment),
+      do: :ok
   end
 
   defp recv_connection_frame(%GoAway{stream_id: 0, payload: %{error_code: code}}, _state) do
