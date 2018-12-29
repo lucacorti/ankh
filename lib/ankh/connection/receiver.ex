@@ -35,7 +35,7 @@ defmodule Ankh.Connection.Receiver do
     :ssl.setopts(socket, active: :once)
 
     (buffer <> data)
-    |> Frame.stream_frames()
+    |> Frame.to_stream()
     |> Enum.reduce_while({:noreply, %{state | buffer: buffer <> data}}, fn
       {rest, {_length, type, 0, data}}, {:noreply, state} ->
         with type when not is_nil(type) <- Frame.Registry.frame_for_type(connection, type),

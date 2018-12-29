@@ -119,12 +119,13 @@ defmodule Ankh.Frame do
   end
 
   @doc """
-  Stream frames from a buffer, returning the leftover buffer data and the frame
-  header information and data (without decoding it) in a tuple:
-  {remaining_buffer, {length, type, id, frame_data}}
+  Returns s tream of frames from a buffer, returning the leftover buffer data
+  and the frame header information and data (without decoding it) in a tuple:
+
+  `{remaining_buffer, {length, type, id, frame_data}}`
   """
-  @spec stream_frames(iodata) :: Enumerable.t()
-  def stream_frames(data) do
+  @spec to_stream(iodata) :: Enumerable.t()
+  def to_stream(data) do
     Stream.unfold(data, fn
       <<length::24, type::8, _flags::binary-size(1), 0::1, id::31, rest::binary>> = data
       when byte_size(rest) >= length ->
