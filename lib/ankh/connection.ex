@@ -178,8 +178,8 @@ defmodule Ankh.Connection do
 
   Before closing the TLS connection a GOAWAY frame is sent to the peer.
   """
-  @spec close(connection) :: :ok | {:error, term}
-  def close(connection), do: GenServer.call(connection, {:close})
+  @spec error(connection, atom) :: :ok | {:error, term}
+  def error(connection, error), do: GenServer.call(connection, {:error, error})
 
   def handle_call(
         {:accept, socket},
@@ -255,13 +255,13 @@ defmodule Ankh.Connection do
     end
   end
 
-  def handle_call({:close}, _from, %{last_stream_id: last_stream_id, socket: socket} = state) do
+  def handle_call({:error, error}, _from, %{last_stream_id: last_stream_id, socket: socket} = state) do
     :ssl.send(
       socket,
       Frame.encode!(%GoAway{
         payload: %GoAway.Payload{
           last_stream_id: last_stream_id,
-          error_code: :no_error
+          error_code: error
         }
       })
     )
