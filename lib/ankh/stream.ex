@@ -13,7 +13,6 @@ defmodule Ankh.Stream do
     Data,
     Continuation,
     Headers,
-    Ping,
     Priority,
     PushPromise,
     RstStream,
