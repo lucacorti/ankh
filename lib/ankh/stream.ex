@@ -226,6 +226,7 @@ defmodule Ankh.Stream do
            state: :idle,
            recv_hbf: recv_hbf,
            recv_hbf_es: recv_hbf_es,
+           recv_table: recv_table,
            controlling_process: controlling_process
          } = state,
          %Headers{
@@ -237,7 +238,7 @@ defmodule Ankh.Stream do
 
     recv_hbf =
       if end_headers do
-        headers = process_recv_headers([hbf | recv_hbf], state)
+        headers = process_recv_headers([hbf | recv_hbf], recv_table)
 
         Process.send(
           controlling_process,
@@ -297,7 +298,8 @@ defmodule Ankh.Stream do
            state: :open,
            controlling_process: controlling_process,
            recv_hbf: recv_hbf,
-           recv_hbf_es: recv_hbf_es
+           recv_hbf_es: recv_hbf_es,
+           recv_table: recv_table
          } = state,
          %Headers{
            flags: %{end_headers: end_headers, end_stream: end_stream},
@@ -308,7 +310,7 @@ defmodule Ankh.Stream do
 
     recv_hbf =
       if end_headers do
-        headers = process_recv_headers([hbf | recv_hbf], state)
+        headers = process_recv_headers([hbf | recv_hbf], recv_table)
 
         Process.send(
           controlling_process,
@@ -337,7 +339,8 @@ defmodule Ankh.Stream do
            state: :open,
            controlling_process: controlling_process,
            recv_hbf: recv_hbf,
-           recv_hbf_es: recv_hbf_es
+           recv_hbf_es: recv_hbf_es,
+           recv_table: recv_table
          } = state,
          %PushPromise{
            flags: %{end_headers: end_headers, end_stream: end_stream},
@@ -348,7 +351,7 @@ defmodule Ankh.Stream do
 
     recv_hbf =
       if end_headers do
-        headers = process_recv_headers([hbf | recv_hbf], state)
+        headers = process_recv_headers([hbf | recv_hbf], recv_table)
 
         Process.send(
           controlling_process,
@@ -378,7 +381,8 @@ defmodule Ankh.Stream do
            controlling_process: controlling_process,
            recv_hbf: recv_hbf,
            recv_hbf_type: recv_hbf_type,
-           recv_hbf_es: recv_hbf_es
+           recv_hbf_es: recv_hbf_es,
+           recv_table: recv_table
          } = state,
          %Continuation{
            flags: %{end_headers: end_headers},
@@ -387,7 +391,7 @@ defmodule Ankh.Stream do
        ) do
     recv_hbf =
       if end_headers do
-        headers = process_recv_headers([hbf | recv_hbf], state)
+        headers = process_recv_headers([hbf | recv_hbf], recv_table)
         Process.send(controlling_process, {:ankh, recv_hbf_type, id, headers, recv_hbf_es}, [])
         []
       else
@@ -426,7 +430,8 @@ defmodule Ankh.Stream do
            state: :half_closed_local,
            controlling_process: controlling_process,
            recv_hbf: recv_hbf,
-           recv_hbf_es: recv_hbf_es
+           recv_hbf_es: recv_hbf_es,
+           recv_table: recv_table
          } = state,
          %Headers{
            flags: %{end_headers: end_headers, end_stream: end_stream},
@@ -437,7 +442,7 @@ defmodule Ankh.Stream do
 
     recv_hbf =
       if end_headers do
-        headers = process_recv_headers([hbf | recv_hbf], state)
+        headers = process_recv_headers([hbf | recv_hbf], recv_table)
 
         Process.send(
           controlling_process,
@@ -494,7 +499,8 @@ defmodule Ankh.Stream do
            controlling_process: controlling_process,
            recv_hbf: recv_hbf,
            recv_hbf_type: recv_hbf_type,
-           recv_hbf_es: recv_hbf_es
+           recv_hbf_es: recv_hbf_es,
+           recv_table: recv_table
          } = state,
          %Continuation{
            flags: %{end_headers: end_headers},
@@ -503,7 +509,7 @@ defmodule Ankh.Stream do
        ) do
     recv_hbf =
       if end_headers do
-        headers = process_recv_headers([hbf | recv_hbf], state)
+        headers = process_recv_headers([hbf | recv_hbf], recv_table)
 
         Process.send(
           controlling_process,
@@ -674,9 +680,13 @@ defmodule Ankh.Stream do
     {:ok, state}
   end
 
-  defp really_send_frame(%{connection: connection, max_frame_size: max_frame_size} = state, frame) do
+  defp really_send_frame(
+         %{connection: connection, send_table: send_table, max_frame_size: max_frame_size} =
+           state,
+         frame
+       ) do
     frame
-    |> process_send_headers(state)
+    |> process_send_headers(send_table)
     |> Splittable.split(max_frame_size)
     |> Enum.reduce_while({:ok, nil}, fn frame, _ ->
       with :ok <- Connection.send(connection, Frame.encode!(frame)) do
@@ -706,20 +716,18 @@ defmodule Ankh.Stream do
          do: state
   end
 
-  defp process_recv_headers([<<>>], _state), do: []
+  defp process_recv_headers([<<>>], _recv_table), do: []
 
-  defp process_recv_headers(hbf, %{recv_table: recv_table}) do
+  defp process_recv_headers(hbf, recv_table) do
     hbf
     |> Enum.reverse()
     |> Enum.join()
     |> HPack.decode(recv_table)
   end
 
-  defp process_send_headers(%{payload: %{hbf: headers} = payload} = frame, %{
-         send_table: send_table
-       }) do
+  defp process_send_headers(%{payload: %{hbf: headers} = payload} = frame, send_table) do
     %{frame | payload: %{payload | hbf: HPack.encode(headers, send_table)}}
   end
 
-  defp process_send_headers(frame, _state), do: frame
+  defp process_send_headers(frame, _send_table), do: frame
 end
