@@ -4,8 +4,8 @@ defmodule Ankh.Connection.Receiver do
 
   require Logger
 
-  alias Ankh.{Connection, Frame, Stream}
-  alias Ankh.Frame.{Error, GoAway, Ping, Settings, WindowUpdate}
+  alias Ankh.{Connection, Error, Frame, Stream}
+  alias Ankh.Frame.{GoAway, Ping, Settings, WindowUpdate}
 
   @type receiver :: GenServer.server()
 

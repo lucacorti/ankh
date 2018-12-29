@@ -1,4 +1,4 @@
-defmodule Ankh.Frame.Error do
+defmodule Ankh.Error do
   @moduledoc """
   HTTP/2 Error encoding and decoding
   """

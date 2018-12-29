@@ -25,7 +25,7 @@ defmodule Ankh.Connection do
   use GenServer
 
   alias Ankh.Connection.Receiver
-  alias Ankh.{Frame, Stream}
+  alias Ankh.{Error, Frame, Stream}
   alias Ankh.Frame.{GoAway, Settings}
   alias HPack.Table
 
@@ -178,7 +178,7 @@ defmodule Ankh.Connection do
 
   Before closing the TLS connection a GOAWAY frame is sent to the peer.
   """
-  @spec error(connection, atom) :: :ok | {:error, term}
+  @spec error(connection, Error.t) :: :ok | {:error, term}
   def error(connection, error), do: GenServer.call(connection, {:error, error})
 
   def handle_call(

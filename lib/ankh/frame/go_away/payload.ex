@@ -6,7 +6,7 @@ defmodule Ankh.Frame.GoAway.Payload do
 end
 
 defimpl Ankh.Frame.Encodable, for: Ankh.Frame.GoAway.Payload do
-  alias Ankh.Frame.Error
+  alias Ankh.Error
 
   def decode!(payload, <<_::1, lsid::31, error::32>>, _) do
     %{payload | last_stream_id: lsid, error_code: Error.decode!(error)}
