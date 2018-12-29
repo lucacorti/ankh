@@ -468,6 +468,10 @@ defmodule Ankh.Stream do
     {:ok, %{state | state: :closed}}
   end
 
+  defp recv_frame(%{state: :open, recv_hbf_type: recv_hbf_type}, _)
+  when not is_nil(recv_hbf_type),
+    do: {:error, :protocol_error}
+
   defp recv_frame(%{state: :open} = state, _), do: {:ok, state}
 
   # HALF CLOSED LOCAL
