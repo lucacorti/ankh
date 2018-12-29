@@ -68,14 +68,14 @@ defmodule Ankh.Frame do
   @spec decode!(t, binary, options) :: t
   def decode!(frame, data, options \\ [])
 
-  def decode!(frame, <<0::24, _type::8, flags::binary-size(1), 0::1, id::31>>, options) do
+  def decode!(frame, <<0::24, _type::8, flags::binary-size(1), _reserved::1, id::31>>, options) do
     flags = Encodable.decode!(frame.flags, flags, options)
     %{frame | stream_id: id, flags: flags, payload: nil}
   end
 
   def decode!(
         frame,
-        <<length::24, _type::8, flags::binary-size(1), 0::1, id::31, payload::binary>>,
+        <<length::24, _type::8, flags::binary-size(1), _reserved::1, id::31, payload::binary>>,
         options
       ) do
     flags = Encodable.decode!(frame.flags, flags, options)
