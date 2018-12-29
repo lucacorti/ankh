@@ -249,7 +249,7 @@ defmodule Ankh.Stream do
        state
        | state: stream_state,
          recv_hbf_type: :headers,
-         recv_hbf_es: recv_hbf_es,
+         recv_hbf_es: end_stream,
          recv_hbf: recv_hbf
      }}
   end
@@ -320,7 +320,7 @@ defmodule Ankh.Stream do
        state
        | state: stream_state,
          recv_hbf_type: :headers,
-         recv_hbf_es: recv_hbf_es,
+         recv_hbf_es: end_stream,
          recv_hbf: recv_hbf
      }}
   end
@@ -360,7 +360,7 @@ defmodule Ankh.Stream do
        state
        | state: stream_state,
          recv_hbf_type: :push_promise,
-         recv_hbf_es: recv_hbf_es,
+         recv_hbf_es: end_stream,
          recv_hbf: recv_hbf
      }}
   end
@@ -449,7 +449,7 @@ defmodule Ankh.Stream do
        state
        | state: stream_state,
          recv_hbf_type: :headers,
-         recv_hbf_es: recv_hbf_es,
+         recv_hbf_es: end_stream,
          recv_hbf: recv_hbf
      }}
   end
@@ -480,6 +480,32 @@ defmodule Ankh.Stream do
   defp recv_frame(%{state: :half_closed_local} = state, _), do: {:ok, state}
 
   # HALF CLOSED REMOTE
+
+  defp recv_frame(
+         %{
+           id: id,
+           state: :half_closed_remote,
+           controlling_process: controlling_process,
+           recv_hbf: recv_hbf,
+           recv_hbf_type: recv_hbf_type,
+           recv_hbf_es: recv_hbf_es
+         } = state,
+         %Continuation{
+           flags: %{end_headers: end_headers},
+           payload: %{hbf: hbf}
+         }
+       ) do
+    recv_hbf =
+      if end_headers do
+        headers = process_recv_headers([hbf | recv_hbf], state)
+        Process.send(controlling_process, {:ankh, recv_hbf_type, id, headers, recv_hbf_es} |> IO.inspect, [])
+        []
+      else
+        [hbf | recv_hbf]
+      end
+
+    {:ok, %{state | recv_hbf_es: recv_hbf_es, recv_hbf: recv_hbf}}
+  end
 
   defp recv_frame(%{state: :half_closed_remote} = state, %Priority{}), do: {:ok, state}
 
