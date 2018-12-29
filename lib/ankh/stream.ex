@@ -133,13 +133,17 @@ defmodule Ankh.Stream do
   end
 
   def handle_call({:recv_raw, type, data}, from, %{connection: connection} = state) do
-    frame =
-      connection
-      |> Frame.Registry.frame_for_type(type)
-      |> struct()
-      |> Frame.decode!(data)
+    case Frame.Registry.frame_for_type(connection, type) do
+      nil ->
+        {:ok, state}
 
-    handle_call({:recv, frame}, from, state)
+      type ->
+        frame = type
+          |> struct()
+          |> Frame.decode!(data)
+
+        handle_call({:recv, frame}, from, state)
+    end
   end
 
   def handle_call(
