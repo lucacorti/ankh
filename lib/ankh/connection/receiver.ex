@@ -45,6 +45,7 @@ defmodule Ankh.Connection.Receiver do
         else
           nil ->
             {:cont, {:noreply, %{state | buffer: rest}}}
+
           error ->
             Process.send(controlling_process, {:ankh, :error, 0, error}, [])
             {:halt, {:stop, error, %{state | buffer: rest}}}

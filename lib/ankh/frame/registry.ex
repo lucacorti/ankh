@@ -39,6 +39,7 @@ defmodule Ankh.Frame.Registry do
     case Registry.meta(__MODULE__, {connection, type}) do
       {:ok, type} ->
         type
+
       :error ->
         nil
     end

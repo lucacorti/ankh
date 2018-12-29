@@ -255,7 +255,11 @@ defmodule Ankh.Connection do
     end
   end
 
-  def handle_call({:error, error}, _from, %{last_stream_id: last_stream_id, socket: socket} = state) do
+  def handle_call(
+        {:error, error},
+        _from,
+        %{last_stream_id: last_stream_id, socket: socket} = state
+      ) do
     :ssl.send(
       socket,
       Frame.encode!(%GoAway{

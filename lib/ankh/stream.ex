@@ -138,7 +138,8 @@ defmodule Ankh.Stream do
         {:ok, state}
 
       type ->
-        frame = type
+        frame =
+          type
           |> struct()
           |> Frame.decode!(data)
 
@@ -211,7 +212,7 @@ defmodule Ankh.Stream do
   end
 
   defp recv_frame(%{max_frame_size: max_frame_size}, %{length: length})
-    when length > max_frame_size do
+       when length > max_frame_size do
     {:error, :frame_size_error}
   end
 
@@ -503,7 +504,13 @@ defmodule Ankh.Stream do
     recv_hbf =
       if end_headers do
         headers = process_recv_headers([hbf | recv_hbf], state)
-        Process.send(controlling_process, {:ankh, recv_hbf_type, id, headers, recv_hbf_es} |> IO.inspect, [])
+
+        Process.send(
+          controlling_process,
+          {:ankh, recv_hbf_type, id, headers, recv_hbf_es} |> IO.inspect(),
+          []
+        )
+
         []
       else
         [hbf | recv_hbf]
