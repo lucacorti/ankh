@@ -6,8 +6,8 @@ defmodule Ankh.Frame.Ping.Flags do
 end
 
 defimpl Ankh.Frame.Encodable, for: Ankh.Frame.Ping.Flags do
-  def decode!(flags, <<_::7, 1::1>>, _), do: {:ok, %{flags | ack: true}}
-  def decode!(flags, <<_::7, 0::1>>, _), do: {:ok, %{flags | ack: false}}
+  def decode(flags, <<_::7, 1::1>>, _), do: {:ok, %{flags | ack: true}}
+  def decode(flags, <<_::7, 0::1>>, _), do: {:ok, %{flags | ack: false}}
   def decode(_flags, _data, _options), do: {:error, :decode_error}
 
   def encode(%{ack: true}, _), do: {:ok, <<0::7, 1::1>>}
