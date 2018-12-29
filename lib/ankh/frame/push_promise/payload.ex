@@ -7,7 +7,13 @@ end
 
 defimpl Ankh.Frame.Encodable, for: Ankh.Frame.PushPromise.Payload do
   def decode(payload, <<pl::8, _::1, psi::31, data::binary>>, flags: %{padded: true}) do
-    {:ok, %{payload | pad_length: pl, promised_stream_id: psi, hbf: binary_part(data, 0, byte_size(data) - pl)}}
+    {:ok,
+     %{
+       payload
+       | pad_length: pl,
+         promised_stream_id: psi,
+         hbf: binary_part(data, 0, byte_size(data) - pl)
+     }}
   end
 
   def decode(payload, <<_::8, _::1, psi::31, hbf::binary>>, flags: %{padded: false}) do

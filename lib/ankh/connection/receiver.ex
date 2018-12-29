@@ -130,7 +130,7 @@ defmodule Ankh.Connection.Receiver do
 
     with {:ok, data} <- Frame.encode(ping),
          :ok <- Connection.send(connection, data),
-      do: :ok
+         do: :ok
   end
 
   defp recv_connection_frame(

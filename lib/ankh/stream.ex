@@ -139,7 +139,7 @@ defmodule Ankh.Stream do
 
       type ->
         with {:ok, frame} <- Frame.decode(struct(type), data),
-          do: handle_call({:recv, frame}, from, state)
+             do: handle_call({:recv, frame}, from, state)
     end
   end
 

@@ -47,20 +47,21 @@ defimpl Ankh.Frame.Encodable, for: Ankh.Frame.Settings.Payload do
         },
         _
       ) do
-    {:ok, [
-      <<@header_table_size::16>>,
-      <<hts::32>>,
-      <<@enable_push::16>>,
-      <<1::32>>,
-      <<@max_concurrent_streams::16>>,
-      <<mcs::32>>,
-      <<@initial_window_size::16>>,
-      <<iws::32>>,
-      <<@max_frame_size::16>>,
-      <<mfs::32>>,
-      <<@max_header_list_size::16>>,
-      <<mhls::32>>
-    ]}
+    {:ok,
+     [
+       <<@header_table_size::16>>,
+       <<hts::32>>,
+       <<@enable_push::16>>,
+       <<1::32>>,
+       <<@max_concurrent_streams::16>>,
+       <<mcs::32>>,
+       <<@initial_window_size::16>>,
+       <<iws::32>>,
+       <<@max_frame_size::16>>,
+       <<mfs::32>>,
+       <<@max_header_list_size::16>>,
+       <<mhls::32>>
+     ]}
   end
 
   def encode(
@@ -74,20 +75,21 @@ defimpl Ankh.Frame.Encodable, for: Ankh.Frame.Settings.Payload do
         },
         _
       ) do
-    {:ok, [
-      <<@header_table_size::16>>,
-      <<hts::32>>,
-      <<@enable_push::16>>,
-      <<0::32>>,
-      <<@max_concurrent_streams::16>>,
-      <<mcs::32>>,
-      <<@initial_window_size::16>>,
-      <<iws::32>>,
-      <<@max_frame_size::16>>,
-      <<mfs::32>>,
-      <<@max_header_list_size::16>>,
-      <<mhls::32>>
-    ]}
+    {:ok,
+     [
+       <<@header_table_size::16>>,
+       <<hts::32>>,
+       <<@enable_push::16>>,
+       <<0::32>>,
+       <<@max_concurrent_streams::16>>,
+       <<mcs::32>>,
+       <<@initial_window_size::16>>,
+       <<iws::32>>,
+       <<@max_frame_size::16>>,
+       <<mfs::32>>,
+       <<@max_header_list_size::16>>,
+       <<mhls::32>>
+     ]}
   end
 
   def encode(_payload, _options), do: {:error, :encode_error}

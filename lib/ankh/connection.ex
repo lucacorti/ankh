@@ -262,12 +262,14 @@ defmodule Ankh.Connection do
         _from,
         %{last_stream_id: last_stream_id, socket: socket} = state
       ) do
-    {:ok, data} = Frame.encode(%GoAway{
-      payload: %GoAway.Payload{
-        last_stream_id: last_stream_id,
-        error_code: error
-      }
-    })
+    {:ok, data} =
+      Frame.encode(%GoAway{
+        payload: %GoAway.Payload{
+          last_stream_id: last_stream_id,
+          error_code: error
+        }
+      })
+
     :ssl.send(socket, data)
     :ssl.close(socket)
     {:stop, :normal, :ok, %{state | socket: nil}}

@@ -77,7 +77,7 @@ defmodule Ankh.Frame do
 
   def decode(frame, <<0::24, _type::8, flags::binary-size(1), _reserved::1, id::31>>, options) do
     with {:ok, flags} <- Encodable.decode(frame.flags, flags, options),
-      do: {:ok, %{frame | stream_id: id, flags: flags, payload: nil}}
+         do: {:ok, %{frame | stream_id: id, flags: flags, payload: nil}}
   end
 
   def decode(
@@ -85,10 +85,10 @@ defmodule Ankh.Frame do
         <<length::24, _type::8, flags::binary-size(1), _reserved::1, id::31, payload::binary>>,
         options
       ) do
-   with {:ok, flags} <- Encodable.decode(frame.flags, flags, options),
-        payload_options <- Keyword.put(options, :flags, flags),
-        {:ok, payload} <- Encodable.decode(frame.payload, payload, payload_options),
-      do: {:ok, %{frame | length: length, stream_id: id, flags: flags, payload: payload}}
+    with {:ok, flags} <- Encodable.decode(frame.flags, flags, options),
+         payload_options <- Keyword.put(options, :flags, flags),
+         {:ok, payload} <- Encodable.decode(frame.payload, payload, payload_options),
+         do: {:ok, %{frame | length: length, stream_id: id, flags: flags, payload: payload}}
   end
 
   @doc """
@@ -103,21 +103,22 @@ defmodule Ankh.Frame do
 
   def encode(%{type: type, flags: flags, stream_id: id, payload: nil}, options) do
     with {:ok, flags} <- Encodable.encode(flags, options),
-      do: {:ok, [<<0::24, type::8, flags::binary-size(1), 0::1, id::31>>]}
+         do: {:ok, [<<0::24, type::8, flags::binary-size(1), 0::1, id::31>>]}
   end
 
   def encode(%{type: type, flags: nil, stream_id: id, payload: payload}, options) do
     with {:ok, payload} <- Encodable.encode(payload, options),
          length <- IO.iodata_length(payload),
-      do: {:ok, [<<length::24, type::8, 0::8, 0::1, id::31>> | payload]}
+         do: {:ok, [<<length::24, type::8, 0::8, 0::1, id::31>> | payload]}
   end
 
   def encode(%{type: type, stream_id: id, flags: flags, payload: payload}, options) do
     payload_options = Keyword.put(options, :flags, flags)
+
     with {:ok, payload} <- Encodable.encode(payload, payload_options),
          length <- IO.iodata_length(payload),
          {:ok, flags} <- Encodable.encode(flags, options),
-      do: {:ok, [<<length::24, type::8, flags::binary-size(1), 0::1, id::31>> | payload]}
+         do: {:ok, [<<length::24, type::8, flags::binary-size(1), 0::1, id::31>> | payload]}
   end
 
   @doc """

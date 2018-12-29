@@ -17,14 +17,15 @@ defimpl Ankh.Frame.Encodable, for: Ankh.Frame.Headers.Payload do
         <<pl::8, 1::1, sd::31, wh::8, data::binary>>,
         flags: %{padded: true, priority: true}
       ) do
-    {:ok, %{
-      payload
-      | pad_length: pl,
-        exclusive: true,
-        weight: wh,
-        stream_dependency: sd,
-        hbf: binary_part(data, 0, byte_size(data) - pl)
-    }}
+    {:ok,
+     %{
+       payload
+       | pad_length: pl,
+         exclusive: true,
+         weight: wh,
+         stream_dependency: sd,
+         hbf: binary_part(data, 0, byte_size(data) - pl)
+     }}
   end
 
   def decode(
@@ -32,14 +33,15 @@ defimpl Ankh.Frame.Encodable, for: Ankh.Frame.Headers.Payload do
         <<pl::8, 0::1, sd::31, wh::8, data::binary>>,
         flags: %{padded: true, priority: true}
       ) do
-    {:ok, %{
-      payload
-      | pad_length: pl,
-        exclusive: false,
-        weight: wh,
-        stream_dependency: sd,
-        hbf: binary_part(data, 0, byte_size(data) - pl)
-    }}
+    {:ok,
+     %{
+       payload
+       | pad_length: pl,
+         exclusive: false,
+         weight: wh,
+         stream_dependency: sd,
+         hbf: binary_part(data, 0, byte_size(data) - pl)
+     }}
   end
 
   def decode(payload, <<pl::8, data::binary>>, flags: %{padded: true, priority: false}) do
