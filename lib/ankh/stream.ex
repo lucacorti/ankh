@@ -216,6 +216,10 @@ defmodule Ankh.Stream do
     {:error, :frame_size_error}
   end
 
+  defp recv_frame(_stream, %WindowUpdate{payload: %{window_size_increment: 0}}) do
+    {:error, :protocol_error}
+  end
+
   # IDLE
 
   defp recv_frame(%{state: :idle} = state, %Priority{}), do: {:ok, state}
