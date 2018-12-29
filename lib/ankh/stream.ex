@@ -217,10 +217,6 @@ defmodule Ankh.Stream do
     {:error, :protocol_error}
   end
 
-  defp recv_frame(_stream, %Ping{}) do
-    {:error, :protocol_error}
-  end
-
   # IDLE
 
   defp recv_frame(%{state: :idle} = state, %Priority{}), do: {:ok, state}
@@ -624,8 +620,6 @@ defmodule Ankh.Stream do
   end
 
   defp recv_frame(%{state: :closed}, _), do: {:error, :stream_closed}
-
-  # Stop on protocol error
 
   defp recv_frame(%{}, _), do: {:error, :protocol_error}
 
