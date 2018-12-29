@@ -38,11 +38,13 @@ defmodule Ankh.Connection.Receiver do
     |> Frame.stream_frames()
     |> Enum.reduce_while({:noreply, %{state | buffer: buffer <> data}}, fn
       {rest, {_length, type, 0, data}}, {:noreply, state} ->
-        with frame <- Frame.Registry.frame_for_type(connection, type),
-             frame <- Frame.decode!(struct(frame), data),
+        with type when not is_nil(type) <- Frame.Registry.frame_for_type(connection, type),
+             frame <- Frame.decode!(struct(type), data),
              :ok <- recv_connection_frame(frame, state) do
           {:cont, {:noreply, %{state | buffer: rest}}}
         else
+          nil ->
+            {:cont, {:noreply, %{state | buffer: rest}}}
           error ->
             Process.send(controlling_process, {:ankh, :error, 0, error}, [])
             {:halt, {:stop, error, %{state | buffer: rest}}}

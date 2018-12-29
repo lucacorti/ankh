@@ -36,7 +36,12 @@ defmodule Ankh.Frame.Registry do
   def frame_for_type(_, 0x9), do: Continuation
 
   def frame_for_type(connection, type) when is_integer(type) and type > 9 and type < 256 do
-    Agent.get({:via, Registry, {__MODULE__, connection}}, &Map.get(&1, type))
+    case Registry.meta(__MODULE__, {connection, type}) do
+      {:ok, type} ->
+        type
+      :error ->
+        nil
+    end
   end
 
   @doc """
@@ -44,9 +49,9 @@ defmodule Ankh.Frame.Registry do
 
   Codes 0-9 are reserved for standard frame types.
   """
-  @spec register(URI.t(), integer, Frame.t()) :: :ok
+  @spec register(Connection.connection(), integer, Frame.t()) :: :ok
   def register(connection, type, frame)
       when is_integer(type) and type > 9 and type < 256 do
-    Agent.update({:via, Registry, {__MODULE__, connection}}, &Map.put(&1, type, frame))
+    Registry.put_meta(__MODULE__, {connection, type}, frame)
   end
 end
