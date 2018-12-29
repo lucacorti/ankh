@@ -72,7 +72,7 @@ defmodule Ankh.Connection.Receiver do
   end
 
   defp recv_connection_frame(
-         %Settings{stream_id: 0, flags: %{ack: false}, payload: payload} = frame,
+         %Settings{flags: %{ack: false}, payload: payload} = frame,
          connection
        ) do
     Logger.debug("STREAM 0 RECEIVED SETTINGS")
@@ -91,7 +91,7 @@ defmodule Ankh.Connection.Receiver do
   end
 
   defp recv_connection_frame(
-         %Settings{stream_id: 0, length: 0, flags: %{ack: true}},
+         %Settings{length: 0, flags: %{ack: true}},
          _connection
        ) do
     Logger.debug("STREAM 0 RECEIVED SETTINGS ACK")
@@ -99,7 +99,7 @@ defmodule Ankh.Connection.Receiver do
   end
 
   defp recv_connection_frame(
-         %Settings{stream_id: 0, flags: %{ack: true}},
+         %Settings{flags: %{ack: true}},
          _connection
        ) do
     Logger.debug("STREAM 0 ERROR RECEIVED SETTINGS ACK WITH PAYLOAD")
@@ -107,7 +107,7 @@ defmodule Ankh.Connection.Receiver do
   end
 
   defp recv_connection_frame(
-         %Ping{stream_id: 0, length: 8, flags: %{ack: true}},
+         %Ping{length: 8, flags: %{ack: true}},
          _connection
        ) do
     Logger.debug("STREAM 0 RECEIVED PING ACK")
@@ -115,7 +115,7 @@ defmodule Ankh.Connection.Receiver do
   end
 
   defp recv_connection_frame(
-         %Ping{stream_id: 0, length: 8, flags: %{ack: false} = flags} = frame,
+         %Ping{length: 8, flags: %{ack: false} = flags} = frame,
          connection
        ) do
     Logger.debug("STREAM 0 RECEIVED PING")
@@ -134,7 +134,15 @@ defmodule Ankh.Connection.Receiver do
   end
 
   defp recv_connection_frame(
-         %WindowUpdate{stream_id: 0, payload: %{window_size_increment: 0}},
+         %Ping{length: length},
+         _connection
+       )
+       when length != 8 do
+    {:error, :frame_size_error}
+  end
+
+  defp recv_connection_frame(
+         %WindowUpdate{payload: %{window_size_increment: 0}},
          _connection
        ) do
     Logger.debug("STREAM 0 RECEIVED WINDOW_UPDATE with window_size increment 0")
@@ -142,14 +150,14 @@ defmodule Ankh.Connection.Receiver do
   end
 
   defp recv_connection_frame(
-         %WindowUpdate{stream_id: 0, payload: %{window_size_increment: increment}},
+         %WindowUpdate{payload: %{window_size_increment: increment}},
          connection
        ) do
     with :ok <- Connection.window_update(connection, increment),
          do: :ok
   end
 
-  defp recv_connection_frame(%GoAway{stream_id: 0, payload: %{error_code: code}}, _connection) do
+  defp recv_connection_frame(%GoAway{payload: %{error_code: code}}, _connection) do
     Logger.debug(fn ->
       "STREAM 0 RECEIVED GO_AWAY #{inspect(code)}: #{Error.format(code)}"
     end)
