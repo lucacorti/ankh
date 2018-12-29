@@ -48,8 +48,10 @@ defmodule Ankh.Frame do
                 flags: Encodable.t() | nil,
                 payload: Encodable.t() | nil
               }
+
         flags = if flags, do: struct(flags), else: nil
         payload = if payload, do: struct(payload), else: nil
+
         defstruct length: 0,
                   type: type,
                   stream_id: 0,

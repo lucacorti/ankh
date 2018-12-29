@@ -77,16 +77,17 @@ defmodule Ankh.Connection.Receiver do
        ) do
     Logger.debug("STREAM 0 RECEIVED SETTINGS")
 
-    settings = Frame.encode!(%Settings{
-      frame
-      | flags: %Settings.Flags{ack: true},
-        payload: nil,
-        length: 0
-    })
+    settings =
+      Frame.encode!(%Settings{
+        frame
+        | flags: %Settings.Flags{ack: true},
+          payload: nil,
+          length: 0
+      })
 
     with :ok <- Connection.send(connection, settings),
          :ok <- Connection.send_settings(connection, payload),
-      do: :ok
+         do: :ok
   end
 
   defp recv_connection_frame(
@@ -119,16 +120,17 @@ defmodule Ankh.Connection.Receiver do
        ) do
     Logger.debug("STREAM 0 RECEIVED PING")
 
-    ping = Frame.encode!(%Ping{
-      frame
-      | flags: %{
-          flags
-          | ack: true
-        }
-    })
+    ping =
+      Frame.encode!(%Ping{
+        frame
+        | flags: %{
+            flags
+            | ack: true
+          }
+      })
 
     with :ok <- Connection.send(connection, ping),
-      do: :ok
+         do: :ok
   end
 
   defp recv_connection_frame(
@@ -144,7 +146,7 @@ defmodule Ankh.Connection.Receiver do
          %{connection: connection}
        ) do
     with :ok <- Connection.window_update(connection, increment),
-      do: :ok
+         do: :ok
   end
 
   defp recv_connection_frame(%GoAway{stream_id: 0, payload: %{error_code: code}}, _state) do

@@ -178,7 +178,7 @@ defmodule Ankh.Connection do
 
   Before closing the TLS connection a GOAWAY frame is sent to the peer.
   """
-  @spec error(connection, Error.t) :: :ok | {:error, term}
+  @spec error(connection, Error.t()) :: :ok | {:error, term}
   def error(connection, error), do: GenServer.call(connection, {:error, error})
 
   def handle_call(

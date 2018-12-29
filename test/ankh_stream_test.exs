@@ -122,7 +122,10 @@ defmodule AnkhTest.Stream do
 
     assert {:ok, :reserved_local} ==
              stream
-             |> Stream.recv(%WindowUpdate{stream_id: @stream_id, payload: %WindowUpdate.Payload{window_size_increment: 1}})
+             |> Stream.recv(%WindowUpdate{
+               stream_id: @stream_id,
+               payload: %WindowUpdate.Payload{window_size_increment: 1}
+             })
   end
 
   test "stream reserved_local protocol_error on other frame type", %{stream: stream} do
@@ -263,7 +266,9 @@ defmodule AnkhTest.Stream do
 
     assert {:ok, :half_closed_local} ==
              stream
-             |> Stream.send(%WindowUpdate{payload: %WindowUpdate.Payload{window_size_increment: 1}})
+             |> Stream.send(%WindowUpdate{
+               payload: %WindowUpdate.Payload{window_size_increment: 1}
+             })
   end
 
   test "stream half_closed_local can send priority", %{stream: stream} do
@@ -327,7 +332,10 @@ defmodule AnkhTest.Stream do
 
     assert {:ok, :half_closed_remote} ==
              stream
-             |> Stream.recv(%WindowUpdate{stream_id: @stream_id, payload: %WindowUpdate.Payload{window_size_increment: 1}})
+             |> Stream.recv(%WindowUpdate{
+               stream_id: @stream_id,
+               payload: %WindowUpdate.Payload{window_size_increment: 1}
+             })
   end
 
   test "stream half_closed_remote can receive priority", %{stream: stream} do
@@ -443,7 +451,10 @@ defmodule AnkhTest.Stream do
 
     assert {:ok, :closed} ==
              stream
-             |> Stream.recv(%WindowUpdate{stream_id: @stream_id, payload: %WindowUpdate.Payload{window_size_increment: 1}})
+             |> Stream.recv(%WindowUpdate{
+               stream_id: @stream_id,
+               payload: %WindowUpdate.Payload{window_size_increment: 1}
+             })
   end
 
   test "stream closed can receive rst_stream", %{stream: stream} do
