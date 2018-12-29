@@ -126,7 +126,7 @@ defmodule Ankh.Frame do
   @spec stream_frames(iodata) :: Enumerable.t()
   def stream_frames(data) do
     Stream.unfold(data, fn
-      <<length::24, type::8, _flags::8, 0::1, id::31, rest::binary>> = data
+      <<length::24, type::8, _flags::binary-size(1), 0::1, id::31, rest::binary>> = data
       when byte_size(rest) >= length ->
         frame_size = @frame_header_size + length
         frame_data = binary_part(data, 0, frame_size)
