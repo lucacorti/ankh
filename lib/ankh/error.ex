@@ -66,6 +66,7 @@ defmodule Ankh.Error do
   def decode!(@enache_your_calm), do: :enache_your_calm
   def decode!(@inadequate_security), do: :inadequate_security
   def decode!(@http_1_1_required), do: :http_1_1_required
+  def decode!(_), do: :protocol_error
 
   def encode!(:no_error), do: <<@no_error::32>>
   def encode!(:protocol_error), do: <<@protocol_error::32>>
