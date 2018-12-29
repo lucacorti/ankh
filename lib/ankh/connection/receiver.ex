@@ -39,7 +39,7 @@ defmodule Ankh.Connection.Receiver do
     |> Enum.reduce_while({:noreply, %{state | buffer: buffer <> data}}, fn
       {rest, {_length, type, 0, data}}, {:noreply, state} ->
         with type when not is_nil(type) <- Frame.Registry.frame_for_type(connection, type),
-             frame <- Frame.decode!(struct(type), data),
+             {:ok, frame} <- Frame.decode(struct(type), data),
              :ok <- recv_connection_frame(frame, state) do
           {:cont, {:noreply, %{state | buffer: rest}}}
         else
@@ -77,15 +77,15 @@ defmodule Ankh.Connection.Receiver do
        ) do
     Logger.debug("STREAM 0 RECEIVED SETTINGS")
 
-    settings =
-      Frame.encode!(%Settings{
-        frame
-        | flags: %Settings.Flags{ack: true},
-          payload: nil,
-          length: 0
-      })
+    settings = %Settings{
+      frame
+      | flags: %Settings.Flags{ack: true},
+        payload: nil,
+        length: 0
+    }
 
-    with :ok <- Connection.send(connection, settings),
+    with {:ok, data} <- Frame.encode(settings),
+         :ok <- Connection.send(connection, data),
          :ok <- Connection.send_settings(connection, payload),
          do: :ok
   end
@@ -120,17 +120,17 @@ defmodule Ankh.Connection.Receiver do
        ) do
     Logger.debug("STREAM 0 RECEIVED PING")
 
-    ping =
-      Frame.encode!(%Ping{
-        frame
-        | flags: %{
-            flags
-            | ack: true
-          }
-      })
+    ping = %Ping{
+      frame
+      | flags: %{
+          flags
+          | ack: true
+        }
+    }
 
-    with :ok <- Connection.send(connection, ping),
-         do: :ok
+    with {:ok, data} <- Frame.encode(ping),
+         :ok <- Connection.send(connection, data),
+      do: :ok
   end
 
   defp recv_connection_frame(

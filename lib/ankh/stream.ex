@@ -138,12 +138,8 @@ defmodule Ankh.Stream do
         {:ok, state}
 
       type ->
-        frame =
-          type
-          |> struct()
-          |> Frame.decode!(data)
-
-        handle_call({:recv, frame}, from, state)
+        with {:ok, frame} <- Frame.decode(struct(type), data),
+          do: handle_call({:recv, frame}, from, state)
     end
   end
 
@@ -693,7 +689,8 @@ defmodule Ankh.Stream do
     |> process_send_headers(send_table)
     |> Splittable.split(max_frame_size)
     |> Enum.reduce_while({:ok, nil}, fn frame, _ ->
-      with :ok <- Connection.send(connection, Frame.encode!(frame)) do
+      with {:ok, data} <- Frame.encode(frame),
+           :ok <- Connection.send(connection, data) do
         Logger.debug(fn ->
           "SENT #{inspect(frame)}"
         end)

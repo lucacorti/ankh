@@ -196,7 +196,8 @@ defmodule Ankh.Connection do
     with {:ok, ^preface} <- :ssl.recv(socket, 24),
          :ok <- :ssl.controlling_process(socket, receiver),
          :ok <- :ssl.setopts(socket, active: :once),
-         :ok <- :ssl.send(socket, Frame.encode!(%Settings{payload: send_settings})) do
+         {:ok, data} <- Frame.encode(%Settings{payload: send_settings}),
+         :ok <- :ssl.send(socket, data) do
       {:reply, :ok, %{state | last_stream_id: 2, socket: socket}}
     else
       {:error, reason} ->
@@ -227,7 +228,8 @@ defmodule Ankh.Connection do
          :ok <- :ssl.controlling_process(socket, receiver),
          :ok <- :ssl.setopts(socket, active: :once),
          :ok <- :ssl.send(socket, @preface),
-         :ok <- :ssl.send(socket, Frame.encode!(%Settings{payload: recv_settings})) do
+         {:ok, data} <- Frame.encode(%Settings{payload: recv_settings}),
+         :ok <- :ssl.send(socket, data) do
       {:reply, :ok, %{state | last_stream_id: 1, socket: socket}}
     else
       {:error, reason} ->
@@ -260,16 +262,13 @@ defmodule Ankh.Connection do
         _from,
         %{last_stream_id: last_stream_id, socket: socket} = state
       ) do
-    :ssl.send(
-      socket,
-      Frame.encode!(%GoAway{
-        payload: %GoAway.Payload{
-          last_stream_id: last_stream_id,
-          error_code: error
-        }
-      })
-    )
-
+    {:ok, data} = Frame.encode(%GoAway{
+      payload: %GoAway.Payload{
+        last_stream_id: last_stream_id,
+        error_code: error
+      }
+    })
+    :ssl.send(socket, data)
     :ssl.close(socket)
     {:stop, :normal, :ok, %{state | socket: nil}}
   end
