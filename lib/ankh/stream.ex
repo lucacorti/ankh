@@ -149,11 +149,11 @@ defmodule Ankh.Stream do
         %{id: id, state: old_stream_state, controlling_process: controlling_process} = state
       ) do
     case recv_frame(state, frame) do
-      {:ok, %{state: new_stream_state} = state} ->
+      {:ok, %{state: new_stream_state, recv_hbf_type: recv_hbf_type} = state} ->
         Logger.debug(fn ->
           "RECEIVED #{inspect(frame)}\nSTREAM #{inspect(old_stream_state)} -> #{
             inspect(new_stream_state)
-          }"
+          } receiving hbf: #{inspect recv_hbf_type}"
         end)
 
         {:reply, {:ok, new_stream_state}, state}
