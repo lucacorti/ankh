@@ -13,6 +13,7 @@ defmodule Ankh.Stream do
     Data,
     Continuation,
     Headers,
+    Ping,
     Priority,
     PushPromise,
     RstStream,
@@ -213,6 +214,10 @@ defmodule Ankh.Stream do
   end
 
   defp recv_frame(_stream, %WindowUpdate{payload: %{window_size_increment: 0}}) do
+    {:error, :protocol_error}
+  end
+
+  defp recv_frame(_stream, %Ping{}) do
     {:error, :protocol_error}
   end
 
