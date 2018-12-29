@@ -101,7 +101,7 @@ defmodule Ankh.Frame do
 
   def encode!(%{type: type, flags: flags, stream_id: id, payload: nil}, options) do
     flags = Encodable.encode!(flags, options)
-    [<<0::24, type::8>>, flags, <<0::1, id::31>>]
+    [<<0::24, type::8, flags::binary-size(1), 0::1, id::31>>]
   end
 
   def encode!(%{type: type, flags: nil, stream_id: id, payload: payload}, options) do
@@ -115,7 +115,7 @@ defmodule Ankh.Frame do
     payload = Encodable.encode!(payload, payload_options)
     length = IO.iodata_length(payload)
     flags = Encodable.encode!(flags, options)
-    [<<length::24, type::8>>, flags, <<0::1, id::31>> | payload]
+    [<<length::24, type::8, flags::binary-size(1), 0::1, id::31>> | payload]
   end
 
   @doc """
