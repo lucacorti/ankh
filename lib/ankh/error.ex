@@ -52,34 +52,35 @@ defmodule Ankh.Error do
   def format(:inadequate_security), do: "Negotiated TLS parameters not acceptable"
   def format(:http_1_1_required), do: "Use HTTP/1.1 for the request"
 
-  def decode!(@no_error), do: :no_error
-  def decode!(@protocol_error), do: :protocol_error
-  def decode!(@internal_error), do: :internal_error
-  def decode!(@flow_control_error), do: :flow_control_error
-  def decode!(@settings_timeout), do: :settings_timeout
-  def decode!(@stream_closed), do: :stream_closed
-  def decode!(@frame_size_error), do: :frame_size_error
-  def decode!(@refused_stream), do: :refused_stream
-  def decode!(@cancel), do: :cancel
-  def decode!(@compression_error), do: :compression_error
-  def decode!(@connect_error), do: :connect_error
-  def decode!(@enache_your_calm), do: :enache_your_calm
-  def decode!(@inadequate_security), do: :inadequate_security
-  def decode!(@http_1_1_required), do: :http_1_1_required
-  def decode!(_), do: :protocol_error
+  def decode(@no_error), do: :no_error
+  def decode(@protocol_error), do: :protocol_error
+  def decode(@internal_error), do: :internal_error
+  def decode(@flow_control_error), do: :flow_control_error
+  def decode(@settings_timeout), do: :settings_timeout
+  def decode(@stream_closed), do: :stream_closed
+  def decode(@frame_size_error), do: :frame_size_error
+  def decode(@refused_stream), do: :refused_stream
+  def decode(@cancel), do: :cancel
+  def decode(@compression_error), do: :compression_error
+  def decode(@connect_error), do: :connect_error
+  def decode(@enache_your_calm), do: :enache_your_calm
+  def decode(@inadequate_security), do: :inadequate_security
+  def decode(@http_1_1_required), do: :http_1_1_required
+  def decode(_), do: :protocol_error
 
-  def encode!(:no_error), do: <<@no_error::32>>
-  def encode!(:protocol_error), do: <<@protocol_error::32>>
-  def encode!(:internal_error), do: <<@internal_error::32>>
-  def encode!(:flow_control_error), do: <<@flow_control_error::32>>
-  def encode!(:settings_timeout), do: <<@settings_timeout::32>>
-  def encode!(:stream_closed), do: <<@stream_closed::32>>
-  def encode!(:frame_size_error), do: <<@frame_size_error::32>>
-  def encode!(:refused_stream), do: <<@refused_stream::32>>
-  def encode!(:cancel), do: <<@cancel::32>>
-  def encode!(:compression_error), do: <<@compression_error::32>>
-  def encode!(:connect_error), do: <<@connect_error::32>>
-  def encode!(:enache_your_calm), do: <<@enache_your_calm::32>>
-  def encode!(:inadequate_security), do: <<@inadequate_security::32>>
-  def encode!(:http_1_1_required), do: <<@http_1_1_required::32>>
+  def encode(:no_error), do: <<@no_error::32>>
+  def encode(:protocol_error), do: <<@protocol_error::32>>
+  def encode(:internal_error), do: <<@internal_error::32>>
+  def encode(:flow_control_error), do: <<@flow_control_error::32>>
+  def encode(:settings_timeout), do: <<@settings_timeout::32>>
+  def encode(:stream_closed), do: <<@stream_closed::32>>
+  def encode(:frame_size_error), do: <<@frame_size_error::32>>
+  def encode(:refused_stream), do: <<@refused_stream::32>>
+  def encode(:cancel), do: <<@cancel::32>>
+  def encode(:compression_error), do: <<@compression_error::32>>
+  def encode(:connect_error), do: <<@connect_error::32>>
+  def encode(:enache_your_calm), do: <<@enache_your_calm::32>>
+  def encode(:inadequate_security), do: <<@inadequate_security::32>>
+  def encode(:http_1_1_required), do: <<@http_1_1_required::32>>
+  def encode(_), do: <<@protocol_error::32>>
 end
