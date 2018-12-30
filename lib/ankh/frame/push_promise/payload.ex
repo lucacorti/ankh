@@ -2,7 +2,7 @@ defmodule Ankh.Frame.PushPromise.Payload do
   @moduledoc false
 
   @type t :: %__MODULE__{pad_length: integer, promised_stream_id: integer, hbf: binary}
-  defstruct pad_length: 0, promised_stream_id: 0, hbf: <<>>
+  defstruct pad_length: 0, promised_stream_id: 0, hbf: []
 end
 
 defimpl Ankh.Frame.Encodable, for: Ankh.Frame.PushPromise.Payload do

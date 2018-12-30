@@ -2,7 +2,7 @@ defmodule Ankh.Frame.Continuation.Payload do
   @moduledoc false
 
   @type t :: %__MODULE__{hbf: binary}
-  defstruct hbf: <<>>
+  defstruct hbf: []
 end
 
 defimpl Ankh.Frame.Encodable, for: Ankh.Frame.Continuation.Payload do

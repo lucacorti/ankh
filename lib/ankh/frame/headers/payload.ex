@@ -8,7 +8,7 @@ defmodule Ankh.Frame.Headers.Payload do
           weight: integer,
           hbf: binary
         }
-  defstruct pad_length: 0, exclusive: false, stream_dependency: 0, weight: 0, hbf: <<>>
+  defstruct pad_length: 0, exclusive: false, stream_dependency: 0, weight: 0, hbf: []
 end
 
 defimpl Ankh.Frame.Encodable, for: Ankh.Frame.Headers.Payload do
