@@ -80,7 +80,7 @@ defmodule Ankh.Connection.Receiver do
          %Settings{flags: %{ack: false}, payload: payload} = frame,
          connection
        ) do
-    Logger.debug("STREAM 0 RECEIVED SETTINGS")
+    Logger.debug("STREAM 0 RECEIVED SETTINGS #{inspect payload}")
 
     settings = %Settings{
       frame
@@ -168,5 +168,13 @@ defmodule Ankh.Connection.Receiver do
     end)
 
     {:error, code}
+  end
+
+  defp recv_connection_frame(frame, _connection) do
+    Logger.debug(fn ->
+      "STREAM 0 RECEIVED ILLEGAL FRAME #{inspect(frame)}"
+    end)
+
+    {:error, :protocol_error}
   end
 end
