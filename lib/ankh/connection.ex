@@ -264,18 +264,19 @@ defmodule Ankh.Connection do
         _from,
         %{last_stream_id: last_stream_id, socket: socket} = state
       ) do
-
     frame = %GoAway{
       payload: %GoAway.Payload{
         last_stream_id: last_stream_id,
         error_code: error
       }
     }
+
     with {:ok, data} <- Frame.encode(frame),
-          :ok <- :ssl.send(socket, data) do
-      Logger.debug(fn -> "SENT #{inspect frame}" end)
+         :ok <- :ssl.send(socket, data) do
+      Logger.debug(fn -> "SENT #{inspect(frame)}" end)
       :ssl.close(socket)
     end
+
     {:stop, :normal, :ok, %{state | socket: nil}}
   end
 

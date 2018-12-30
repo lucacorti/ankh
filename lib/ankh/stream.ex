@@ -129,26 +129,34 @@ defmodule Ankh.Stream do
   def handle_call(
         {:recv, type, data},
         _from,
-        %{id: id, state: old_stream_state, connection: connection, controlling_process: controlling_process} = state
+        %{
+          id: id,
+          state: old_stream_state,
+          connection: connection,
+          controlling_process: controlling_process
+        } = state
       ) do
     case Frame.Registry.frame_for_type(connection, type) do
       nil ->
-          {:reply, {:ok, old_stream_state}, state}
+        {:reply, {:ok, old_stream_state}, state}
 
       type ->
         with {:ok, frame} <- Frame.decode(struct(type), data),
-             {:ok, %{state: new_stream_state, recv_hbf_type: recv_hbf_type} = state} <- recv_frame(state, frame) do
+             {:ok, %{state: new_stream_state, recv_hbf_type: recv_hbf_type} = state} <-
+               recv_frame(state, frame) do
           Logger.debug(fn ->
             "RECEIVED #{inspect(frame)}\nSTREAM #{inspect(old_stream_state)} -> #{
               inspect(new_stream_state)
-            } receiving hbf: #{inspect recv_hbf_type}"
+            } receiving hbf: #{inspect(recv_hbf_type)}"
           end)
 
-         {:reply, {:ok, new_stream_state}, state}
+          {:reply, {:ok, new_stream_state}, state}
         else
           {:error, _} = error ->
             Logger.debug(fn ->
-              "STREAM #{id} STATE #{old_stream_state} RECEIVE #{inspect(error)} FRAME #{inspect(type)} DATA #{inspect(data)}"
+              "STREAM #{id} STATE #{old_stream_state} RECEIVE #{inspect(error)} FRAME #{
+                inspect(type)
+              } DATA #{inspect(data)}"
             end)
 
             Process.send(controlling_process, {:ankh, :error, id, error}, [])
@@ -167,7 +175,9 @@ defmodule Ankh.Stream do
     case send_frame(state, frame) do
       {:ok, %{state: new_stream_state, recv_hbf_type: recv_hbf_type} = state} ->
         Logger.debug(fn ->
-          "STREAM #{id}: #{inspect(old_stream_state)} -> #{inspect(new_stream_state)} receiving hbf: #{inspect(recv_hbf_type)}"
+          "STREAM #{id}: #{inspect(old_stream_state)} -> #{inspect(new_stream_state)} receiving hbf: #{
+            inspect(recv_hbf_type)
+          }"
         end)
 
         {:reply, {:ok, new_stream_state}, state}
@@ -456,8 +466,8 @@ defmodule Ankh.Stream do
   end
 
   defp recv_frame(%{state: :open, recv_hbf_type: recv_hbf_type}, _)
-  when not is_nil(recv_hbf_type),
-    do: {:error, :protocol_error}
+       when not is_nil(recv_hbf_type),
+       do: {:error, :protocol_error}
 
   defp recv_frame(%{state: :open} = state, _), do: {:ok, state}
 
