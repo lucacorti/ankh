@@ -80,7 +80,7 @@ defmodule Ankh.Connection.Receiver do
          %Settings{flags: %{ack: false}, payload: payload} = frame,
          connection
        ) do
-    Logger.debug("STREAM 0 RECEIVED SETTINGS #{inspect payload}")
+    Logger.debug(fn -> "STREAM 0 RECEIVED SETTINGS #{inspect payload}" end)
 
     settings = %Settings{
       frame
