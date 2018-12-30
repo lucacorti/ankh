@@ -3,7 +3,7 @@ defmodule Ankh.Frame.RstStream.Payload do
   alias Ankh.Error
 
   @type t :: %__MODULE__{error_code: Error.t()}
-  defstruct error_code: nil
+  defstruct error_code: :no_error
 end
 
 defimpl Ankh.Frame.Encodable, for: Ankh.Frame.RstStream.Payload do
