@@ -21,7 +21,7 @@ defimpl Ankh.Frame.Encodable, for: Ankh.Frame.Priority.Payload do
   end
 
   def encode(%{exclusive: false, stream_dependency: sd, weight: wh}, _) do
-    {:ok, [<<0, sd::31, wh::8>>]}
+    {:ok, [<<0::1, sd::31, wh::8>>]}
   end
 
   def encode(_payload, _options), do: {:error, :encode_error}
