@@ -138,8 +138,11 @@ defmodule Ankh.Frame do
         rest_data = binary_part(data, frame_size, rest_size)
         {{rest_data, {length, type, id, frame_data}}, rest_data}
 
-      _data ->
+      data when byte_size(data) == 0 ->
         nil
+
+      data ->
+        {{data, nil}, data}
     end)
   end
 end

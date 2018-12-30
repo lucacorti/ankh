@@ -37,6 +37,9 @@ defmodule Ankh.Connection.Receiver do
     (buffer <> data)
     |> Frame.to_stream()
     |> Enum.reduce_while({:noreply, %{state | buffer: buffer <> data}}, fn
+      {rest, nil}, {:noreply, state} ->
+        {:halt, {:noreply, %{state | buffer: rest}}}
+
       {rest, {_length, type, 0, data}}, {:noreply, state} ->
         with type when not is_nil(type) <- Frame.Registry.frame_for_type(connection, type),
              {:ok, frame} <- Frame.decode(struct(type), data),
