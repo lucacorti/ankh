@@ -29,6 +29,8 @@ defmodule Ankh.Connection do
   alias Ankh.Frame.{GoAway, Settings}
   alias HPack.Table
 
+  require Logger
+
   @default_ssl_opts binary: true,
                     active: false,
                     versions: [:"tlsv1.2"],
@@ -262,16 +264,18 @@ defmodule Ankh.Connection do
         _from,
         %{last_stream_id: last_stream_id, socket: socket} = state
       ) do
-    {:ok, data} =
-      Frame.encode(%GoAway{
-        payload: %GoAway.Payload{
-          last_stream_id: last_stream_id,
-          error_code: error
-        }
-      })
 
-    :ssl.send(socket, data)
-    :ssl.close(socket)
+    frame = %GoAway{
+      payload: %GoAway.Payload{
+        last_stream_id: last_stream_id,
+        error_code: error
+      }
+    }
+    with {:ok, data} <- Frame.encode(frame),
+          :ok <- :ssl.send(socket, data) do
+      Logger.debug(fn -> "SENT #{inspect frame}" end)
+      :ssl.close(socket)
+    end
     {:stop, :normal, :ok, %{state | socket: nil}}
   end
 
