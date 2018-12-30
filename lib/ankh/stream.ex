@@ -454,7 +454,7 @@ defmodule Ankh.Stream do
            payload: payload
          }
        ) do
-    data = if payload, do: payload.data, else: ""
+    data = if not is_nil(payload) and not is_nil(payload.data), do: payload.data, else: ""
     Process.send(controlling_process, {:ankh, :data, id, data, end_stream}, [])
     state = process_recv_data(length, state)
     stream_state = if end_stream, do: :half_closed_remote, else: :open
@@ -540,7 +540,7 @@ defmodule Ankh.Stream do
            payload: payload
          }
        ) do
-    data = if payload, do: payload.data, else: ""
+    data = if not is_nil(payload) and not is_nil(payload.data), do: payload.data, else: ""
     Process.send(controlling_process, {:ankh, :data, id, data, end_stream}, [])
     state = process_recv_data(length, state)
     stream_state = if end_stream, do: :closed, else: :half_closed_local
