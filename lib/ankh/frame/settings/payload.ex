@@ -33,11 +33,12 @@ defimpl Ankh.Frame.Encodable, for: Ankh.Frame.Settings.Payload do
   def decode(payload, data, _) when rem(byte_size(data), 6) == 0 do
     case parse_settings_payload(data) do
       parsed when is_list(parsed) ->
-        {:ok, parsed
-        |> Enum.reduce(payload, fn
-          {key, value}, acc ->
-            struct(acc, [{key, value}])
-          end)}
+        {:ok,
+         parsed
+         |> Enum.reduce(payload, fn
+           {key, value}, acc ->
+             struct(acc, [{key, value}])
+         end)}
 
       {:error, _reason} = error ->
         error
@@ -125,14 +126,16 @@ defimpl Ankh.Frame.Encodable, for: Ankh.Frame.Settings.Payload do
   end
 
   defp parse_settings_payload(<<@initial_window_size::16, value::32, _rest::binary>>)
-    when value > @window_size_limit, do: {:error, :flow_control_error}
+       when value > @window_size_limit,
+       do: {:error, :flow_control_error}
 
   defp parse_settings_payload(<<@initial_window_size::16, value::32, rest::binary>>) do
     [{:initial_window_size, value} | parse_settings_payload(rest)]
   end
 
   defp parse_settings_payload(<<@max_frame_size::16, value::32, _rest::binary>>)
-    when value < @frame_size_initial or value > @frame_size_limit, do: {:error, :protocol_error}
+       when value < @frame_size_initial or value > @frame_size_limit,
+       do: {:error, :protocol_error}
 
   defp parse_settings_payload(<<@max_frame_size::16, value::32, rest::binary>>) do
     [{:max_frame_size, value} | parse_settings_payload(rest)]
