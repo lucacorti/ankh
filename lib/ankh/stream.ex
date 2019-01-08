@@ -823,7 +823,7 @@ defmodule Ankh.Stream do
          |> Enum.join()
          |> HPack.decode(recv_table)
 
-      if Enum.find(headers, false, fn
+      if Enum.any?(headers, fn
         :none -> true
         _ -> false
       end) do
