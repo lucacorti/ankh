@@ -772,10 +772,6 @@ defmodule Ankh.Stream do
 
   defp send_frame(%{}, _), do: {:error, :protocol_error}
 
-  defp really_send_frame(%{connection: Ankh.Connection.Mock} = state, _frame) do
-    {:ok, state}
-  end
-
   defp really_send_frame(
          %{connection: connection, send_table: send_table, max_frame_size: max_frame_size} =
            state,
