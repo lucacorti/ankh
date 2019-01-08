@@ -27,8 +27,8 @@ defmodule Ankh.Frame do
   Injects the frame struct in a module.
 
   - type: HTTP/2 frame type code
-  - flags: frame flags struct or nil for no flags
-  - payload: frame payload struct or nil for no payload
+  - flags: data type implementing `Ankh.Frame.Encodable`
+  - payload: data type implementing `Ankh.Frame.Encodable`
   """
   @spec __using__(type: type, flags: atom | nil, payload: atom | nil) :: Macro.t()
   defmacro __using__(args) do
@@ -126,6 +126,10 @@ defmodule Ankh.Frame do
   and the frame header information and data (without decoding it) in a tuple:
 
   `{remaining_buffer, {length, type, id, frame_data}}`
+
+  or nil to signal partial leftover data:
+
+  `{remaining_buffer, nil}`
   """
   @spec to_stream(iodata) :: Enumerable.t()
   def to_stream(data) do
