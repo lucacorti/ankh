@@ -2,6 +2,7 @@ defmodule Ankh.Transport do
   @moduledoc """
   Transport behavior
   """
+  alias Ankh.Connection.Receiver
 
   @typedoc "Transport reference"
   @type t :: term
@@ -9,7 +10,7 @@ defmodule Ankh.Transport do
   @doc """
   Accepts a client connection
   """
-  @callback accept(t, Ankh.Connection.Receiver.t(), Keyword.t()) :: {:ok, t} | {:error, term}
+  @callback accept(t, Receiver.t(), Keyword.t()) :: {:ok, t} | {:error, term}
 
   @doc """
   Closes the connection
@@ -19,8 +20,7 @@ defmodule Ankh.Transport do
   @doc """
   Connects to an host
   """
-  @callback connect(URI.t(), Ankh.Connection.Receiver.t(), Keyword.t()) ::
-              {:ok, t} | {:error, term}
+  @callback connect(URI.t(), Receiver.t(), Keyword.t()) :: {:ok, t} | {:error, term}
 
   @doc """
   Sends data
