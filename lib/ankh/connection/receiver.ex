@@ -167,7 +167,7 @@ defmodule Ankh.Connection.Receiver do
       "STREAM 0 RECEIVED GO_AWAY #{inspect(code)}: #{Error.format(code)}"
     end)
 
-    {:error, code}
+    :ok
   end
 
   defp recv_connection_frame(frame, _connection) do
