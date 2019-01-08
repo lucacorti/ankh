@@ -5,26 +5,33 @@ defmodule Ankh.Connection.Receiver do
   require Logger
 
   alias Ankh.{Connection, Error, Frame, Stream}
-  alias Ankh.Frame.{GoAway, Ping, Settings, WindowUpdate}
+  alias Ankh.Frame.{GoAway, Ping, Priority, Settings, WindowUpdate}
 
   @type receiver :: GenServer.server()
 
-  @spec start_link(Connection.connection(), pid, GenServer.options()) :: GenServer.on_start()
-  def start_link(connection, controlling_process, options \\ []) do
+  @spec start_link(Connection.connection(), pid, integer(), integer(), GenServer.options()) ::
+          GenServer.on_start()
+  def start_link(
+        connection,
+        controlling_process,
+        first_local_stream_id,
+        first_remote_stream_id,
+        options \\ []
+      ) do
     GenServer.start_link(
       __MODULE__,
       [
         connection: connection,
-        controlling_process: controlling_process
+        controlling_process: controlling_process,
+        last_local_stream_id: first_local_stream_id,
+        last_remote_stream_id: first_remote_stream_id
       ],
       options
     )
   end
 
   def init(args) do
-    connection = Keyword.get(args, :connection)
-    controlling_process = Keyword.get(args, :controlling_process)
-    {:ok, %{buffer: <<>>, connection: connection, controlling_process: controlling_process}}
+    {:ok, Enum.into(args, %{buffer: <<>>})}
   end
 
   def handle_info(
@@ -49,20 +56,46 @@ defmodule Ankh.Connection.Receiver do
           nil ->
             {:cont, {:noreply, %{state | buffer: rest}}}
 
-          {:error, reason} = error ->
-            Process.send(controlling_process, {:ankh, :error, 0, error}, [])
+          {:error, reason} ->
             Connection.error(connection, reason)
-            {:halt, {:stop, error, %{state | buffer: rest}}}
+            {:halt, {:noreply, %{state | buffer: rest}}}
         end
 
-      {rest, {_length, type, id, data}}, {:noreply, state} ->
-        with {:ok, ^id, stream} <- Connection.start_stream(connection, id, controlling_process),
+      {rest, {_length, type, id, data}},
+      {:noreply, %{last_local_stream_id: last_local_stream_id} = state}
+      when rem(last_local_stream_id, 2) == rem(id, 2) ->
+        with stream when not is_nil(stream) <- Connection.get_stream(connection, id),
              {:ok, _stream_state} <- Stream.recv(stream, type, data) do
-          {:cont, {:noreply, %{state | buffer: rest}}}
+          last_local_stream_id = max(last_local_stream_id, id)
+          {:cont, {:noreply, %{state | buffer: rest, last_local_stream_id: last_local_stream_id}}}
         else
-          {:error, reason} = error ->
+          nil ->
+            Connection.error(connection, :protocol_error)
+            {:halt, {:noreply, %{state | buffer: rest}}}
+
+          {:error, reason} ->
             Connection.error(connection, reason)
-            {:halt, {:stop, error, %{state | buffer: rest}}}
+            {:halt, {:noreply, %{state | buffer: rest}}}
+        end
+
+      {rest, {_length, type, id, data}},
+      {:noreply, %{last_remote_stream_id: last_remote_stream_id} = state} ->
+        with %Priority{type: priority} <- %Priority{},
+             {:ok, _id, stream} when type == priority or id >= last_remote_stream_id <-
+               Connection.start_stream(connection, id, controlling_process),
+             {:ok, _stream_state} <- Stream.recv(stream, type, data) do
+          last_remote_stream_id = if type == priority, do: last_remote_stream_id, else: id
+
+          {:cont,
+           {:noreply, %{state | buffer: rest, last_remote_stream_id: last_remote_stream_id}}}
+        else
+          {:ok, _id, _stream} ->
+            Connection.error(connection, :protocol_error)
+            {:halt, {:noreply, %{state | buffer: rest}}}
+
+          {:error, reason} ->
+            Connection.error(connection, reason)
+            {:halt, {:noreply, %{state | buffer: rest}}}
         end
     end)
   end
