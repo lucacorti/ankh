@@ -25,22 +25,11 @@ defmodule Ankh.Connection do
   use GenServer
 
   alias Ankh.Connection.Receiver
-  alias Ankh.{Error, Frame, Stream}
+  alias Ankh.{Error, Frame, Stream, Transport}
   alias Ankh.Frame.{GoAway, Settings}
   alias HPack.Table
 
   require Logger
-
-  @default_ssl_opts binary: true,
-                    active: false,
-                    versions: [:"tlsv1.2"],
-                    secure_renegotiate: true,
-                    client_renegotiation: false,
-                    ciphers: ["ECDHE-ECDSA-AES128-SHA256", "ECDHE-ECDSA-AES128-SHA"],
-                    alpn_advertised_protocols: ["h2"],
-                    cacerts: :certifi.cacerts()
-
-  @preface "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
 
   @max_stream_id 2_147_483_647
 
@@ -76,10 +65,9 @@ defmodule Ankh.Connection do
   @type push_promise_msg :: {:ankh, :push_promise, integer, integer, Keyword.t()}
 
   @typedoc """
-  Startup options:
-    - ssl_options: SSL connection options, for the Erlang `:ssl` module
+
   """
-  @type args :: [uri: URI.t(), ssl_options: Keyword.t()]
+  @type args :: [uri: URI.t()]
 
   @doc """
   Start the connection process for the specified `URI`.
@@ -88,17 +76,18 @@ defmodule Ankh.Connection do
     - args: startup options
     - options: GenServer startup options
   """
-  @spec start_link(args, GenServer.options()) :: GenServer.on_start()
-  def start_link(args, options \\ []) do
-    GenServer.start_link(__MODULE__, Keyword.put(args, :controlling_process, self()), options)
+  @spec start_link(URI.t()) :: GenServer.on_start()
+  def start_link(uri) do
+    GenServer.start_link(__MODULE__, Keyword.put([uri: uri], :controlling_process, self()))
   end
 
   @doc false
   def init(args) do
+    transport = Keyword.get(args, :transport, Transport.TLS)
     settings = Keyword.get(args, :settings, %Settings.Payload{})
     controlling_process = Keyword.get(args, :controlling_process)
     uri = Keyword.get(args, :uri)
-    ssl_opts = Keyword.get(args, :ssl_options, [])
+    options = Keyword.get(args, :options, [])
 
     with %{header_table_size: header_table_size} <- settings,
          {:ok, send_hpack} <- Table.start_link(header_table_size),
@@ -107,14 +96,15 @@ defmodule Ankh.Connection do
        %{
          controlling_process: controlling_process,
          last_stream_id: nil,
-         uri: uri,
-         ssl_opts: ssl_opts,
+         options: options,
          receiver: nil,
-         socket: nil,
          recv_hpack: recv_hpack,
          recv_settings: settings,
          send_hpack: send_hpack,
          send_settings: settings,
+         socket: nil,
+         transport: transport,
+         uri: uri,
          window_size: 0
        }}
     else
@@ -127,13 +117,14 @@ defmodule Ankh.Connection do
   Accepts a client connection
   """
   @spec accept(connection, pid) :: :ok | {:error, term}
-  def accept(connection, socket), do: GenServer.call(connection, {:accept, socket})
+  def accept(connection, socket, options \\ []),
+    do: GenServer.call(connection, {:accept, socket, options})
 
   @doc """
   Connects to a server
   """
-  @spec connect(connection) :: :ok | {:error, term}
-  def connect(connection), do: GenServer.call(connection, {:connect})
+  @spec connect(connection, Keyword.t()) :: :ok | {:error, term}
+  def connect(connection, options \\ []), do: GenServer.call(connection, {:connect, options})
 
   @doc """
   Sends a frame over the connection
@@ -181,60 +172,48 @@ defmodule Ankh.Connection do
   def error(connection, error), do: GenServer.call(connection, {:error, error})
 
   def handle_call(
-        {:accept, socket},
+        {:accept, socket, options},
         _from,
         %{
-          socket: nil,
-          ssl_opts: _ssl_opts,
+          controlling_process: controlling_process,
           send_settings: send_settings,
-          controlling_process: controlling_process
+          socket: nil,
+          transport: transport
         } = state
       ) do
-    preface = @preface
-
-    with {:ok, ^preface} <- :ssl.recv(socket, 24),
-         {:ok, receiver} <- Receiver.start_link(self(), controlling_process, 2, 1),
-         :ok <- :ssl.controlling_process(socket, receiver),
-         :ok <- :ssl.setopts(socket, active: :once),
+    with {:ok, receiver} <- Receiver.start_link(self(), controlling_process, 2, 1),
+         {:ok, socket} <- transport.accept(socket, receiver, options),
          {:ok, data} <- Frame.encode(%Settings{payload: send_settings}),
-         :ok <- :ssl.send(socket, data) do
+         :ok <- transport.send(socket, data) do
       {:reply, :ok, %{state | last_stream_id: 2, receiver: receiver, socket: socket}}
     else
-      {:error, reason} ->
-        error = {:error, :ssl.format_error(reason)}
+      {:error, _reason} = error ->
         {:stop, error, error, state}
     end
   end
 
-  def handle_call({:sccept, _socket}, _from, state) do
+  def handle_call({:accept, _socket, _options}, _from, state) do
     {:reply, {:error, :connected}, state}
   end
 
   def handle_call(
-        {:connect},
+        {:connect, options},
         _from,
         %{
-          socket: nil,
-          ssl_opts: ssl_opts,
-          uri: %URI{host: host, port: port},
+          controlling_process: controlling_process,
           recv_settings: recv_settings,
-          controlling_process: controlling_process
+          socket: nil,
+          transport: transport,
+          uri: uri
         } = state
       ) do
-    hostname = String.to_charlist(host)
-    ssl_options = Keyword.merge(ssl_opts, @default_ssl_opts)
-
-    with {:ok, socket} <- :ssl.connect(hostname, port, ssl_options),
-         {:ok, receiver} <- Receiver.start_link(self(), controlling_process, 1, 2),
-         :ok <- :ssl.controlling_process(socket, receiver),
-         :ok <- :ssl.setopts(socket, active: :once),
-         :ok <- :ssl.send(socket, @preface),
+    with {:ok, receiver} <- Receiver.start_link(self(), controlling_process, 1, 2),
+         {:ok, socket} <- transport.connect(uri, receiver, options),
          {:ok, data} <- Frame.encode(%Settings{payload: recv_settings}),
-         :ok <- :ssl.send(socket, data) do
+         :ok <- transport.send(socket, data) do
       {:reply, :ok, %{state | last_stream_id: 1, receiver: receiver, socket: socket}}
     else
-      {:error, reason} ->
-        error = {:error, :ssl.format_error(reason)}
+      {:error, _reason} = error ->
         {:stop, error, error, state}
     end
   end
@@ -247,21 +226,19 @@ defmodule Ankh.Connection do
     {:reply, {:error, :not_connected}, state}
   end
 
-  def handle_call({:send, frame}, _from, %{socket: socket} = state) do
-    case :ssl.send(socket, frame) do
-      :ok ->
-        {:reply, :ok, state}
-
-      {:error, reason} ->
-        error = {:error, :ssl.format_error(reason)}
-        {:stop, error, error, state}
+  def handle_call({:send, frame}, _from, %{socket: socket, transport: transport} = state) do
+    with :ok <- transport.send(socket, frame) do
+      {:reply, :ok, state}
+    else
+      error ->
+        {:reply, error, state}
     end
   end
 
   def handle_call(
         {:error, error},
         _from,
-        %{last_stream_id: last_stream_id, socket: socket} = state
+        %{last_stream_id: last_stream_id, socket: socket, transport: transport} = state
       ) do
     frame = %GoAway{
       payload: %GoAway.Payload{
@@ -271,7 +248,7 @@ defmodule Ankh.Connection do
     }
 
     with {:ok, data} when not is_nil(socket) <- Frame.encode(frame),
-         :ok <- :ssl.send(socket, data) do
+         :ok <- transport.send(socket, data) do
       Logger.debug(fn -> "SENT #{inspect(frame)}" end)
     else
       error ->

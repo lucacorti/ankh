@@ -7,7 +7,7 @@ defmodule Ankh.Connection.Receiver do
   alias Ankh.{Connection, Error, Frame, Stream}
   alias Ankh.Frame.{GoAway, Ping, Priority, Settings, WindowUpdate}
 
-  @type receiver :: GenServer.server()
+  @type t :: GenServer.server()
 
   @spec start_link(Connection.connection(), pid, integer(), integer(), GenServer.options()) ::
           GenServer.on_start()
