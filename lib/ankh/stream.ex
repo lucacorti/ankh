@@ -168,7 +168,11 @@ defmodule Ankh.Stream do
   def handle_call(
         {:send, frame},
         _from,
-        %{id: id, state: old_stream_state, controlling_process: controlling_process} = state
+        %{
+          id: id,
+          state: old_stream_state,
+          controlling_process: controlling_process
+        } = state
       ) do
     frame = %{frame | stream_id: id}
 
