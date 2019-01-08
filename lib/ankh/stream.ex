@@ -232,22 +232,26 @@ defmodule Ankh.Stream do
        ) do
     stream_state = if end_stream, do: :half_closed_remote, else: :open
 
-    headers = process_recv_headers([hbf | recv_hbf], recv_table)
+    case process_recv_headers([hbf | recv_hbf], recv_table) do
+      {:ok, headers} ->
+        Process.send(
+          controlling_process,
+          {:ankh, :headers, id, headers, end_stream},
+          []
+        )
 
-    Process.send(
-      controlling_process,
-      {:ankh, :headers, id, headers, end_stream},
-      []
-    )
+        {:ok,
+         %{
+           state
+           | state: stream_state,
+             recv_hbf_type: nil,
+             recv_hbf_es: false,
+             recv_hbf: []
+         }}
 
-    {:ok,
-     %{
-       state
-       | state: stream_state,
-         recv_hbf_type: nil,
-         recv_hbf_es: false,
-         recv_hbf: []
-     }}
+      :error ->
+        {:error, :compression_error}
+    end
   end
 
   defp recv_frame(
@@ -318,22 +322,26 @@ defmodule Ankh.Stream do
        ) do
     stream_state = if end_stream, do: :half_closed_remote, else: :open
 
-    headers = process_recv_headers([hbf | recv_hbf], recv_table)
+    case process_recv_headers([hbf | recv_hbf], recv_table) do
+      {:ok, headers} ->
+        Process.send(
+          controlling_process,
+          {:ankh, :headers, id, headers, end_stream},
+          []
+        )
 
-    Process.send(
-      controlling_process,
-      {:ankh, :headers, id, headers, end_stream},
-      []
-    )
+        {:ok,
+         %{
+           state
+           | state: stream_state,
+             recv_hbf_type: nil,
+             recv_hbf_es: false,
+             recv_hbf: []
+         }}
 
-    {:ok,
-     %{
-       state
-       | state: stream_state,
-         recv_hbf_type: nil,
-         recv_hbf_es: false,
-         recv_hbf: []
-     }}
+      :error ->
+        {:error, :compression_error}
+    end
   end
 
   defp recv_frame(
@@ -373,22 +381,26 @@ defmodule Ankh.Stream do
        ) do
     stream_state = if end_stream, do: :half_closed_remote, else: :open
 
-    headers = process_recv_headers([hbf | recv_hbf], recv_table)
+    case process_recv_headers([hbf | recv_hbf], recv_table) do
+      {:ok, headers} ->
+        Process.send(
+          controlling_process,
+          {:ankh, :push_promise, id, headers, end_stream},
+          []
+        )
 
-    Process.send(
-      controlling_process,
-      {:ankh, :push_promise, id, headers, end_stream},
-      []
-    )
+        {:ok,
+         %{
+           state
+           | state: stream_state,
+             recv_hbf_type: nil,
+             recv_hbf_es: false,
+             recv_hbf: []
+         }}
 
-    {:ok,
-     %{
-       state
-       | state: stream_state,
-         recv_hbf_type: nil,
-         recv_hbf_es: false,
-         recv_hbf: []
-     }}
+      :error ->
+        {:error, :compression_error}
+    end
   end
 
   defp recv_frame(
@@ -428,9 +440,14 @@ defmodule Ankh.Stream do
            payload: %{hbf: hbf}
          }
        ) do
-    headers = process_recv_headers([hbf | recv_hbf], recv_table)
-    Process.send(controlling_process, {:ankh, recv_hbf_type, id, headers, recv_hbf_es}, [])
-    {:ok, %{state | recv_hbf_type: nil, recv_hbf_es: false, recv_hbf: []}}
+    case process_recv_headers([hbf | recv_hbf], recv_table) do
+      {:ok, headers} ->
+        Process.send(controlling_process, {:ankh, recv_hbf_type, id, headers, recv_hbf_es}, [])
+        {:ok, %{state | recv_hbf_type: nil, recv_hbf_es: false, recv_hbf: []}}
+
+      :error ->
+        {:error, :compression_error}
+    end
   end
 
   defp recv_frame(
@@ -488,22 +505,26 @@ defmodule Ankh.Stream do
        ) do
     stream_state = if end_stream, do: :closed, else: :half_closed_local
 
-    headers = process_recv_headers([hbf | recv_hbf], recv_table)
+    case process_recv_headers([hbf | recv_hbf], recv_table) do
+      {:ok, headers} ->
+        Process.send(
+          controlling_process,
+          {:ankh, :headers, id, headers, end_stream},
+          []
+        )
 
-    Process.send(
-      controlling_process,
-      {:ankh, :headers, id, headers, end_stream},
-      []
-    )
+        {:ok,
+         %{
+           state
+           | state: stream_state,
+             recv_hbf_type: nil,
+             recv_hbf_es: false,
+             recv_hbf: []
+         }}
 
-    {:ok,
-     %{
-       state
-       | state: stream_state,
-         recv_hbf_type: nil,
-         recv_hbf_es: false,
-         recv_hbf: []
-     }}
+      :error ->
+        {:error, :compression_error}
+    end
   end
 
   defp recv_frame(
@@ -570,15 +591,19 @@ defmodule Ankh.Stream do
            payload: %{hbf: hbf}
          }
        ) do
-    headers = process_recv_headers([hbf | recv_hbf], recv_table)
+    case process_recv_headers([hbf | recv_hbf], recv_table) do
+      {:ok, headers} ->
+        Process.send(
+          controlling_process,
+          {:ankh, recv_hbf_type, id, headers, recv_hbf_es},
+          []
+        )
 
-    Process.send(
-      controlling_process,
-      {:ankh, recv_hbf_type, id, headers, recv_hbf_es},
-      []
-    )
+        {:ok, %{state | recv_hbf_type: nil, recv_hbf_es: false, recv_hbf: []}}
 
-    {:ok, %{state | recv_hbf_type: nil, recv_hbf_es: false, recv_hbf: []}}
+      :error ->
+        {:error, :compression_error}
+    end
   end
 
   defp recv_frame(
@@ -784,13 +809,19 @@ defmodule Ankh.Stream do
          do: state
   end
 
-  defp process_recv_headers([<<>>], _recv_table), do: []
+  defp process_recv_headers([<<>>], _recv_table), do: {:ok, []}
 
   defp process_recv_headers(hbf, recv_table) do
-    hbf
-    |> Enum.reverse()
-    |> Enum.join()
-    |> HPack.decode(recv_table)
+    try do
+      {:ok,
+       hbf
+       |> Enum.reverse()
+       |> Enum.join()
+       |> HPack.decode(recv_table)}
+    rescue
+      _ ->
+        :error
+    end
   end
 
   defp process_send_headers(%{payload: %{hbf: headers} = payload} = frame, send_table) do
