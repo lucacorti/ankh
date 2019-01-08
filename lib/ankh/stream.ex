@@ -817,11 +817,20 @@ defmodule Ankh.Stream do
 
   defp process_recv_headers(hbf, recv_table) do
     try do
-      {:ok,
-       hbf
-       |> Enum.reverse()
-       |> Enum.join()
-       |> HPack.decode(recv_table)}
+       headers =
+         hbf
+         |> Enum.reverse()
+         |> Enum.join()
+         |> HPack.decode(recv_table)
+
+      if Enum.find(headers, false, fn
+        :none -> true
+        _ -> false
+      end) do
+        :error
+      else
+        {:ok, headers}
+      end
     rescue
       _ ->
         :error
