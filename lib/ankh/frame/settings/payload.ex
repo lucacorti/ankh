@@ -27,7 +27,6 @@ defimpl Ankh.Frame.Encodable, for: Ankh.Frame.Settings.Payload do
 
   @window_size_limit 2_147_483_647
   @frame_size_limit 16_777_215
-
   @frame_size_initial 16_384
 
   def decode(payload, data, _) when rem(byte_size(data), 6) == 0 do
