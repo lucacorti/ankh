@@ -468,7 +468,7 @@ defmodule Ankh.Stream do
          %Data{
            length: length,
            flags: %Data.Flags{end_stream: end_stream},
-           payload: %Data.Payload{} = payload
+           payload: payload
          }
        ) do
     data = if not is_nil(payload) and not is_nil(payload.data), do: payload.data, else: ""
@@ -558,7 +558,7 @@ defmodule Ankh.Stream do
          %Data{
            length: length,
            flags: %Data.Flags{end_stream: end_stream},
-           payload: %Data.Payload{} = payload
+           payload: payload
          }
        ) do
     data = if not is_nil(payload) and not is_nil(payload.data), do: payload.data, else: ""
