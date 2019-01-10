@@ -122,9 +122,9 @@ defmodule Ankh.Connection.Receiver do
         length: 0
     }
 
-    with {:ok, data} <- Frame.encode(settings),
+    with :ok <- Connection.send_settings(connection, payload),
+         {:ok, data} <- Frame.encode(settings),
          :ok <- Connection.send(connection, data),
-         :ok <- Connection.send_settings(connection, payload),
          do: :ok
   end
 

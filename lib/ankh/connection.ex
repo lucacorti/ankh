@@ -101,7 +101,7 @@ defmodule Ankh.Connection do
          recv_hpack: recv_hpack,
          recv_settings: settings,
          send_hpack: send_hpack,
-         send_settings: settings,
+         send_settings: nil,
          socket: nil,
          transport: transport,
          uri: uri,
@@ -176,15 +176,12 @@ defmodule Ankh.Connection do
         _from,
         %{
           controlling_process: controlling_process,
-          send_settings: send_settings,
           socket: nil,
           transport: transport
         } = state
       ) do
     with {:ok, receiver} <- Receiver.start_link(self(), controlling_process, 2, 1),
-         {:ok, socket} <- transport.accept(socket, receiver, options),
-         {:ok, data} <- Frame.encode(%Settings{payload: send_settings}),
-         :ok <- transport.send(socket, data) do
+         {:ok, socket} <- transport.accept(socket, receiver, options) do
       {:reply, :ok, %{state | last_stream_id: 2, receiver: receiver, socket: socket}}
     else
       {:error, _reason} = error ->
@@ -211,7 +208,14 @@ defmodule Ankh.Connection do
          {:ok, socket} <- transport.connect(uri, receiver, options),
          {:ok, data} <- Frame.encode(%Settings{payload: recv_settings}),
          :ok <- transport.send(socket, data) do
-      {:reply, :ok, %{state | last_stream_id: 1, receiver: receiver, socket: socket}}
+      {:reply, :ok,
+       %{
+         state
+         | last_stream_id: 1,
+           receiver: receiver,
+           socket: socket,
+           send_settings: %Settings.Payload{}
+       }}
     else
       {:error, _reason} = error ->
         {:stop, error, error, state}
@@ -322,6 +326,33 @@ defmodule Ankh.Connection do
       {:error, {:already_started, pid}} ->
         {:reply, {:ok, id, pid}, state}
 
+      error ->
+        {:reply, error, state}
+    end
+  end
+
+  def handle_call(
+        {:send_settings,
+         %{
+           enable_push: enable_push,
+           header_table_size: header_table_size,
+           initial_window_size: window_size
+         } = send_settings},
+        _from,
+        %{send_hpack: send_hpack, send_settings: nil, socket: socket, transport: transport} =
+          state
+      ) do
+    with :ok <- Table.resize(header_table_size, send_hpack),
+         settings <- %Settings.Payload{send_settings | enable_push: enable_push},
+         {:ok, data} <- Frame.encode(%Settings{payload: settings}),
+         :ok <- transport.send(socket, data) do
+      {:reply, :ok,
+       %{
+         state
+         | send_settings: send_settings,
+           window_size: window_size
+       }}
+    else
       error ->
         {:reply, error, state}
     end
