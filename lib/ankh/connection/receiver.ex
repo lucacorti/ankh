@@ -58,7 +58,7 @@ defmodule Ankh.Connection.Receiver do
 
           {:error, reason} ->
             Connection.error(connection, reason)
-            {:halt, {:noreply, %{state | buffer: rest}}}
+            {:halt, {:stop, reason, %{state | buffer: rest}}}
         end
 
       {rest, {_length, type, id, data}},
@@ -176,6 +176,14 @@ defmodule Ankh.Connection.Receiver do
          _connection
        )
        when length != 8 do
+    {:error, :frame_size_error}
+  end
+
+  defp recv_connection_frame(
+         %WindowUpdate{length: length},
+         _connection
+       )
+       when length != 4 do
     {:error, :frame_size_error}
   end
 
