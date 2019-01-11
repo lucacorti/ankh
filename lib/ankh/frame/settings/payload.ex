@@ -34,6 +34,7 @@ defimpl Ankh.Frame.Encodable, for: Ankh.Frame.Settings.Payload do
       parsed when is_list(parsed) ->
         {:ok,
          parsed
+         |> Enum.reverse()
          |> Enum.reduce(payload, fn
            {key, value}, acc ->
              struct(acc, [{key, value}])
