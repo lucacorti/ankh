@@ -22,6 +22,8 @@ defmodule Ankh.Stream do
 
   use GenServer
 
+  @max_window_size 2_147_483_647
+
   @typedoc "Stream states"
   @type state ::
           :idle
@@ -221,6 +223,21 @@ defmodule Ankh.Stream do
 
   defp recv_frame(%{id: stream_id}, %Priority{payload: %Priority.Payload{stream_dependency: depended_id}})
     when stream_id == depended_id, do: {:error, :protocol_error}
+
+  defp recv_frame(%{id: stream_id, window_size: window_size} = state, %WindowUpdate{
+         payload: %WindowUpdate.Payload{window_size_increment: increment}
+       }) when window_size + increment > @max_window_size do
+     reason = :flow_control_error
+     rst_stream = %RstStream{
+       stream_id: stream_id,
+       payload: %RstStream.Payload{
+         error_code: reason
+       }
+     }
+
+     with {:ok, _state} <- send_frame(state, rst_stream),
+          do: {:error, :flow_control_error}
+  end
 
   defp recv_frame(_stream, %WindowUpdate{payload: %WindowUpdate.Payload{window_size_increment: 0}}) do
     {:error, :protocol_error}

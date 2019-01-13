@@ -31,6 +31,7 @@ defmodule Ankh.Connection do
 
   require Logger
 
+  @max_window_size 2_147_483_647
   @max_stream_id 2_147_483_647
 
   @typedoc "Connection process"
@@ -366,6 +367,30 @@ defmodule Ankh.Connection do
       ) do
     :ok = Table.resize(header_table_size, send_hpack)
     {:reply, :ok, %{state | send_settings: send_settings, window_size: window_size}}
+  end
+
+  def handle_call(
+        {:window_update, increment},
+        _from,
+        %{last_stream_id: last_stream_id, socket: socket, transport: transport, window_size: window_size} = state
+      ) when window_size + increment > @max_window_size do
+    reason = :flow_control_error
+    frame = %GoAway{
+      payload: %GoAway.Payload{
+        last_stream_id: last_stream_id - 2,
+        error_code: reason
+      }
+    }
+
+    with {:ok, data} when not is_nil(socket) <- Frame.encode(frame),
+         :ok <- transport.send(socket, data) do
+      Logger.debug(fn -> "SENT #{inspect(frame)}" end)
+    else
+      error ->
+        Logger.debug(fn -> "ERROR #{inspect(error)} SENDING GOAWAY #{inspect(frame)}" end)
+    end
+
+    {:stop, {:error, reason}, state}
   end
 
   def handle_call(
