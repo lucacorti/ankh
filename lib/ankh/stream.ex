@@ -218,10 +218,7 @@ defmodule Ankh.Stream do
   defp recv_frame(%{recv_hbf_type: recv_hbf_type}, %{type: type})
     when not is_nil(recv_hbf_type) and type !==  9, do: {:error, :protocol_error}
 
-  defp recv_frame(%{id: stream_id}, %Headers{flags: %Headers.Flags{priority: true}, payload: %Headers.Payload{stream_dependency: depended_id}})
-    when stream_id == depended_id, do: {:error, :protocol_error}
-
-  defp recv_frame(%{id: stream_id}, %Priority{payload: %Priority.Payload{stream_dependency: depended_id}})
+  defp recv_frame(%{id: stream_id}, %{payload: %{stream_dependency: depended_id}})
     when stream_id == depended_id, do: {:error, :protocol_error}
 
   defp recv_frame(%{id: stream_id, window_size: window_size} = state, %WindowUpdate{
