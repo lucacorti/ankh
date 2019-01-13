@@ -213,6 +213,12 @@ defmodule Ankh.Stream do
     {:error, :frame_size_error}
   end
 
+  defp recv_frame(%{id: stream_id}, %Headers{flags: %Headers.Flags{priority: true}, payload: %Headers.Payload{stream_dependency: depended_id}})
+    when stream_id == depended_id, do: {:error, :protocol_error}
+
+  defp recv_frame(%{id: stream_id}, %Priority{payload: %Priority.Payload{stream_dependency: depended_id}})
+    when stream_id == depended_id, do: {:error, :protocol_error}
+
   defp recv_frame(_stream, %WindowUpdate{payload: %WindowUpdate.Payload{window_size_increment: 0}}) do
     {:error, :protocol_error}
   end
