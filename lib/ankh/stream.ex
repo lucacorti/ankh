@@ -39,7 +39,7 @@ defmodule Ankh.Stream do
   @type id :: integer
 
   @typedoc "Stream HBF type"
-  @type hbf_type :: :headers | :push_promise
+  @type hbf_type :: :headers | :push_promise | nil
 
   @typedoc "Reserve mode"
   @type reserve_mode :: :local | :remote
@@ -87,7 +87,7 @@ defmodule Ankh.Stream do
   @doc """
   Process a received frame for the stream
   """
-  @spec recv(t(), integer, iodata) :: {:ok, state()} | {:error, term}
+  @spec recv(t(), integer, iodata) :: {:ok, state(), hbf_type()} | {:error, term}
   def recv(stream, type, data), do: GenServer.call(stream, {:recv, type, data})
 
   @doc """
@@ -150,7 +150,7 @@ defmodule Ankh.Stream do
             } receiving hbf: #{inspect(recv_hbf_type)}"
           end)
 
-          {:reply, {:ok, new_stream_state}, state}
+          {:reply, {:ok, new_stream_state, recv_hbf_type}, state}
         else
           {:error, _} = error ->
             Logger.debug(fn ->

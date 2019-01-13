@@ -31,7 +31,7 @@ defmodule Ankh.Connection.Receiver do
   end
 
   def init(args) do
-    {:ok, Enum.into(args, %{buffer: <<>>})}
+    {:ok, Enum.into(args, %{buffer: <<>>, recv_hbf_type: nil})}
   end
 
   def handle_info(
@@ -47,14 +47,17 @@ defmodule Ankh.Connection.Receiver do
       {rest, nil}, {:noreply, state} ->
         {:halt, {:noreply, %{state | buffer: rest}}}
 
-      {rest, {_length, type, 0, data}}, {:noreply, state} ->
+      {rest, {_length, type, 0, data}}, {:noreply, %{recv_hbf_type: recv_hbf_type} = state} ->
         with type when not is_nil(type) <- Frame.Registry.frame_for_type(connection, type),
              {:ok, frame} <- Frame.decode(struct(type), data),
              :ok <- recv_connection_frame(frame, connection) do
           {:cont, {:noreply, %{state | buffer: rest}}}
         else
-          nil ->
+          nil when is_nil(recv_hbf_type) ->
             {:cont, {:noreply, %{state | buffer: rest}}}
+
+          nil ->
+            {:halt, {:stop, {:error, :protcol_error}, %{state | buffer: rest}}}
 
           {:error, reason} ->
             Connection.error(connection, reason)
@@ -65,9 +68,9 @@ defmodule Ankh.Connection.Receiver do
       {:noreply, %{last_local_stream_id: last_local_stream_id} = state}
       when rem(last_local_stream_id, 2) == rem(id, 2) ->
         with stream when not is_nil(stream) <- Connection.get_stream(connection, id),
-             {:ok, _stream_state} <- Stream.recv(stream, type, data) do
+             {:ok, _stream_state, recv_hbf_type} <- Stream.recv(stream, type, data) do
           last_local_stream_id = max(last_local_stream_id, id)
-          {:cont, {:noreply, %{state | buffer: rest, last_local_stream_id: last_local_stream_id}}}
+          {:cont, {:noreply, %{state | buffer: rest, last_local_stream_id: last_local_stream_id, recv_hbf_type: recv_hbf_type}}}
         else
           nil ->
             Connection.error(connection, :protocol_error)
@@ -83,11 +86,11 @@ defmodule Ankh.Connection.Receiver do
         with %Priority{type: priority} <- %Priority{},
              {:ok, _id, stream} when type == priority or id >= last_remote_stream_id <-
                Connection.start_stream(connection, id, controlling_process),
-             {:ok, _stream_state} <- Stream.recv(stream, type, data) do
+             {:ok, _stream_state, recv_hbf_type} <- Stream.recv(stream, type, data) do
           last_remote_stream_id = if type == priority, do: last_remote_stream_id, else: id
 
           {:cont,
-           {:noreply, %{state | buffer: rest, last_remote_stream_id: last_remote_stream_id}}}
+           {:noreply, %{state | buffer: rest, last_remote_stream_id: last_remote_stream_id, recv_hbf_type: recv_hbf_type}}}
         else
           {:ok, _id, _stream} ->
             Connection.error(connection, :protocol_error)
