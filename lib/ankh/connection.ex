@@ -106,7 +106,7 @@ defmodule Ankh.Connection do
          socket: nil,
          transport: transport,
          uri: uri,
-         window_size: 0
+         window_size: 65_535
        }}
     else
       error ->

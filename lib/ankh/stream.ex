@@ -82,7 +82,7 @@ defmodule Ankh.Stream do
        recv_hbf_type: nil,
        recv_hbf_es: false,
        recv_hbf: [],
-       window_size: 2_147_483_647
+       window_size: 65_535
      })}
   end
 
