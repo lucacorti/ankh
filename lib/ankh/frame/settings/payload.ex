@@ -1,20 +1,21 @@
 defmodule Ankh.Frame.Settings.Payload do
   @moduledoc false
 
-  @type t :: %__MODULE__{
-          header_table_size: integer,
-          enable_push: boolean,
-          max_concurrent_streams: integer,
-          initial_window_size: integer,
-          max_frame_size: integer,
-          max_header_list_size: integer
-        }
-  defstruct header_table_size: 4_096,
-            enable_push: true,
-            max_concurrent_streams: 128,
-            initial_window_size: 2_147_483_647,
-            max_frame_size: 16_384,
-            max_header_list_size: 128
+  @typedoc "Settings key"
+  @type key ::
+          :header_table_size
+          | :enable_push
+          | :max_concurrent_streams
+          | :initial_window_size
+          | :max_frame_size
+          | :max_header_list_size
+
+  @typedoc "Settings value"
+  @type value :: integer | boolean
+
+  @type t :: %__MODULE__{settings: list({key, value})}
+
+  defstruct settings: []
 end
 
 defimpl Ankh.Frame.Encodable, for: Ankh.Frame.Settings.Payload do
@@ -30,124 +31,100 @@ defimpl Ankh.Frame.Encodable, for: Ankh.Frame.Settings.Payload do
   @frame_size_initial 16_384
 
   def decode(payload, data, _) when rem(byte_size(data), 6) == 0 do
-    case parse_settings_payload(data) do
-      parsed when is_list(parsed) ->
-        {:ok,
-         parsed
-         |> Enum.reverse()
-         |> Enum.reduce(payload, fn
-           {key, value}, acc ->
-             struct(acc, [{key, value}])
-         end)}
+    case decode_settings(data, []) do
+      settings when is_list(settings) ->
+        {:ok, %{payload | settings: Enum.reverse(settings)}}
 
       {:error, _reason} = error ->
         error
     end
   end
 
-  def decode(_payload, _data, _options), do: {:error, :frame_size_error}
+  def decode(_payload, _data, _options), do: {:error, :frame_size_error} |> IO.inspect
 
-  def encode(
-        %{
-          header_table_size: hts,
-          enable_push: true,
-          max_concurrent_streams: mcs,
-          initial_window_size: iws,
-          max_frame_size: mfs,
-          max_header_list_size: mhls
-        },
-        _
-      ) do
-    {:ok,
-     [
-       <<@header_table_size::16>>,
-       <<hts::32>>,
-       <<@enable_push::16>>,
-       <<1::32>>,
-       <<@max_concurrent_streams::16>>,
-       <<mcs::32>>,
-       <<@initial_window_size::16>>,
-       <<iws::32>>,
-       <<@max_frame_size::16>>,
-       <<mfs::32>>,
-       <<@max_header_list_size::16>>,
-       <<mhls::32>>
-     ]}
-  end
+  defp decode_settings(<<@header_table_size::16, value::32, rest::binary>>, settings),
+    do: decode_settings(rest, [{:header_table_size, value} | settings])
 
-  def encode(
-        %{
-          header_table_size: hts,
-          enable_push: false,
-          max_concurrent_streams: mcs,
-          initial_window_size: iws,
-          max_frame_size: mfs,
-          max_header_list_size: mhls
-        },
-        _
-      ) do
-    {:ok,
-     [
-       <<@header_table_size::16>>,
-       <<hts::32>>,
-       <<@enable_push::16>>,
-       <<0::32>>,
-       <<@max_concurrent_streams::16>>,
-       <<mcs::32>>,
-       <<@initial_window_size::16>>,
-       <<iws::32>>,
-       <<@max_frame_size::16>>,
-       <<mfs::32>>,
-       <<@max_header_list_size::16>>,
-       <<mhls::32>>
-     ]}
+  defp decode_settings(<<@enable_push::16, 1::32, rest::binary>>, settings),
+    do: decode_settings(rest, [{:enable_push, true} | settings])
+
+  defp decode_settings(<<@enable_push::16, 0::32, rest::binary>>, settings),
+    do: decode_settings(rest, [{:enable_push, false} | settings])
+
+  defp decode_settings(<<@enable_push::16, _value::32, _rest::binary>>, _settings),
+    do: {:error, :protocol_error}
+
+  defp decode_settings(<<@max_concurrent_streams::16, value::32, rest::binary>>, settings),
+    do: decode_settings(rest, [{:max_concurrent_streams, value} | settings])
+
+  defp decode_settings(<<@initial_window_size::16, value::32, _rest::binary>>, _settings)
+       when value > @window_size_limit,
+       do: {:error, :flow_control_error}
+
+  defp decode_settings(<<@initial_window_size::16, value::32, rest::binary>>, settings),
+    do: decode_settings(rest, [{:initial_window_size, value} | settings])
+
+  defp decode_settings(<<@max_frame_size::16, value::32, _rest::binary>>, _settings)
+       when value < @frame_size_initial or value > @frame_size_limit,
+       do: {:error, :protocol_error}
+
+  defp decode_settings(<<@max_frame_size::16, value::32, rest::binary>>, settings),
+    do: decode_settings(rest, [{:max_frame_size, value} | settings])
+
+  defp decode_settings(<<@max_header_list_size::16, value::32, rest::binary>>, settings),
+    do: decode_settings(rest, [{:max_header_list_size, value} | settings])
+
+  defp decode_settings(<<_key::16, _value::32, rest::binary>>, settings),
+    do: decode_settings(rest, settings)
+
+  defp decode_settings(<<>>, settings), do: settings
+
+  def encode(%{settings: settings}, _options) do
+    case encode_settings(settings, []) do
+      settings when is_list(settings) ->
+        {:ok, Enum.reverse(settings)}
+
+      {:error, _reason} = error ->
+        error
+    end
   end
 
   def encode(_payload, _options), do: {:error, :encode_error}
 
-  defp parse_settings_payload(<<@header_table_size::16, value::32, rest::binary>>) do
-    [{:header_table_size, value} | parse_settings_payload(rest)]
-  end
+  defp encode_settings([{:header_table_size, value} | rest], data),
+    do: encode_settings(rest, [<<@header_table_size::16, value::32>> | data])
 
-  defp parse_settings_payload(<<@enable_push::16, 1::32, rest::binary>>) do
-    [{:enable_push, true} | parse_settings_payload(rest)]
-  end
+  defp encode_settings([{:enable_push, true} | rest], data),
+    do: encode_settings(rest, [<<@enable_push::16, 1::32>> | data])
 
-  defp parse_settings_payload(<<@enable_push::16, 0::32, rest::binary>>) do
-    [{:enable_push, false} | parse_settings_payload(rest)]
-  end
+  defp encode_settings([{:enable_push, false} | rest], data),
+    do: encode_settings(rest, [<<@enable_push::16, 0::32>> | data])
 
-  defp parse_settings_payload(<<@enable_push::16, _value::32, _rest::binary>>) do
-    {:error, :protocol_error}
-  end
+  defp encode_settings([{:enable_push, _value}, _rest], _data),
+    do: {:error, :encode_error}
 
-  defp parse_settings_payload(<<@max_concurrent_streams::16, value::32, rest::binary>>) do
-    [{:max_concurrent_streams, value} | parse_settings_payload(rest)]
-  end
+  defp encode_settings([{:max_concurrent_streams, value} | rest], data),
+    do: encode_settings(rest, [<<@max_concurrent_streams::16, value::32>> | data])
 
-  defp parse_settings_payload(<<@initial_window_size::16, value::32, _rest::binary>>)
-       when value > @window_size_limit,
+  defp encode_settings([{:initial_window_size, value} | _rest], _data)
+       when value < 0 or value > @window_size_limit,
        do: {:error, :flow_control_error}
 
-  defp parse_settings_payload(<<@initial_window_size::16, value::32, rest::binary>>) do
-    [{:initial_window_size, value} | parse_settings_payload(rest)]
-  end
+  defp encode_settings([{:initial_window_size, value} | rest], data),
+    do: encode_settings(rest, [<<@initial_window_size::16, value::32>> | data])
 
-  defp parse_settings_payload(<<@max_frame_size::16, value::32, _rest::binary>>)
+  defp encode_settings([{:max_frame_size, value} | _rest], _data)
        when value < @frame_size_initial or value > @frame_size_limit,
        do: {:error, :protocol_error}
 
-  defp parse_settings_payload(<<@max_frame_size::16, value::32, rest::binary>>) do
-    [{:max_frame_size, value} | parse_settings_payload(rest)]
-  end
+  defp encode_settings([{:max_frame_size, value} | rest], data),
+    do: encode_settings(rest, [<<@max_frame_size::16, value::32>> | data])
 
-  defp parse_settings_payload(<<@max_header_list_size::16, value::32, rest::binary>>) do
-    [{:max_header_list_size, value} | parse_settings_payload(rest)]
-  end
+  defp encode_settings([{:max_header_list_size, value} | rest], data),
+    do: encode_settings(rest, [<<@max_header_list_size::16, value::32>> | data])
 
-  defp parse_settings_payload(<<_key::16, _value::32, rest::binary>>),
-    do: parse_settings_payload(rest)
+  defp encode_settings([{_key, _value} | rest], data),
+    do: encode_settings(rest, data)
 
-  defp parse_settings_payload(<<>>),
-    do: []
+  defp encode_settings([], data), do: data
 end

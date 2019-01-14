@@ -33,6 +33,14 @@ defmodule Ankh.Connection do
 
   @max_window_size 2_147_483_647
   @max_stream_id 2_147_483_647
+  @recv_settings [
+    header_table_size: 4_096,
+    enable_push: true,
+    max_concurrent_streams: 128,
+    initial_window_size: 2_147_483_647,
+    max_frame_size: 16_384,
+    max_header_list_size: 128
+  ]
 
   @typedoc "Connection process"
   @type connection :: GenServer.server()
@@ -85,13 +93,13 @@ defmodule Ankh.Connection do
   @doc false
   def init(args) do
     transport = Keyword.get(args, :transport, Transport.TLS)
-    settings = Keyword.get(args, :settings, %Settings.Payload{})
     controlling_process = Keyword.get(args, :controlling_process)
     uri = Keyword.get(args, :uri)
     options = Keyword.get(args, :options, [])
+    recv_settings = Keyword.get(args, :settings, @recv_settings)
 
-    with %{header_table_size: header_table_size} <- settings,
-         {:ok, send_hpack} <- Table.start_link(header_table_size),
+    with {:ok, send_hpack} <- Table.start_link(4_096),
+         header_table_size <- Keyword.get(recv_settings, :header_table_size),
          {:ok, recv_hpack} <- Table.start_link(header_table_size) do
       {:ok,
        %{
@@ -100,7 +108,7 @@ defmodule Ankh.Connection do
          options: options,
          receiver: nil,
          recv_hpack: recv_hpack,
-         recv_settings: settings,
+         recv_settings: recv_settings,
          send_hpack: send_hpack,
          send_settings: nil,
          socket: nil,
@@ -130,9 +138,9 @@ defmodule Ankh.Connection do
   @doc """
   Sends a frame over the connection
   """
-  @spec send(connection, Frame.t()) :: :ok | {:error, term}
-  def send(connection, frame) do
-    GenServer.call(connection, {:send, frame})
+  @spec send(connection, Frame.length(), Frame.type(), Frame.data()) :: :ok | {:error, term}
+  def send(connection, length, type, data) do
+    GenServer.call(connection, {:send, length, type, data})
   end
 
   def get_stream(connection, id) do
@@ -207,15 +215,15 @@ defmodule Ankh.Connection do
       ) do
     with {:ok, receiver} <- Receiver.start_link(self(), controlling_process, 1, 2),
          {:ok, socket} <- transport.connect(uri, receiver, options),
-         {:ok, data} <- Frame.encode(%Settings{payload: recv_settings}),
+         settings <- %Settings{payload: %Settings.Payload{settings: recv_settings}},
+         {:ok, _length, _type, data} <- Frame.encode(settings),
          :ok <- transport.send(socket, data) do
       {:reply, :ok,
        %{
          state
          | last_stream_id: 1,
            receiver: receiver,
-           socket: socket,
-           send_settings: %Settings.Payload{}
+           socket: socket
        }}
     else
       {:error, _reason} = error ->
@@ -231,8 +239,25 @@ defmodule Ankh.Connection do
     {:reply, {:error, :not_connected}, state}
   end
 
-  def handle_call({:send, frame}, _from, %{socket: socket, transport: transport} = state) do
-    with :ok <- transport.send(socket, frame) do
+  def handle_call(
+        {:send, length, 0, data},
+        _from,
+        %{socket: socket, transport: transport, window_size: window_size} = state
+      ) do
+    with :ok <- transport.send(socket, data) do
+      {:reply, :ok, %{state | window_size: window_size - length}}
+    else
+      error ->
+        {:reply, error, state}
+    end
+  end
+
+  def handle_call(
+        {:send, _length, _type, data},
+        _from,
+        %{socket: socket, transport: transport} = state
+      ) do
+    with :ok <- transport.send(socket, data) do
       {:reply, :ok, state}
     else
       error ->
@@ -252,7 +277,7 @@ defmodule Ankh.Connection do
       }
     }
 
-    with {:ok, data} when not is_nil(socket) <- Frame.encode(frame),
+    with {:ok, _length, _type, data} when not is_nil(socket) <- Frame.encode(frame),
          :ok <- transport.send(socket, data) do
       Logger.debug(fn -> "SENT #{inspect(frame)}" end)
     else
@@ -280,10 +305,11 @@ defmodule Ankh.Connection do
           last_stream_id: last_stream_id,
           recv_hpack: recv_hpack,
           send_hpack: send_hpack,
-          send_settings: %{max_frame_size: max_frame_size}
+          send_settings: send_settings
         } = state
       ) do
-    with {:ok, pid} <-
+    with max_frame_size <- Keyword.get(send_settings || [], :max_frame_size, 16_384),
+         {:ok, pid} <-
            Stream.start_link(
              self(),
              last_stream_id,
@@ -309,10 +335,11 @@ defmodule Ankh.Connection do
         %{
           recv_hpack: recv_hpack,
           send_hpack: send_hpack,
-          send_settings: %{max_frame_size: max_frame_size}
+          send_settings: send_settings
         } = state
       ) do
-    with {:ok, pid} <-
+    with max_frame_size <- Keyword.get(send_settings || [], :max_frame_size, 16_384),
+         {:ok, pid} <-
            Stream.start_link(
              self(),
              id,
@@ -333,25 +360,31 @@ defmodule Ankh.Connection do
   end
 
   def handle_call(
-        {:send_settings,
-         %{
-           enable_push: enable_push,
-           header_table_size: header_table_size,
-           initial_window_size: window_size
-         } = send_settings},
+        {:send_settings, %Settings.Payload{settings: settings}},
         _from,
-        %{send_hpack: send_hpack, send_settings: nil, socket: socket, transport: transport} =
-          state
+        %{
+          recv_settings: recv_settings,
+          send_hpack: send_hpack,
+          send_settings: nil,
+          socket: socket,
+          transport: transport
+        } = state
       ) do
-    with :ok <- Table.resize(header_table_size, send_hpack),
-         settings <- %Settings.Payload{send_settings | enable_push: enable_push},
-         {:ok, data} <- Frame.encode(%Settings{payload: settings}),
+    with header_table_size <- Keyword.get(settings, :header_table_size, 4_096),
+         window_size <- Keyword.get(settings, :window_size, 65_535),
+         enable_push <- Keyword.get(settings, :enable_push, true),
+         :ok <- Table.resize(header_table_size, send_hpack),
+         recv_settings <- %Settings.Payload{
+           settings: Keyword.put(recv_settings, :enable_push, enable_push)
+         },
+         {:ok, _length, _type, data} <- Frame.encode(%Settings{payload: recv_settings}),
          :ok <- transport.send(socket, data) do
       {:reply, :ok,
        %{
          state
-         | send_settings: send_settings,
-           window_size: window_size
+         | send_hpack: send_hpack,
+           window_size: window_size,
+           send_settings: settings
        }}
     else
       error ->
@@ -360,21 +393,33 @@ defmodule Ankh.Connection do
   end
 
   def handle_call(
-        {:send_settings,
-         %{header_table_size: header_table_size, initial_window_size: window_size} = send_settings},
+        {:send_settings, %Settings.Payload{settings: settings}},
         _from,
         %{send_hpack: send_hpack} = state
       ) do
-    :ok = Table.resize(header_table_size, send_hpack)
-    {:reply, :ok, %{state | send_settings: send_settings, window_size: window_size}}
+    header_table_size = Keyword.get(settings, :header_table_size)
+
+    if header_table_size do
+      :ok = Table.resize(header_table_size, send_hpack)
+    end
+
+    window_size = Keyword.get(settings, :initial_window_size, 65_535)
+    {:reply, :ok, %{state | send_settings: settings, window_size: window_size}}
   end
 
   def handle_call(
         {:window_update, increment},
         _from,
-        %{last_stream_id: last_stream_id, socket: socket, transport: transport, window_size: window_size} = state
-      ) when window_size + increment > @max_window_size do
+        %{
+          last_stream_id: last_stream_id,
+          socket: socket,
+          transport: transport,
+          window_size: window_size
+        } = state
+      )
+      when window_size + increment > @max_window_size do
     reason = :flow_control_error
+
     frame = %GoAway{
       payload: %GoAway.Payload{
         last_stream_id: last_stream_id - 2,
@@ -382,7 +427,7 @@ defmodule Ankh.Connection do
       }
     }
 
-    with {:ok, data} when not is_nil(socket) <- Frame.encode(frame),
+    with {:ok, _lenght, _type, data} when not is_nil(socket) <- Frame.encode(frame),
          :ok <- transport.send(socket, data) do
       Logger.debug(fn -> "SENT #{inspect(frame)}" end)
     else

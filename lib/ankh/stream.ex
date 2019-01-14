@@ -89,7 +89,7 @@ defmodule Ankh.Stream do
   @doc """
   Process a received frame for the stream
   """
-  @spec recv(t(), integer, iodata) :: {:ok, state(), hbf_type()} | {:error, term}
+  @spec recv(t(), Frame.type(), Frame.data()) :: {:ok, state(), hbf_type()} | {:error, term}
   def recv(stream, type, data), do: GenServer.call(stream, {:recv, type, data})
 
   @doc """
@@ -216,24 +216,28 @@ defmodule Ankh.Stream do
   end
 
   defp recv_frame(%{recv_hbf_type: recv_hbf_type}, %{type: type})
-    when not is_nil(recv_hbf_type) and type !==  9, do: {:error, :protocol_error}
+       when not is_nil(recv_hbf_type) and type !== 9,
+       do: {:error, :protocol_error}
 
   defp recv_frame(%{id: stream_id}, %{payload: %{stream_dependency: depended_id}})
-    when stream_id == depended_id, do: {:error, :protocol_error}
+       when stream_id == depended_id,
+       do: {:error, :protocol_error}
 
   defp recv_frame(%{id: stream_id, window_size: window_size} = state, %WindowUpdate{
          payload: %WindowUpdate.Payload{window_size_increment: increment}
-       }) when window_size + increment > @max_window_size do
-     reason = :flow_control_error
-     rst_stream = %RstStream{
-       stream_id: stream_id,
-       payload: %RstStream.Payload{
-         error_code: reason
-       }
-     }
+       })
+       when window_size + increment > @max_window_size do
+    reason = :flow_control_error
 
-     with {:ok, _state} <- send_frame(state, rst_stream),
-          do: {:error, :flow_control_error}
+    rst_stream = %RstStream{
+      stream_id: stream_id,
+      payload: %RstStream.Payload{
+        error_code: reason
+      }
+    }
+
+    with {:ok, _state} <- send_frame(state, rst_stream),
+         do: {:error, :flow_control_error}
   end
 
   defp recv_frame(_stream, %WindowUpdate{payload: %WindowUpdate.Payload{window_size_increment: 0}}) do
@@ -249,6 +253,7 @@ defmodule Ankh.Stream do
            id: id,
            state: :idle,
            recv_hbf: recv_hbf,
+           recv_hbf_type: recv_hbf_type,
            recv_table: recv_table,
            controlling_process: controlling_process
          } = state,
@@ -256,7 +261,8 @@ defmodule Ankh.Stream do
            flags: %Headers.Flags{end_headers: true, end_stream: end_stream},
            payload: %Headers.Payload{hbf: hbf}
          }
-       ) do
+       )
+       when is_nil(recv_hbf_type) do
     stream_state = if end_stream, do: :half_closed_remote, else: :open
 
     case process_recv_headers([hbf | recv_hbf], recv_table) do
@@ -284,13 +290,15 @@ defmodule Ankh.Stream do
   defp recv_frame(
          %{
            state: :idle,
-           recv_hbf: recv_hbf
+           recv_hbf: recv_hbf,
+           recv_hbf_type: recv_hbf_type
          } = state,
          %Headers{
            flags: %Headers.Flags{end_headers: false, end_stream: end_stream},
            payload: %Headers.Payload{hbf: hbf}
          }
-       ) do
+       )
+       when is_nil(recv_hbf_type) do
     stream_state = if end_stream, do: :half_closed_remote, else: :open
 
     {:ok,
@@ -319,9 +327,13 @@ defmodule Ankh.Stream do
 
   # RESERVED REMOTE
 
-  defp recv_frame(%{state: :reserved_remote, recv_hbf: recv_hbf} = state, %Headers{
-         payload: %Headers.Payload{hbf: hbf}
-       }) do
+  defp recv_frame(
+         %{state: :reserved_remote, recv_hbf: recv_hbf, recv_hbf_type: recv_hbf_type} = state,
+         %Headers{
+           payload: %Headers.Payload{hbf: hbf}
+         }
+       )
+       when is_nil(recv_hbf_type) do
     {:ok,
      %{state | state: :half_closed_local, recv_hbf_type: :headers, recv_hbf: [hbf | recv_hbf]}}
   end
@@ -340,13 +352,15 @@ defmodule Ankh.Stream do
            state: :open,
            controlling_process: controlling_process,
            recv_hbf: recv_hbf,
+           recv_hbf_type: recv_hbf_type,
            recv_table: recv_table
          } = state,
          %Headers{
            flags: %Headers.Flags{end_headers: true, end_stream: end_stream},
            payload: %Headers.Payload{hbf: hbf}
          }
-       ) do
+       )
+       when is_nil(recv_hbf_type) do
     stream_state = if end_stream, do: :half_closed_remote, else: :open
 
     case process_recv_headers([hbf | recv_hbf], recv_table) do
@@ -374,13 +388,15 @@ defmodule Ankh.Stream do
   defp recv_frame(
          %{
            state: :open,
-           recv_hbf: recv_hbf
+           recv_hbf: recv_hbf,
+           recv_hbf_type: recv_hbf_type
          } = state,
          %Headers{
            flags: %Headers.Flags{end_headers: false, end_stream: end_stream},
            payload: %Headers.Payload{hbf: hbf}
          }
-       ) do
+       )
+       when is_nil(recv_hbf_type) do
     stream_state = if end_stream, do: :half_closed_remote, else: :open
 
     {:ok,
@@ -519,13 +535,15 @@ defmodule Ankh.Stream do
            state: :half_closed_local,
            controlling_process: controlling_process,
            recv_hbf: recv_hbf,
+           recv_hbf_type: recv_hbf_type,
            recv_table: recv_table
          } = state,
          %Headers{
            flags: %Headers.Flags{end_headers: true, end_stream: end_stream},
            payload: %Headers.Payload{hbf: hbf}
          }
-       ) do
+       )
+       when is_nil(recv_hbf_type) do
     stream_state = if end_stream, do: :closed, else: :half_closed_local
 
     case process_recv_headers([hbf | recv_hbf], recv_table) do
@@ -553,13 +571,15 @@ defmodule Ankh.Stream do
   defp recv_frame(
          %{
            state: :half_closed_local,
-           recv_hbf: recv_hbf
+           recv_hbf: recv_hbf,
+           recv_hbf_type: recv_hbf_type
          } = state,
          %Headers{
            flags: %Headers.Flags{end_headers: false, end_stream: end_stream},
            payload: %Headers.Payload{hbf: hbf}
          }
-       ) do
+       )
+       when is_nil(recv_hbf_type) do
     stream_state = if end_stream, do: :closed, else: :half_closed_local
 
     {:ok,
@@ -809,8 +829,8 @@ defmodule Ankh.Stream do
     |> process_send_headers(send_table)
     |> Splittable.split(max_frame_size)
     |> Enum.reduce_while({:ok, nil}, fn frame, _ ->
-      with {:ok, data} <- Frame.encode(frame),
-           :ok <- Connection.send(connection, data) do
+      with {:ok, length, type, data} <- Frame.encode(frame),
+           :ok <- Connection.send(connection, length, type, data) do
         Logger.debug(fn ->
           "SENT #{inspect(frame)}"
         end)

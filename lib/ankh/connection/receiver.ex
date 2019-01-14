@@ -70,7 +70,15 @@ defmodule Ankh.Connection.Receiver do
         with stream when not is_nil(stream) <- Connection.get_stream(connection, id),
              {:ok, _stream_state, recv_hbf_type} <- Stream.recv(stream, type, data) do
           last_local_stream_id = max(last_local_stream_id, id)
-          {:cont, {:noreply, %{state | buffer: rest, last_local_stream_id: last_local_stream_id, recv_hbf_type: recv_hbf_type}}}
+
+          {:cont,
+           {:noreply,
+            %{
+              state
+              | buffer: rest,
+                last_local_stream_id: last_local_stream_id,
+                recv_hbf_type: recv_hbf_type
+            }}}
         else
           nil ->
             Connection.error(connection, :protocol_error)
@@ -90,7 +98,13 @@ defmodule Ankh.Connection.Receiver do
           last_remote_stream_id = if type == priority, do: last_remote_stream_id, else: id
 
           {:cont,
-           {:noreply, %{state | buffer: rest, last_remote_stream_id: last_remote_stream_id, recv_hbf_type: recv_hbf_type}}}
+           {:noreply,
+            %{
+              state
+              | buffer: rest,
+                last_remote_stream_id: last_remote_stream_id,
+                recv_hbf_type: recv_hbf_type
+            }}}
         else
           {:ok, _id, _stream} ->
             Connection.error(connection, :protocol_error)
@@ -126,8 +140,8 @@ defmodule Ankh.Connection.Receiver do
     }
 
     with :ok <- Connection.send_settings(connection, payload),
-         {:ok, data} <- Frame.encode(settings),
-         :ok <- Connection.send(connection, data),
+         {:ok, length, type, data} <- Frame.encode(settings),
+         :ok <- Connection.send(connection, length, type, data),
          do: :ok
   end
 
@@ -169,8 +183,8 @@ defmodule Ankh.Connection.Receiver do
         }
     }
 
-    with {:ok, data} <- Frame.encode(ping),
-         :ok <- Connection.send(connection, data),
+    with {:ok, length, type, data} <- Frame.encode(ping),
+         :ok <- Connection.send(connection, length, type, data),
          do: :ok
   end
 
