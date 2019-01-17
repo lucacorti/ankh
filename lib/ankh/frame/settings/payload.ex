@@ -40,7 +40,7 @@ defimpl Ankh.Frame.Encodable, for: Ankh.Frame.Settings.Payload do
     end
   end
 
-  def decode(_payload, _data, _options), do: {:error, :frame_size_error} |> IO.inspect
+  def decode(_payload, _data, _options), do: {:error, :frame_size_error}
 
   defp decode_settings(<<@header_table_size::16, value::32, rest::binary>>, settings),
     do: decode_settings(rest, [{:header_table_size, value} | settings])
