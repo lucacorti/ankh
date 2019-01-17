@@ -27,7 +27,7 @@ defmodule AnkhTest.Connection do
       }
     }
 
-    assert {:ok, state} = Stream.send(stream, headers)
+    assert {:ok, _state} = Stream.send(stream, headers)
     receive_all(stream_id)
   end
 
