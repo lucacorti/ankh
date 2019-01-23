@@ -869,6 +869,7 @@ defmodule Ankh.Stream do
 
       if Enum.any?(headers, fn
            :none -> true
+          {":path", ""} -> true
            _ -> false
          end) do
         :error
