@@ -104,6 +104,7 @@ defmodule Ankh.Connection do
       {:ok,
        %{
          controlling_process: controlling_process,
+         header_table_size: 4_096,
          last_stream_id: nil,
          options: options,
          receiver: nil,
@@ -363,15 +364,17 @@ defmodule Ankh.Connection do
         {:send_settings, %Settings.Payload{settings: settings}},
         _from,
         %{
+          header_table_size: header_table_size,
           recv_settings: recv_settings,
           send_hpack: send_hpack,
           send_settings: nil,
           socket: socket,
-          transport: transport
+          transport: transport,
+          window_size: window_size
         } = state
       ) do
-    with header_table_size <- Keyword.get(settings, :header_table_size, 4_096),
-         window_size <- Keyword.get(settings, :window_size, 65_535),
+    with header_table_size <- Keyword.get(settings, :header_table_size, header_table_size),
+         window_size <- Keyword.get(settings, :window_size, window_size),
          enable_push <- Keyword.get(settings, :enable_push, true),
          :ok <- Table.resize(header_table_size, send_hpack),
          recv_settings <- %Settings.Payload{
@@ -387,24 +390,26 @@ defmodule Ankh.Connection do
            send_settings: settings
        }}
     else
-      error ->
-        {:reply, error, state}
+      _ ->
+        error = {:error, :compression_error}
+        {:stop, error, error, state}
     end
   end
 
   def handle_call(
         {:send_settings, %Settings.Payload{settings: settings}},
         _from,
-        %{send_hpack: send_hpack} = state
+        %{header_table_size: header_table_size, send_hpack: send_hpack, window_size: window_size} = state
       ) do
-    header_table_size = Keyword.get(settings, :header_table_size)
-
-    if header_table_size do
-      :ok = Table.resize(header_table_size, send_hpack)
+    header_table_size = Keyword.get(settings, :header_table_size, header_table_size)
+    window_size = Keyword.get(settings, :initial_window_size, window_size)
+    with :ok <- Table.resize(header_table_size, send_hpack) do
+      {:reply, :ok, %{state | header_table_size: header_table_size, send_settings: settings, window_size: window_size}}
+    else
+      _ ->
+        error = {:error, :compression_error}
+        {:stop, error, error, state}
     end
-
-    window_size = Keyword.get(settings, :initial_window_size, 65_535)
-    {:reply, :ok, %{state | send_settings: settings, window_size: window_size}}
   end
 
   def handle_call(
