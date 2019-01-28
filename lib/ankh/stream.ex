@@ -107,12 +107,6 @@ defmodule Ankh.Stream do
   @spec reserve(t(), reserve_mode) :: term
   def reserve(stream, mode), do: GenServer.call(stream, {:reserve, mode})
 
-  @doc """
-  Closes the stream
-  """
-  @spec close(t()) :: term
-  def close(stream), do: GenServer.call(stream, {:close})
-
   def handle_call({:reserve, :local}, _from, %{state: :idle} = state) do
     {:reply, {:ok, :reserved_local}, %{state | state: :reserved_local}}
   end
@@ -155,6 +149,10 @@ defmodule Ankh.Stream do
             } receiving hbf: #{inspect(recv_hbf_type)}"
           end)
 
+          if new_stream_state == :closed do
+            Process.send_after(self(), {:close}, 1_000)
+          end
+
           {:reply, {:ok, new_stream_state, recv_hbf_type}, state}
         else
           {:error, _} = error ->
@@ -189,6 +187,10 @@ defmodule Ankh.Stream do
           }"
         end)
 
+        if new_stream_state == :closed do
+          Process.send_after(self(), {:close}, 1_000)
+        end
+
         {:reply, {:ok, new_stream_state}, state}
 
       {:error, _} = error ->
@@ -201,8 +203,8 @@ defmodule Ankh.Stream do
     end
   end
 
-  def handle_call({:close}, _from, state) do
-    {:stop, :normal, :ok, state}
+  def handle_info({:close}, state) do
+    {:stop, :normal, state}
   end
 
   defp recv_frame(%{id: id}, %{stream_id: stream_id}) when stream_id !== id do
