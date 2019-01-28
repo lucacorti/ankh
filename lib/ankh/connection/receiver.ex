@@ -71,7 +71,7 @@ defmodule Ankh.Connection.Receiver do
                 {:cont, {:noreply, %{state | buffer: rest}}}
 
               nil ->
-                {:halt, {:stop, {:error, :protcol_error}, %{state | buffer: rest}}}
+                {:halt, {:stop, {:error, :protocol_error}, %{state | buffer: rest}}}
 
               {:error, reason} ->
                 Connection.error(connection, reason)
