@@ -10,13 +10,21 @@ defmodule Ankh.Connection.Receiver do
 
   @type t :: GenServer.server()
 
-  @spec start_link(Connection.connection(), pid, integer(), integer(), GenServer.options()) ::
+  @spec start_link(
+          Connection.connection(),
+          pid,
+          integer(),
+          integer(),
+          atom(),
+          GenServer.options()
+        ) ::
           GenServer.on_start()
   def start_link(
         connection,
         controlling_process,
         first_local_stream_id,
         first_remote_stream_id,
+        transport,
         options \\ []
       ) do
     GenServer.start_link(
@@ -25,7 +33,8 @@ defmodule Ankh.Connection.Receiver do
         connection: connection,
         controlling_process: controlling_process,
         last_local_stream_id: first_local_stream_id,
-        last_remote_stream_id: first_remote_stream_id
+        last_remote_stream_id: first_remote_stream_id,
+        transport: transport
       ],
       options
     )
@@ -36,95 +45,100 @@ defmodule Ankh.Connection.Receiver do
   end
 
   def handle_info(
-        {:ssl, socket, data},
-        %{buffer: buffer, connection: connection, controlling_process: controlling_process} =
-          state
+        msg,
+        %{
+          buffer: buffer,
+          connection: connection,
+          controlling_process: controlling_process,
+          transport: transport
+        } = state
       ) do
-    :ssl.setopts(socket, active: :once)
-
-    (buffer <> data)
-    |> Frame.to_stream()
-    |> Enum.reduce_while({:noreply, %{state | buffer: buffer <> data}}, fn
-      {rest, nil}, {:noreply, state} ->
-        {:halt, {:noreply, %{state | buffer: rest}}}
-
-      {rest, {_length, type, 0, data}}, {:noreply, %{recv_hbf_type: recv_hbf_type} = state} ->
-        with type when not is_nil(type) <- Frame.Registry.frame_for_type(connection, type),
-             {:ok, frame} <- Frame.decode(struct(type), data),
-             :ok <- recv_connection_frame(frame, connection) do
-          {:cont, {:noreply, %{state | buffer: rest}}}
-        else
-          nil when is_nil(recv_hbf_type) ->
-            {:cont, {:noreply, %{state | buffer: rest}}}
-
-          nil ->
-            {:halt, {:stop, {:error, :protcol_error}, %{state | buffer: rest}}}
-
-          {:error, reason} ->
-            Connection.error(connection, reason)
-            {:halt, {:stop, reason, %{state | buffer: rest}}}
-        end
-
-      {rest, {_length, type, id, data}},
-      {:noreply, %{last_local_stream_id: last_local_stream_id} = state}
-      when is_local(last_local_stream_id, id) ->
-        with stream when not is_nil(stream) <- Connection.get_stream(connection, id),
-             {:ok, _stream_state, recv_hbf_type} <- Stream.recv(stream, type, data) do
-          last_local_stream_id = max(last_local_stream_id, id)
-
-          {:cont,
-           {:noreply,
-            %{
-              state
-              | buffer: rest,
-                last_local_stream_id: last_local_stream_id,
-                recv_hbf_type: recv_hbf_type
-            }}}
-        else
-          nil ->
-            Connection.error(connection, :protocol_error)
+    case transport.handle_msg(msg) do
+      {:data, data} ->
+        (buffer <> data)
+        |> Frame.to_stream()
+        |> Enum.reduce_while({:noreply, %{state | buffer: buffer <> data}}, fn
+          {rest, nil}, {:noreply, state} ->
             {:halt, {:noreply, %{state | buffer: rest}}}
 
-          {:error, reason} ->
-            Connection.error(connection, reason)
-            {:halt, {:noreply, %{state | buffer: rest}}}
-        end
+          {rest, {_length, type, 0, data}}, {:noreply, %{recv_hbf_type: recv_hbf_type} = state} ->
+            with type when not is_nil(type) <- Frame.Registry.frame_for_type(connection, type),
+                 {:ok, frame} <- Frame.decode(struct(type), data),
+                 :ok <- recv_connection_frame(frame, connection) do
+              {:cont, {:noreply, %{state | buffer: rest}}}
+            else
+              nil when is_nil(recv_hbf_type) ->
+                {:cont, {:noreply, %{state | buffer: rest}}}
 
-      {rest, {_length, type, id, data}},
-      {:noreply, %{last_remote_stream_id: last_remote_stream_id} = state} ->
-        with %Priority{type: priority} <- %Priority{},
-             {:ok, _id, stream} when type == priority or id >= last_remote_stream_id <-
-               Connection.start_stream(connection, id, controlling_process),
-             {:ok, _stream_state, recv_hbf_type} <- Stream.recv(stream, type, data) do
-          last_remote_stream_id = if type == priority, do: last_remote_stream_id, else: id
+              nil ->
+                {:halt, {:stop, {:error, :protcol_error}, %{state | buffer: rest}}}
 
-          {:cont,
-           {:noreply,
-            %{
-              state
-              | buffer: rest,
-                last_remote_stream_id: last_remote_stream_id,
-                recv_hbf_type: recv_hbf_type
-            }}}
-        else
-          {:ok, _id, _stream} ->
-            Connection.error(connection, :protocol_error)
-            {:halt, {:noreply, %{state | buffer: rest}}}
+              {:error, reason} ->
+                Connection.error(connection, reason)
+                {:halt, {:stop, reason, %{state | buffer: rest}}}
+            end
 
-          {:error, reason} ->
-            Connection.error(connection, reason)
-            {:halt, {:noreply, %{state | buffer: rest}}}
-        end
-    end)
-  end
+          {rest, {_length, type, id, data}},
+          {:noreply, %{last_local_stream_id: last_local_stream_id} = state}
+          when is_local(last_local_stream_id, id) ->
+            with stream when not is_nil(stream) <- Connection.get_stream(connection, id),
+                 {:ok, _stream_state, recv_hbf_type} <- Stream.recv(stream, type, data) do
+              last_local_stream_id = max(last_local_stream_id, id)
 
-  def handle_info({:ssl_closed, _socket}, state) do
-    {:stop, :normal, state}
-  end
+              {:cont,
+               {:noreply,
+                %{
+                  state
+                  | buffer: rest,
+                    last_local_stream_id: last_local_stream_id,
+                    recv_hbf_type: recv_hbf_type
+                }}}
+            else
+              nil ->
+                Connection.error(connection, :protocol_error)
+                {:halt, {:noreply, %{state | buffer: rest}}}
 
-  def handle_info({:ssl_error, _socket, reason}, state) do
-    error = {:error, :ssl.format_error(reason)}
-    {:stop, error, state}
+              {:error, reason} ->
+                Connection.error(connection, reason)
+                {:halt, {:noreply, %{state | buffer: rest}}}
+            end
+
+          {rest, {_length, type, id, data}},
+          {:noreply, %{last_remote_stream_id: last_remote_stream_id} = state} ->
+            with %Priority{type: priority} <- %Priority{},
+                 {:ok, _id, stream} when type == priority or id >= last_remote_stream_id <-
+                   Connection.start_stream(connection, id, controlling_process),
+                 {:ok, _stream_state, recv_hbf_type} <- Stream.recv(stream, type, data) do
+              last_remote_stream_id = if type == priority, do: last_remote_stream_id, else: id
+
+              {:cont,
+               {:noreply,
+                %{
+                  state
+                  | buffer: rest,
+                    last_remote_stream_id: last_remote_stream_id,
+                    recv_hbf_type: recv_hbf_type
+                }}}
+            else
+              {:ok, _id, _stream} ->
+                Connection.error(connection, :protocol_error)
+                {:halt, {:noreply, %{state | buffer: rest}}}
+
+              {:error, reason} ->
+                Connection.error(connection, reason)
+                {:halt, {:noreply, %{state | buffer: rest}}}
+            end
+        end)
+
+      :closed ->
+        {:stop, :normal, state}
+
+      {:error, _msg} = error ->
+        {:stop, error, state}
+
+      msg ->
+        Logger.error("Transport did not handle message: #{inspect(msg)}")
+    end
   end
 
   defp recv_connection_frame(

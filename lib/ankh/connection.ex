@@ -190,7 +190,7 @@ defmodule Ankh.Connection do
           transport: transport
         } = state
       ) do
-    with {:ok, receiver} <- Receiver.start_link(self(), controlling_process, 2, 1),
+    with {:ok, receiver} <- Receiver.start_link(self(), controlling_process, 2, 1, transport),
          {:ok, socket} <- transport.accept(socket, receiver, options) do
       {:reply, :ok, %{state | last_stream_id: 2, receiver: receiver, socket: socket}}
     else
@@ -214,7 +214,7 @@ defmodule Ankh.Connection do
           uri: uri
         } = state
       ) do
-    with {:ok, receiver} <- Receiver.start_link(self(), controlling_process, 1, 2),
+    with {:ok, receiver} <- Receiver.start_link(self(), controlling_process, 1, 2, transport),
          {:ok, socket} <- transport.connect(uri, receiver, options),
          settings <- %Settings{payload: %Settings.Payload{settings: recv_settings}},
          {:ok, _length, _type, data} <- Frame.encode(settings),

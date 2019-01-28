@@ -3,7 +3,9 @@ defmodule Ankh.Transport.TLS do
   TLS transport module
   """
 
-  @behaviour Ankh.Transport
+  alias Ankh.Transport
+
+  @behaviour Transport
 
   @default_connect_options binary: true,
                            active: false,
@@ -16,6 +18,7 @@ defmodule Ankh.Transport.TLS do
 
   @preface "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
 
+  @impl Transport
   def connect(%URI{host: host, port: port}, receiver, options \\ []) do
     hostname = String.to_charlist(host)
     options = Keyword.merge(options, @default_connect_options)
@@ -31,6 +34,7 @@ defmodule Ankh.Transport.TLS do
     end
   end
 
+  @impl Transport
   def accept(socket, receiver, options \\ []) do
     options = Keyword.merge(options, active: :once)
     preface = @preface
@@ -48,6 +52,7 @@ defmodule Ankh.Transport.TLS do
     end
   end
 
+  @impl Transport
   def send(socket, data) do
     with :ok <- :ssl.send(socket, data) do
       :ok
@@ -57,6 +62,7 @@ defmodule Ankh.Transport.TLS do
     end
   end
 
+  @impl Transport
   def recv(socket, size) do
     with {:ok, data} <- :ssl.recv(socket, size) do
       {:ok, data}
@@ -66,6 +72,7 @@ defmodule Ankh.Transport.TLS do
     end
   end
 
+  @impl Transport
   def close(socket) do
     with :ok <- :ssl.close(socket) do
       :ok
@@ -74,4 +81,20 @@ defmodule Ankh.Transport.TLS do
         {:error, :ssl.format_error(reason)}
     end
   end
+
+  @impl Transport
+  def handle_msg({:ssl, socket, data}) do
+    with :ok <- :ssl.setopts(socket, active: :once) do
+      {:data, data}
+    else
+      {:error, reason} ->
+        {:error, :ssl.format_error(reason)}
+    end
+  end
+
+  @impl Transport
+  def handle_msg({:ssl_error, _socket, reason}), do: {:error, :ssl.format_error(reason)}
+
+  @impl Transport
+  def handle_msg({:ssl_closed, _socket}), do: :closed
 end

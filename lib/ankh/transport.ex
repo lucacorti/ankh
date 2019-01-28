@@ -31,4 +31,9 @@ defmodule Ankh.Transport do
   Receives data
   """
   @callback recv(t, integer) :: {:ok, binary} | {:error, term}
+
+  @doc """
+  Handles transport messages
+  """
+  @callback handle_msg(term) :: {:data, binary} | {:error, term} | :closed
 end
