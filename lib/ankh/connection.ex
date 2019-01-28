@@ -399,12 +399,20 @@ defmodule Ankh.Connection do
   def handle_call(
         {:send_settings, %Settings.Payload{settings: settings}},
         _from,
-        %{header_table_size: header_table_size, send_hpack: send_hpack, window_size: window_size} = state
+        %{header_table_size: header_table_size, send_hpack: send_hpack, window_size: window_size} =
+          state
       ) do
     header_table_size = Keyword.get(settings, :header_table_size, header_table_size)
     window_size = Keyword.get(settings, :initial_window_size, window_size)
+
     with :ok <- Table.resize(header_table_size, send_hpack) do
-      {:reply, :ok, %{state | header_table_size: header_table_size, send_settings: settings, window_size: window_size}}
+      {:reply, :ok,
+       %{
+         state
+         | header_table_size: header_table_size,
+           send_settings: settings,
+           window_size: window_size
+       }}
     else
       _ ->
         error = {:error, :compression_error}
