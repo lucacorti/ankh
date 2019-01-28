@@ -135,9 +135,6 @@ defmodule Ankh.Connection.Receiver do
 
       {:error, _msg} = error ->
         {:stop, error, state}
-
-      msg ->
-        Logger.error("Transport did not handle message: #{inspect(msg)}")
     end
   end
 
