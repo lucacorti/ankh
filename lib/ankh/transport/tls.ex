@@ -42,6 +42,9 @@ defmodule Ankh.Transport.TLS do
     else
       {:error, reason} ->
         {:error, :ssl.format_error(reason)}
+
+      _ ->
+        {:error, :protocol_error}
     end
   end
 
