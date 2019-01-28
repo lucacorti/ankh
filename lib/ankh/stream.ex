@@ -46,6 +46,9 @@ defmodule Ankh.Stream do
   @typedoc "Reserve mode"
   @type reserve_mode :: :local | :remote
 
+  defguard is_local(last_local_stream_id, stream_id)
+           when rem(last_local_stream_id, 2) == rem(stream_id, 2)
+
   @doc """
   Starts a new stream fot the provided connection
   """
@@ -869,7 +872,7 @@ defmodule Ankh.Stream do
 
       if Enum.any?(headers, fn
            :none -> true
-          {":path", ""} -> true
+           {":path", ""} -> true
            _ -> false
          end) do
         :error

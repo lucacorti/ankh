@@ -6,6 +6,7 @@ defmodule Ankh.Connection.Receiver do
 
   alias Ankh.{Connection, Error, Frame, Stream}
   alias Ankh.Frame.{GoAway, Ping, Priority, Settings, WindowUpdate}
+  import Stream, only: [is_local: 2]
 
   @type t :: GenServer.server()
 
@@ -66,7 +67,7 @@ defmodule Ankh.Connection.Receiver do
 
       {rest, {_length, type, id, data}},
       {:noreply, %{last_local_stream_id: last_local_stream_id} = state}
-      when rem(last_local_stream_id, 2) == rem(id, 2) ->
+      when is_local(last_local_stream_id, id) ->
         with stream when not is_nil(stream) <- Connection.get_stream(connection, id),
              {:ok, _stream_state, recv_hbf_type} <- Stream.recv(stream, type, data) do
           last_local_stream_id = max(last_local_stream_id, id)
