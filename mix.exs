@@ -34,7 +34,7 @@ defmodule Ankh.Mixfile do
     [
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:dialyxir, "~> 0.5.1", only: [:dev, :test], runtime: false},
-      {:credo, "~> 1.0.0", only: [:dev, :test], runtime: false},
+      {:credo, "~> 1.1.0", only: [:dev, :test], runtime: false},
       {:hpack, "~> 1.1.0"},
       {:certifi, "~> 2.0"},
       {:ssl_verify_fun, "~> 1.1"}
