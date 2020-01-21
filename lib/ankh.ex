@@ -10,6 +10,7 @@ defmodule Ankh do
   Ankh only supports HTTP/2 over TLS. Support for HTTP/2 over plaintext
   TCP was intentionally left out.
   """
+
   use Application
 
   @doc false
