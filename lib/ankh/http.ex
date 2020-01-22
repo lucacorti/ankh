@@ -44,16 +44,16 @@ defmodule Ankh.HTTP do
          do: {:ok, protocol}
   end
 
-  @spec request(Protocol.t(), Request.t(), keyword) ::
+  @spec request(Protocol.t(), Request.t()) ::
           {:ok, Protocol.t(), Protocol.request_reference()} | {:error, any()}
-  def request(protocol, request, options \\ []) do
-    HTTP2.request(protocol, request, options)
+  def request(protocol, request) do
+    HTTP2.request(protocol, request)
   end
 
-  @spec respond(Protocol.t(), Protocol.request_reference(), Response.t(), keyword) ::
+  @spec respond(Protocol.t(), Protocol.request_reference(), Response.t()) ::
           {:ok, Protocol.t()} | {:error, any()}
-  def respond(protocol, reference, response, options \\ []) do
-    HTTP2.respond(protocol, reference, response, options)
+  def respond(protocol, reference, response) do
+    HTTP2.respond(protocol, reference, response)
   end
 
   def stream(protocol, msg) do

@@ -15,6 +15,7 @@ defmodule Ankh.HTTP2 do
 
   @behaviour Protocol
 
+  @initial_window_size 65_535
   @max_window_size 2_147_483_647
   @max_stream_id 2_147_483_647
   @preface "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
@@ -48,7 +49,7 @@ defmodule Ankh.HTTP2 do
             streams: %{},
             transport: TLS,
             uri: nil,
-            window_size: 65_535
+            window_size: @initial_window_size
 
   @impl Protocol
   def new(options) do
@@ -128,27 +129,43 @@ defmodule Ankh.HTTP2 do
              {rest, nil}, {:ok, protocol, responses} ->
                {:halt, {:ok, %{protocol | buffer: rest}, responses}}
 
-             {rest, {length, type, id, data}}, {:ok, protocol, responses} ->
-               with {:ok, protocol, response} <- recv_frame(type, id, data, rest, protocol) do
+             {rest, {length, type, id, data}},
+             {:ok, %{recv_hbf_type: recv_hbf_type} = protocol, responses} ->
+               with {:ok, type} <- Frame.Registry.frame_for_type(protocol, type),
+                    {:ok, frame} <- Frame.decode(struct(type), data),
+                    :ok <- Logger.debug(fn -> "RECVD #{inspect(frame)}" end),
+                    {:ok, protocol, response} <- recv_frame(frame, protocol) do
                  case response do
                    {:data, data, end_stream} ->
                      {:ok, protocol} = process_recv_data(protocol, length, id)
-                     {:cont, {:ok, protocol, [{:data, id, data, end_stream} | responses]}}
+
+                     {:cont,
+                      {:ok, %{protocol | buffer: rest},
+                       [{:data, id, data, end_stream} | responses]}}
+
+                   {:error, error} ->
+                     {:cont,
+                      {:ok, %{protocol | buffer: rest}, [{:error, id, error, true} | responses]}}
 
                    {type, hbf, end_stream} when type in [:headers, :push_promise] ->
                      case process_recv_headers(protocol, hbf) do
                        {:ok, headers} ->
-                         {:cont, {:ok, protocol, [{type, id, headers, end_stream} | responses]}}
+                         {:cont,
+                          {:ok, %{protocol | buffer: rest},
+                           [{type, id, headers, end_stream} | responses]}}
 
                        error ->
                          {:halt, error}
                      end
 
                    _ ->
-                     {:cont, {:ok, protocol, responses}}
+                     {:cont, {:ok, %{protocol | buffer: rest}, responses}}
                  end
                else
-                 error ->
+                 {:error, :not_found} when is_nil(recv_hbf_type) ->
+                   {:cont, {:ok, %{protocol | buffer: rest}, responses}}
+
+                 {:error, _reason} = error ->
                    {:halt, error}
                end
            end) do
@@ -159,8 +176,7 @@ defmodule Ankh.HTTP2 do
   @impl Protocol
   def request(
         %{uri: %{authority: authority, host: host, path: path, scheme: scheme}} = protocol,
-        %{method: method} = request,
-        _options
+        %{method: method} = request
       ) do
     request =
       request
@@ -170,6 +186,9 @@ defmodule Ankh.HTTP2 do
       |> Request.set_scheme(scheme)
       |> Request.put_header(":method", method)
       |> Request.put_header(":authority", authority)
+      |> Request.put_header(":scheme", scheme)
+      |> Request.put_header(":path", path || "/")
+      |> IO.inspect
 
     with {:ok, protocol, %{id: id} = stream} <- get_stream(protocol, nil),
          {:ok, protocol} <- send_headers(protocol, stream, request),
@@ -183,8 +202,7 @@ defmodule Ankh.HTTP2 do
   def respond(
         %{uri: %{host: host, scheme: scheme}} = protocol,
         stream_id,
-        %{status: status} = response,
-        _options
+        %{status: status} = response
       ) do
     response =
       response
@@ -265,18 +283,29 @@ defmodule Ankh.HTTP2 do
 
   defp send_frame(protocol, frame), do: do_send_frame(protocol, frame)
 
-  defp do_send_frame(%{socket: socket} = protocol, %{stream_id: stream_id} = frame) do
-    with {:ok, protocol, %{max_frame_size: max_frame_size}} <- get_stream(protocol, stream_id) do
+  defp do_send_frame(%{socket: socket, transport: transport} = protocol, %{stream_id: 0} = frame) do
+    with {:ok, _length, _type, data} <- Frame.encode(frame),
+         :ok <- transport.send(socket, data) do
+      Logger.debug(fn -> "SENT #{inspect(frame)}" end)
+      {:ok, protocol}
+    end
+  end
+
+  defp do_send_frame(
+         %{socket: socket, streams: streams, transport: transport} = protocol,
+         %{stream_id: stream_id} = frame
+       ) do
+    with {:ok, protocol, %{max_frame_size: max_frame_size} = stream} <-
+           get_stream(protocol, stream_id),
+         {:ok, stream} <- __MODULE__.Stream.send(stream, frame) do
       frame
       |> Splittable.split(max_frame_size)
       |> Enum.reduce_while({:ok, protocol}, fn frame, _ ->
-        with {:ok, _type, _length, data} <- Frame.encode(frame),
-             :ok <- TLS.send(socket, data) do
-          Logger.debug(fn ->
-            "SENT #{inspect(frame)} #{inspect(data)}"
-          end)
+        with {:ok, length, _type, data} <- Frame.encode(frame),
+             :ok <- transport.send(socket, data) do
+          Logger.debug(fn -> "SENT #{inspect(%{frame | length: length})}" end)
 
-          {:cont, {:ok, protocol}}
+          {:cont, {:ok, %{protocol | streams: Map.put(streams, stream_id, stream)}}}
         else
           error ->
             {:halt, error}
@@ -286,19 +315,14 @@ defmodule Ankh.HTTP2 do
   end
 
   defp recv_frame(
-         type,
-         0 = _id,
-         data,
-         rest,
+         %{stream_id: 0} = frame,
          %{last_local_stream_id: llid} = protocol
        ) do
-    with {:ok, type} <- Frame.Registry.frame_for_type(protocol, type),
-         {:ok, frame} <- Frame.decode(struct(type), data),
-         {:ok, protocol} <- process_connection_frame(frame, protocol) do
-      {:ok, %{protocol | buffer: rest}, nil}
+    with {:ok, protocol} <- process_connection_frame(frame, protocol) do
+      {:ok, protocol, nil}
     else
       {:error, :not_found} ->
-        {:ok, %{protocol | buffer: rest}, nil}
+        {:ok, protocol, nil}
 
       {:error, reason} ->
         send_error(protocol, llid - 2, reason)
@@ -307,25 +331,19 @@ defmodule Ankh.HTTP2 do
   end
 
   defp recv_frame(
-         type,
-         id,
-         data,
-         rest,
+         %{stream_id: id} = frame,
          %{last_local_stream_id: llid} = protocol
        )
        when is_local_stream(llid, id) do
     with {:ok, %{streams: streams} = protocol, stream} when not is_nil(stream) <-
            get_stream(protocol, id),
-         {:ok, type} <- Frame.Registry.frame_for_type(protocol, type),
-         {:ok, frame} <- Frame.decode(struct(type), data),
          {:ok, %{recv_hbf_type: recv_hbf_type} = stream, response} <-
            __MODULE__.Stream.recv(stream, frame) do
       {
         :ok,
         %{
           protocol
-          | buffer: rest,
-            last_local_stream_id: max(llid, id),
+          | last_local_stream_id: max(llid, id),
             recv_hbf_type: recv_hbf_type,
             streams: Map.put(streams, id, stream)
         },
@@ -343,22 +361,17 @@ defmodule Ankh.HTTP2 do
   end
 
   defp recv_frame(
-         type,
-         id,
-         data,
-         rest,
+         %{stream_id: id} = frame,
          %{
            last_local_stream_id: llid,
            last_remote_stream_id: lrid,
            streams: streams
          } = protocol
        ) do
-    is_priority = Priority.type() == type
+    is_priority = Priority.type() == frame.type()
 
     with {:ok, protocol, stream} when is_priority or id >= lrid <-
            get_stream(protocol, id),
-         {:ok, type} <- Frame.Registry.frame_for_type(protocol, type),
-         {:ok, frame} <- Frame.decode(struct(type), data),
          {:ok, %{recv_hbf_type: recv_hbf_type} = stream, response} <-
            __MODULE__.Stream.recv(stream, frame) do
       lrid = if is_priority, do: lrid, else: id
@@ -367,8 +380,7 @@ defmodule Ankh.HTTP2 do
         :ok,
         %{
           protocol
-          | buffer: rest,
-            last_remote_stream_id: lrid,
+          | last_remote_stream_id: lrid,
             recv_hbf_type: recv_hbf_type,
             streams: Map.put(streams, id, stream)
         },
@@ -386,12 +398,12 @@ defmodule Ankh.HTTP2 do
   end
 
   defp process_connection_frame(
-         %Settings{payload: %{settings: settings}} = frame,
+         %Settings{flags: %{ack: false} = flags, payload: %{settings: settings}} = frame,
          %{send_hpack: send_hpack} = protocol
        ) do
     settings_ack = %Settings{
       frame
-      | flags: %Settings.Flags{ack: true},
+      | flags: %{flags | ack: true},
         payload: nil,
         length: 0
     }
@@ -504,13 +516,7 @@ defmodule Ankh.HTTP2 do
            settings: Keyword.put(recv_settings, :enable_push, enable_push)
          },
          {:ok, protocol} <- send_frame(protocol, %Settings{payload: recv_settings}) do
-      {:ok,
-       %{
-         protocol
-         | send_hpack: send_hpack,
-           window_size: window_size,
-           send_settings: settings
-       }}
+      {:ok, %{protocol | window_size: window_size, send_settings: settings}}
     else
       _ ->
         {:error, :compression_error}
@@ -529,10 +535,17 @@ defmodule Ankh.HTTP2 do
   defp process_recv_data(protocol, length, stream_id) when length > 0 do
     window_update = %WindowUpdate{payload: %WindowUpdate.Payload{increment: length}}
 
-    with {:ok, protocol, %{id: id}} <- get_stream(protocol, stream_id),
-         {:ok, protocol} <- send_frame(protocol, window_update),
-         {:ok, protocol} <- send_frame(protocol, %{window_update | stream_id: id}),
-         do: {:ok, protocol}
+    with {:ok, protocol} <- send_frame(protocol, window_update),
+         {:ok, protocol, %{id: id, state: state}} when state not in [:closed] <-
+           get_stream(protocol, stream_id) do
+      send_frame(protocol, %{window_update | stream_id: id})
+    else
+      {:ok, protocol, %{state: :closed}} ->
+        {:ok, protocol}
+
+      error ->
+        error
+    end
   end
 
   defp process_recv_data(protocol, _length, _stream_id), do: {:ok, protocol}
@@ -560,65 +573,35 @@ defmodule Ankh.HTTP2 do
       {:error, :compression_error}
   end
 
-  defp send_data(protocol, %{id: stream_id}, request) do
-    case data_frame(request, stream_id) do
-      nil ->
-        {:ok, protocol}
+  defp send_data(protocol, _stream, %{body: nil}), do: {:ok, protocol}
 
-      data ->
-        with {:ok, protocol} <- send_frame(protocol, data),
-             do: {:ok, protocol}
-    end
-  end
-
-  defp send_headers(protocol, %{id: stream_id}, request) do
-    with {:ok, protocol} <- send_frame(protocol, headers_frame(request, stream_id)),
-         do: {:ok, protocol}
-  end
-
-  defp send_trailers(protocol, %{id: stream_id}, request) do
-    case trailers_frame(request, stream_id) do
-      nil ->
-        {:ok, protocol}
-
-      trailers ->
-        with {:ok, protocol} <- send_frame(protocol, trailers),
-             do: {:ok, protocol}
-    end
-  end
-
-  defp headers_frame(
-         %{
-           body: body,
-           headers: headers,
-           trailers: trailers
-         },
-         stream_id
-       ) do
-    %Headers{
-      stream_id: stream_id,
-      flags: %Headers.Flags{end_stream: body == nil && List.first(trailers) == nil},
-      payload: %Headers.Payload{hbf: headers}
-    }
-  end
-
-  defp data_frame(%{body: nil}, _stream_id), do: nil
-
-  defp data_frame(%{body: body, trailers: trailers}, stream_id) do
-    %Data{
+  defp send_data(protocol, %{id: stream_id}, %{body: body, trailers: trailers}) do
+    send_frame(protocol, %Data{
       stream_id: stream_id,
       flags: %Data.Flags{end_stream: Enum.empty?(trailers)},
       payload: %Data.Payload{data: body}
-    }
+    })
   end
 
-  defp trailers_frame(%{trailers: []}, _stream_id), do: nil
+  defp send_headers(protocol, %{id: stream_id}, %{
+         headers: headers,
+         body: body,
+         trailers: trailers
+       }) do
+    send_frame(protocol, %Headers{
+      stream_id: stream_id,
+      flags: %Headers.Flags{end_stream: body == nil && List.first(trailers) == nil},
+      payload: %Headers.Payload{hbf: headers}
+    })
+  end
 
-  defp trailers_frame(%{trailers: trailers}, stream_id) do
-    %Headers{
+  defp send_trailers(protocol, _stream, %{trailers: []}), do: {:ok, protocol}
+
+  defp send_trailers(protocol, %{id: stream_id}, %{trailers: trailers}) do
+    send_frame(protocol, %Headers{
       stream_id: stream_id,
       flags: %Headers.Flags{end_stream: true},
       payload: %Headers.Payload{hbf: trailers}
-    }
+    })
   end
 end

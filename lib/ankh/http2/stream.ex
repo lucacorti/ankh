@@ -48,7 +48,7 @@ defmodule Ankh.HTTP2.Stream do
 
   @type data_type :: :headers | :data | :push_promise
 
-  @type data :: {data_type, iodata(), end_stream}
+  @type data :: {data_type, iodata(), end_stream} | {:error, any()}
 
   defguard is_local_stream(last_local_stream_id, stream_id)
            when rem(last_local_stream_id, 2) == rem(stream_id, 2)
@@ -85,9 +85,7 @@ defmodule Ankh.HTTP2.Stream do
     case recv_frame(stream, frame) do
       {:ok, %{state: new_state, recv_hbf_type: recv_hbf_type} = stream, data} ->
         Logger.debug(fn ->
-          "STREAM #{id} RECEIVED #{inspect(frame)}\nSTREAM #{inspect(state)} -> #{
-            inspect(new_state)
-          } receiving hbf: #{inspect(recv_hbf_type)}"
+          "STREAM #{id} #{inspect(state)} -> #{inspect(new_state)} hbf: #{inspect(recv_hbf_type)}"
         end)
 
         {:ok, stream, data}
@@ -97,7 +95,7 @@ defmodule Ankh.HTTP2.Stream do
 
       {:error, reason} = error ->
         Logger.error(fn ->
-          "STREAM #{id} STATE #{state} RECEIVE #{inspect(reason)} FRAME #{inspect(frame)}"
+          "STREAM #{id} #{state} RECV ERROR #{inspect(reason)} ON #{inspect(frame)}"
         end)
 
         error
@@ -108,21 +106,18 @@ defmodule Ankh.HTTP2.Stream do
   Process and send a frame on the stream
   """
   @spec send(t(), HTTP2.Frame.t()) :: {:ok, t()} | {:error, any()}
-  def send(%{id: id, state: state} = stream, frame) do
-    with frame <- %{frame | stream_id: id},
-         {:ok, %{state: new_state, recv_hbf_type: recv_hbf_type} = stream} <-
-           send_frame(stream, frame) do
-      Logger.debug(fn ->
-        "STREAM #{id}: #{inspect(state)} -> #{inspect(new_state)} receiving hbf: #{
-          inspect(recv_hbf_type)
-        }"
-      end)
+  def send(%{id: id, state: state} = stream, %{stream_id: id} = frame) do
+    case send_frame(stream, frame) do
+      {:ok, %{state: new_state, recv_hbf_type: recv_hbf_type} = stream} ->
+        Logger.debug(fn ->
+          "STREAM #{id} #{inspect(state)} -> #{inspect(new_state)} hbf: #{inspect(recv_hbf_type)}"
+        end)
 
-      {:ok, stream}
-    else
-      {:error, _} = error ->
+        {:ok, stream}
+
+      {:error, reason} = error ->
         Logger.error(fn ->
-          "STREAM #{id} STATE #{state} SEND #{inspect(error)} FRAME #{inspect(frame)}"
+          "STREAM #{id} #{state} SEND ERROR #{inspect(reason)} ON #{inspect(frame)}"
         end)
 
         error
@@ -150,23 +145,15 @@ defmodule Ankh.HTTP2.Stream do
        when stream_id == depended_id,
        do: {:error, :protocol_error}
 
-  defp recv_frame(%{id: stream_id, window_size: window_size} = stream, %WindowUpdate{
+  defp recv_frame(_stream, %WindowUpdate{payload: %WindowUpdate.Payload{increment: 0}}) do
+    {:error, :protocol_error}
+  end
+
+  defp recv_frame(%{window_size: window_size}, %WindowUpdate{
          payload: %WindowUpdate.Payload{increment: increment}
        })
        when window_size + increment > @max_window_size do
-    rst_stream = %RstStream{
-      stream_id: stream_id,
-      payload: %RstStream.Payload{
-        error_code: :flow_control_error
-      }
-    }
-
-    with {:ok, _stream} <- send_frame(stream, rst_stream),
-         do: {:error, :flow_control_error}
-  end
-
-  defp recv_frame(_stream, %WindowUpdate{payload: %WindowUpdate.Payload{increment: 0}}) do
-    {:error, :protocol_error}
+    {:error, :flow_control_error}
   end
 
   # IDLE
@@ -228,8 +215,10 @@ defmodule Ankh.HTTP2.Stream do
 
   defp recv_frame(%{state: :reserved_local} = stream, %Priority{}), do: {:ok, stream}
 
-  defp recv_frame(%{state: :reserved_local} = stream, %RstStream{}) do
-    {:ok, %{stream | state: :closed}}
+  defp recv_frame(%{state: :reserved_local} = stream, %RstStream{
+         payload: %RstStream.Payload{error_code: reason}
+       }) do
+    {:ok, %{stream | state: :closed}, {:error, reason}}
   end
 
   defp recv_frame(%{state: :reserved_local, window_size: window_size} = stream, %WindowUpdate{
@@ -255,8 +244,10 @@ defmodule Ankh.HTTP2.Stream do
 
   defp recv_frame(%{state: :reserved_remote} = stream, %Priority{}), do: {:ok, stream}
 
-  defp recv_frame(%{state: :reserved_remote} = stream, %RstStream{}) do
-    {:ok, %{stream | state: :closed}}
+  defp recv_frame(%{state: :reserved_remote} = stream, %RstStream{
+         payload: %RstStream.Payload{error_code: reason}
+       }) do
+    {:ok, %{stream | state: :closed}, {:error, reason}}
   end
 
   # OPEN
@@ -401,8 +392,10 @@ defmodule Ankh.HTTP2.Stream do
     {:ok, %{stream | state: state}, {:data, data, end_stream}}
   end
 
-  defp recv_frame(%{state: :open} = stream, %RstStream{}) do
-    {:ok, %{stream | state: :closed}}
+  defp recv_frame(%{state: :open} = stream, %RstStream{
+         payload: %RstStream.Payload{error_code: reason}
+       }) do
+    {:ok, %{stream | state: :closed}, {:error, reason}}
   end
 
   defp recv_frame(%{state: :open, recv_hbf_type: recv_hbf_type}, _)
@@ -478,8 +471,10 @@ defmodule Ankh.HTTP2.Stream do
     {:ok, %{stream | state: state}, {:data, data, end_stream}}
   end
 
-  defp recv_frame(%{state: :half_closed_local} = stream, %RstStream{}) do
-    {:ok, %{stream | state: :closed}}
+  defp recv_frame(%{state: :half_closed_local} = stream, %RstStream{
+         payload: %RstStream.Payload{error_code: reason}
+       }) do
+    {:ok, %{stream | state: :closed}, {:error, reason}}
   end
 
   defp recv_frame(%{state: :half_closed_local} = stream, _), do: {:ok, stream}
@@ -520,8 +515,10 @@ defmodule Ankh.HTTP2.Stream do
 
   defp recv_frame(%{state: :half_closed_remote} = stream, %Priority{}), do: {:ok, stream}
 
-  defp recv_frame(%{state: :half_closed_remote} = stream, %RstStream{}) do
-    {:ok, %{stream | state: :closed}}
+  defp recv_frame(%{state: :half_closed_remote} = stream, %RstStream{
+         payload: %RstStream.Payload{error_code: reason}
+       }) do
+    {:ok, %{stream | state: :closed}, {:error, reason}}
   end
 
   defp recv_frame(%{state: :half_closed_remote, window_size: window_size} = stream, %WindowUpdate{
@@ -535,7 +532,12 @@ defmodule Ankh.HTTP2.Stream do
   # CLOSED
 
   defp recv_frame(%{state: :closed} = stream, %Priority{}), do: {:ok, stream}
-  defp recv_frame(%{state: :closed} = stream, %RstStream{}), do: {:ok, stream}
+
+  defp recv_frame(%{state: :closed} = stream, %RstStream{
+         payload: %RstStream.Payload{error_code: reason}
+       }) do
+    {:ok, stream, {:error, reason}}
+  end
 
   defp recv_frame(%{state: :closed, window_size: window_size} = stream, %WindowUpdate{
          payload: %WindowUpdate.Payload{increment: increment}

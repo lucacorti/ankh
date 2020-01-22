@@ -8,9 +8,8 @@ defmodule Ankh.Protocol do
   @typep t :: any()
   @typep request_reference :: any()
 
-
   @doc """
-  Creates a new connection context
+  Creates a new connection
   """
   @callback new(keyword) :: t()
 
@@ -28,12 +27,12 @@ defmodule Ankh.Protocol do
   @doc """
   Sends a request
   """
-  @callback request(t(), Request.t(), keyword) :: {:ok, reference(), t()} | {:error, any()}
+  @callback request(t(), Request.t()) :: {:ok, reference(), t()} | {:error, any()}
 
   @doc """
   Sends a request
   """
-  @callback respond(t(), request_reference, Response.t(), keyword) ::
+  @callback respond(t(), request_reference, Response.t()) ::
               {:ok, reference(), t()} | {:error, any()}
 
   @doc """

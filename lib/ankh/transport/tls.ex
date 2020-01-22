@@ -3,6 +3,8 @@ defmodule Ankh.Transport.TLS do
   TLS transport module
   """
 
+  require Logger
+
   alias Ankh.Transport
 
   @behaviour Transport
@@ -34,7 +36,9 @@ defmodule Ankh.Transport.TLS do
   end
 
   @impl Transport
-  def send(socket, data), do: :ssl.send(socket, data)
+  def send(socket, data) do
+    with :ok <- :ssl.send(socket, data), do: Logger.debug(fn -> "SENT #{inspect(data)}" end)
+  end
 
   @impl Transport
   def recv(socket, size), do: :ssl.recv(socket, size)
@@ -44,6 +48,7 @@ defmodule Ankh.Transport.TLS do
 
   @impl Transport
   def handle_msg({:ssl, socket, data}) do
+    Logger.debug(fn -> "RECVD #{inspect(data)}" end)
     with :ok <- :ssl.setopts(socket, active: :once), do: {:ok, data}
   end
 
