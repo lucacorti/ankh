@@ -2,6 +2,7 @@ defmodule Ankh.HTTP.Request do
   @moduledoc """
   Ankh HTTP Request
   """
+  alias Ankh.HTTP
 
   @type t() :: %__MODULE__{
           host: HTTP.host(),

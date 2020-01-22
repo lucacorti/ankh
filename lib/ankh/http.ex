@@ -22,13 +22,18 @@ defmodule Ankh.HTTP do
   See typespecs below for message types and formats.
   """
 
-  @type status :: binary()
+  @type host :: String.t()
+  @type method :: String.t()
+  @type path :: String.t()
+  @type scheme :: String.t()
+  @type status :: String.t()
   @type body :: iodata()
   @type header_name :: String.t()
   @type header_value :: String.t()
   @type header :: {header_name(), header_value()}
 
-  alias Ankh.HTTP2
+  alias Ankh.{HTTP, HTTP2, Protocol, Transport}
+  alias HTTP.{Request, Response}
 
   @spec accept(URI.t(), Transport.t(), keyword) :: {:ok, Protocol.t()} | {:error, any()}
   def accept(uri, socket, options \\ []) do

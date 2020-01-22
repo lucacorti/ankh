@@ -175,8 +175,8 @@ defmodule Ankh.HTTP2 do
 
   @impl Protocol
   def request(
-        %{uri: %{authority: authority, host: host, path: path, scheme: scheme}} = protocol,
-        %{method: method} = request
+        %{uri: %{authority: authority, host: host, scheme: scheme}} = protocol,
+        %{method: method, path: path} = request
       ) do
     request =
       request
@@ -187,8 +187,7 @@ defmodule Ankh.HTTP2 do
       |> Request.put_header(":method", method)
       |> Request.put_header(":authority", authority)
       |> Request.put_header(":scheme", scheme)
-      |> Request.put_header(":path", path || "/")
-      |> IO.inspect
+      |> Request.put_header(":path", path)
 
     with {:ok, protocol, %{id: id} = stream} <- get_stream(protocol, nil),
          {:ok, protocol} <- send_headers(protocol, stream, request),
@@ -318,9 +317,10 @@ defmodule Ankh.HTTP2 do
          %{stream_id: 0} = frame,
          %{last_local_stream_id: llid} = protocol
        ) do
-    with {:ok, protocol} <- process_connection_frame(frame, protocol) do
-      {:ok, protocol, nil}
-    else
+    case process_connection_frame(frame, protocol) do
+      {:ok, protocol} ->
+        {:ok, protocol, nil}
+
       {:error, :not_found} ->
         {:ok, protocol, nil}
 

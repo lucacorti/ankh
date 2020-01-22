@@ -5,8 +5,8 @@ defmodule Ankh.Protocol do
   alias Ankh.Transport
   alias Ankh.HTTP.{Request, Response}
 
-  @typep t :: any()
-  @typep request_reference :: any()
+  @type t :: any()
+  @type request_reference :: any()
 
   @doc """
   Creates a new connection
@@ -32,7 +32,7 @@ defmodule Ankh.Protocol do
   @doc """
   Sends a request
   """
-  @callback respond(t(), request_reference, Response.t()) ::
+  @callback respond(t(), request_reference(), Response.t()) ::
               {:ok, reference(), t()} | {:error, any()}
 
   @doc """

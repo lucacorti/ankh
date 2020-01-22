@@ -3,6 +3,7 @@ defmodule Ankh.HTTP2.Frame.Registry do
   Frame registry
   """
 
+  alias Ankh.HTTP2.Frame
   alias Ankh.HTTP2.Frame.{
     Continuation,
     Data,
@@ -50,7 +51,7 @@ defmodule Ankh.HTTP2.Frame.Registry do
 
   Codes 0-9 are reserved for standard frame types.
   """
-  @spec register(Connection.connection(), integer, Frame.t()) :: :ok
+  @spec register(Protocol.t(), integer, Frame.t()) :: :ok
   def register(connection, type, frame)
       when is_integer(type) and type > 9 and type < 256 do
     Registry.put_meta(__MODULE__, {connection, type}, frame)

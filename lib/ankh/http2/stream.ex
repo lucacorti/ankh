@@ -105,7 +105,7 @@ defmodule Ankh.HTTP2.Stream do
   @doc """
   Process and send a frame on the stream
   """
-  @spec send(t(), HTTP2.Frame.t()) :: {:ok, t()} | {:error, any()}
+  @spec send(t(), Frame.t()) :: {:ok, t()} | {:error, any()}
   def send(%{id: id, state: state} = stream, %{stream_id: id} = frame) do
     case send_frame(stream, frame) do
       {:ok, %{state: new_state, recv_hbf_type: recv_hbf_type} = stream} ->
