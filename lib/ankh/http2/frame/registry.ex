@@ -4,6 +4,7 @@ defmodule Ankh.HTTP2.Frame.Registry do
   """
 
   alias Ankh.HTTP2.Frame
+
   alias Ankh.HTTP2.Frame.{
     Continuation,
     Data,

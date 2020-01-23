@@ -43,36 +43,36 @@ defimpl Ankh.HTTP2.Frame.Encodable, for: Ankh.HTTP2.Frame.Settings.Payload do
   def decode(_payload, _data, _options), do: {:error, :frame_size_error}
 
   defp decode_settings(<<@header_table_size::16, value::32, rest::binary>>, settings),
-    do: decode_settings(rest, Keyword.merge( settings, [{:header_table_size, value}]))
+    do: decode_settings(rest, Keyword.merge(settings, [{:header_table_size, value}]))
 
   defp decode_settings(<<@enable_push::16, 1::32, rest::binary>>, settings),
-    do: decode_settings(rest, Keyword.merge( settings, [{:enable_push, true}]))
+    do: decode_settings(rest, Keyword.merge(settings, [{:enable_push, true}]))
 
   defp decode_settings(<<@enable_push::16, 0::32, rest::binary>>, settings),
-    do: decode_settings(rest, Keyword.merge( settings, [{:enable_push, false}]))
+    do: decode_settings(rest, Keyword.merge(settings, [{:enable_push, false}]))
 
   defp decode_settings(<<@enable_push::16, _value::32, _rest::binary>>, _settings),
     do: {:error, :protocol_error}
 
   defp decode_settings(<<@max_concurrent_streams::16, value::32, rest::binary>>, settings),
-    do: decode_settings(rest, Keyword.merge( settings, [{:max_concurrent_streams, value}]))
+    do: decode_settings(rest, Keyword.merge(settings, [{:max_concurrent_streams, value}]))
 
   defp decode_settings(<<@initial_window_size::16, value::32, _rest::binary>>, _settings)
        when value > @window_size_limit,
        do: {:error, :flow_control_error}
 
   defp decode_settings(<<@initial_window_size::16, value::32, rest::binary>>, settings),
-    do: decode_settings(rest, Keyword.merge( settings, [{:initial_window_size, value}]))
+    do: decode_settings(rest, Keyword.merge(settings, [{:initial_window_size, value}]))
 
   defp decode_settings(<<@max_frame_size::16, value::32, _rest::binary>>, _settings)
        when value < @frame_size_initial or value > @frame_size_limit,
        do: {:error, :protocol_error}
 
   defp decode_settings(<<@max_frame_size::16, value::32, rest::binary>>, settings),
-    do: decode_settings(rest, Keyword.merge( settings, [{:max_frame_size, value}]))
+    do: decode_settings(rest, Keyword.merge(settings, [{:max_frame_size, value}]))
 
   defp decode_settings(<<@max_header_list_size::16, value::32, rest::binary>>, settings),
-    do: decode_settings(rest, Keyword.merge( settings, [{:max_header_list_size, value}]))
+    do: decode_settings(rest, Keyword.merge(settings, [{:max_header_list_size, value}]))
 
   defp decode_settings(<<_key::16, _value::32, rest::binary>>, settings),
     do: decode_settings(rest, settings)

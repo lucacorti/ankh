@@ -29,7 +29,7 @@ defmodule Ankh.HTTP2 do
     max_concurrent_streams: 128,
     initial_window_size: 65_535,
     max_frame_size: 16_384,
-    max_header_list_size: 128,
+    max_header_list_size: 128
   ]
 
   @opaque t :: %__MODULE__{}
@@ -52,7 +52,9 @@ defmodule Ankh.HTTP2 do
   @impl Protocol
   def new(options) do
     settings = Keyword.get(options, :settings, [])
-    recv_settings = @default_settings
+
+    recv_settings =
+      @default_settings
       |> Keyword.merge(settings)
 
     with {:ok, send_hpack} <- Table.start_link(4_096),
@@ -110,7 +112,7 @@ defmodule Ankh.HTTP2 do
 
     with {:ok, socket} <- transport.connect(uri, options),
          :ok <- transport.send(socket, @preface),
-         {:ok, protocol} <- send_settings(protocol) do
+         {:ok, protocol} <- send_settings(%{protocol | socket: socket}) do
       {:ok, protocol}
     end
   end
@@ -314,7 +316,10 @@ defmodule Ankh.HTTP2 do
     |> min(window_size)
   end
 
-  defp max_frame_size(protocol, %{max_frame_size: max_frame_size, window_size: window_size} = _stream) do
+  defp max_frame_size(
+         protocol,
+         %{max_frame_size: max_frame_size, window_size: window_size} = _stream
+       ) do
     protocol
     |> max_frame_size()
     |> min(max_frame_size)
@@ -415,7 +420,7 @@ defmodule Ankh.HTTP2 do
 
     with {:ok, protocol} <- send_frame(protocol, settings_ack),
          :ok <- Table.resize(header_table_size, send_hpack) do
-        {:ok, %{protocol | send_settings: new_settings}}
+      {:ok, %{protocol | send_settings: new_settings}}
     else
       _ ->
         {:error, :compression_error}
@@ -493,15 +498,16 @@ defmodule Ankh.HTTP2 do
   end
 
   defp send_settings(
-    %{
-      send_hpack: send_hpack,
-      recv_settings: recv_settings
-    } = protocol
-  ) do
+         %{
+           send_hpack: send_hpack,
+           recv_settings: recv_settings
+         } = protocol
+       ) do
     header_table_size = Keyword.get(recv_settings, :header_table_size)
 
     with :ok <- Table.resize(header_table_size, send_hpack),
-         {:ok, protocol} <- send_frame(protocol, %Settings{payload: %Settings.Payload{settings: recv_settings}}) do
+         {:ok, protocol} <-
+           send_frame(protocol, %Settings{payload: %Settings.Payload{settings: recv_settings}}) do
       {:ok, protocol}
     else
       _ ->
