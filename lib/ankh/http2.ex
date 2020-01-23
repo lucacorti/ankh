@@ -15,7 +15,6 @@ defmodule Ankh.HTTP2 do
 
   @behaviour Protocol
 
-  @initial_window_size 65_535
   @max_window_size 2_147_483_647
   @max_stream_id 2_147_483_647
   @preface "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
@@ -24,37 +23,39 @@ defmodule Ankh.HTTP2 do
                ciphers: ["ECDHE-ECDSA-AES128-SHA256", "ECDHE-ECDSA-AES128-SHA"],
                alpn_advertised_protocols: ["h2"]
 
-  @recv_settings [
+  @default_settings [
     header_table_size: 4_096,
     enable_push: true,
     max_concurrent_streams: 128,
-    initial_window_size: @max_window_size,
+    initial_window_size: 65_535,
     max_frame_size: 16_384,
     max_header_list_size: 128,
-    open_streams: 0
   ]
 
   @opaque t :: %__MODULE__{}
   defstruct buffer: <<>>,
-            header_table_size: 4_096,
             last_stream_id: nil,
             last_local_stream_id: nil,
             last_remote_stream_id: nil,
+            open_streams: 0,
             recv_hbf_type: nil,
             recv_hpack: nil,
-            recv_settings: [],
+            recv_settings: @default_settings,
             send_hpack: nil,
-            send_settings: [],
+            send_settings: @default_settings,
             socket: nil,
             streams: %{},
             transport: TLS,
             uri: nil,
-            window_size: @initial_window_size
+            window_size: 65_535
 
   @impl Protocol
   def new(options) do
+    settings = Keyword.get(options, :settings, [])
+    recv_settings = @default_settings
+      |> Keyword.merge(settings)
+
     with {:ok, send_hpack} <- Table.start_link(4_096),
-         recv_settings <- Keyword.get(options, :recv_settings, @recv_settings),
          header_table_size <- Keyword.get(recv_settings, :header_table_size),
          {:ok, recv_hpack} <- Table.start_link(header_table_size) do
       {:ok,
@@ -70,7 +71,7 @@ defmodule Ankh.HTTP2 do
   def accept(%{transport: transport} = protocol, uri, socket, options) do
     case transport.recv(socket, 24) do
       {:ok, @preface} ->
-        with {:ok, protocol} <- send_settings(%{protocol | socket: socket}, @recv_settings),
+        with {:ok, protocol} <- send_settings(%{protocol | socket: socket}),
              {:ok, socket} <- TLS.accept(socket, options) do
           {
             :ok,
@@ -96,7 +97,7 @@ defmodule Ankh.HTTP2 do
   end
 
   @impl Protocol
-  def connect(%{recv_settings: recv_settings, transport: transport} = protocol, uri, options) do
+  def connect(%{transport: transport} = protocol, uri, options) do
     options = Keyword.merge(options, @tls_options)
 
     protocol = %{
@@ -109,10 +110,7 @@ defmodule Ankh.HTTP2 do
 
     with {:ok, socket} <- transport.connect(uri, options),
          :ok <- transport.send(socket, @preface),
-         {:ok, protocol} <-
-           send_frame(%{protocol | socket: socket}, %Settings{
-             payload: %Settings.Payload{settings: recv_settings}
-           }) do
+         {:ok, protocol} <- send_settings(protocol) do
       {:ok, protocol}
     end
   end
@@ -215,8 +213,8 @@ defmodule Ankh.HTTP2 do
     end
   end
 
-  defp get_stream(%{send_settings: send_settings} = protocol, 0) do
-    max_frame_size = Keyword.get(send_settings, :max_frame_size, 16_384)
+  defp get_stream(protocol, 0) do
+    max_frame_size = max_frame_size(protocol)
     {:ok, protocol, __MODULE__.Stream.new(0, max_frame_size)}
   end
 
@@ -228,12 +226,11 @@ defmodule Ankh.HTTP2 do
   defp get_stream(
          %{
            last_local_stream_id: llid,
-           send_settings: send_settings,
            streams: streams
          } = protocol,
          nil = _id
        ) do
-    max_frame_size = Keyword.get(send_settings, :max_frame_size, 16_384)
+    max_frame_size = max_frame_size(protocol)
     stream = __MODULE__.Stream.new(llid, max_frame_size)
 
     {:ok, %{protocol | last_local_stream_id: llid + 2, streams: Map.put(streams, llid, stream)},
@@ -242,19 +239,17 @@ defmodule Ankh.HTTP2 do
 
   defp get_stream(
          %{
-           send_settings: send_settings,
            streams: streams,
            last_local_stream_id: llid
          } = protocol,
          id
        ) do
-    max_frame_size = Keyword.get(send_settings, :max_frame_size, 16_384)
-
     case Map.get(streams, id) do
       stream when not is_nil(stream) ->
         {:ok, protocol, stream}
 
       nil when not is_local_stream(llid, id) ->
+        max_frame_size = max_frame_size(protocol)
         stream = __MODULE__.Stream.new(id, max_frame_size)
         {:ok, %{protocol | streams: Map.put(streams, id, stream)}, stream}
 
@@ -292,11 +287,13 @@ defmodule Ankh.HTTP2 do
          %{socket: socket, streams: streams, transport: transport} = protocol,
          %{stream_id: stream_id} = frame
        ) do
-    with {:ok, protocol, %{max_frame_size: max_frame_size} = stream} <-
+    with {:ok, protocol, stream} <-
            get_stream(protocol, stream_id),
          {:ok, stream} <- __MODULE__.Stream.send(stream, frame) do
+      frame_size = max_frame_size(protocol, stream)
+
       frame
-      |> Splittable.split(max_frame_size)
+      |> Splittable.split(frame_size)
       |> Enum.reduce_while({:ok, protocol}, fn frame, _ ->
         with {:ok, length, _type, data} <- Frame.encode(frame),
              :ok <- transport.send(socket, data) do
@@ -309,6 +306,19 @@ defmodule Ankh.HTTP2 do
         end
       end)
     end
+  end
+
+  defp max_frame_size(%{send_settings: settings, window_size: window_size} = _protocol) do
+    settings
+    |> Keyword.get(:max_frame_size)
+    |> min(window_size)
+  end
+
+  defp max_frame_size(protocol, %{max_frame_size: max_frame_size, window_size: window_size} = _stream) do
+    protocol
+    |> max_frame_size()
+    |> min(max_frame_size)
+    |> min(window_size)
   end
 
   defp recv_frame(
@@ -396,32 +406,17 @@ defmodule Ankh.HTTP2 do
   end
 
   defp process_connection_frame(
-         %Settings{flags: %{ack: false} = flags, payload: %{settings: settings}} = frame,
-         %{send_hpack: send_hpack} = protocol
+         %Settings{flags: %{ack: false} = flags, payload: %{settings: settings}},
+         %{send_hpack: send_hpack, send_settings: send_settings} = protocol
        ) do
-    settings_ack = %Settings{
-      frame
-      | flags: %{flags | ack: true},
-        payload: nil,
-        length: 0
-    }
+    settings_ack = %Settings{flags: %Settings.Flags{flags | ack: true}, payload: nil}
+    new_settings = Keyword.merge(send_settings, settings)
+    header_table_size = Keyword.get(new_settings, :header_table_size)
 
-    case send_frame(protocol, settings_ack) do
-      {:ok, protocol} ->
-        header_table_size = Keyword.get(settings, :header_table_size)
-        window_size = Keyword.get(settings, :initial_window_size)
-        Table.resize(header_table_size, send_hpack)
-
-        {
-          :ok,
-          %{
-            protocol
-            | header_table_size: header_table_size,
-              send_settings: settings,
-              window_size: window_size
-          }
-        }
-
+    with {:ok, protocol} <- send_frame(protocol, settings_ack),
+         :ok <- Table.resize(header_table_size, send_hpack) do
+        {:ok, %{protocol | send_settings: new_settings}}
+    else
       _ ->
         {:error, :compression_error}
     end
@@ -439,12 +434,12 @@ defmodule Ankh.HTTP2 do
     {:ok, protocol}
   end
 
-  defp process_connection_frame(%Ping{length: 8, flags: %{ack: false} = flags} = frame, protocol) do
-    send_frame(protocol, %Ping{frame | flags: %{flags | ack: true}})
-  end
-
   defp process_connection_frame(%Ping{length: length}, _protocol) when length != 8 do
     {:error, :frame_size_error}
+  end
+
+  defp process_connection_frame(%Ping{flags: %{ack: false} = flags} = frame, protocol) do
+    send_frame(protocol, %Ping{frame | flags: %{flags | ack: true}})
   end
 
   defp process_connection_frame(%WindowUpdate{length: length}, _protocol) when length != 4 do
@@ -498,24 +493,16 @@ defmodule Ankh.HTTP2 do
   end
 
   defp send_settings(
-         %{
-           header_table_size: header_table_size,
-           recv_settings: recv_settings,
-           send_hpack: send_hpack,
-           send_settings: [],
-           window_size: window_size
-         } = protocol,
-         settings
-       ) do
-    with header_table_size <- Keyword.get(settings, :header_table_size, header_table_size),
-         window_size <- Keyword.get(settings, :window_size, window_size),
-         enable_push <- Keyword.get(settings, :enable_push, true),
-         :ok <- Table.resize(header_table_size, send_hpack),
-         recv_settings <- %Settings.Payload{
-           settings: Keyword.put(recv_settings, :enable_push, enable_push)
-         },
-         {:ok, protocol} <- send_frame(protocol, %Settings{payload: recv_settings}) do
-      {:ok, %{protocol | window_size: window_size, send_settings: settings}}
+    %{
+      send_hpack: send_hpack,
+      recv_settings: recv_settings
+    } = protocol
+  ) do
+    header_table_size = Keyword.get(recv_settings, :header_table_size)
+
+    with :ok <- Table.resize(header_table_size, send_hpack),
+         {:ok, protocol} <- send_frame(protocol, %Settings{payload: %Settings.Payload{settings: recv_settings}}) do
+      {:ok, protocol}
     else
       _ ->
         {:error, :compression_error}
