@@ -92,9 +92,7 @@ defmodule Ankh.HTTP2 do
 
   @impl Protocol
   def close(%{transport: transport, socket: socket}) do
-    with :ok <- transport.close(socket) do
-      :ok
-    end
+    transport.close(socket)
   end
 
   @impl Protocol
@@ -490,8 +488,9 @@ defmodule Ankh.HTTP2 do
     {:ok, %{protocol | window_size: window_size + increment}}
   end
 
-  defp process_connection_frame(%GoAway{payload: %{error_code: code}}, _protocol) do
-    {:error, code}
+  defp process_connection_frame(%GoAway{payload: %{error_code: reason}}, protocol) do
+    Logger.error(fn -> "Received connection error #{inspect(reason)}, closing" end)
+    with :ok <- close(protocol), do: {:ok, %{protocol | socket: nil}, nil}
   end
 
   defp process_connection_frame(_frame, _protocol) do
