@@ -34,8 +34,6 @@ defmodule AnkhTest do
             receive_response(protocol, reference)
 
           {:ok, protocol, responses} ->
-            Logger.info(fn -> "Received #{inspect(responses, pretty: true)}" end)
-
             end_stream =
               Enum.find(responses, fn
                 {_type, ^reference, _data, _end_stream = true} -> true
@@ -47,7 +45,6 @@ defmodule AnkhTest do
             end
 
           error ->
-            Logger.error("#{inspect(error)}")
             error
         end
     end

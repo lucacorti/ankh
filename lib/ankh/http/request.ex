@@ -9,8 +9,8 @@ defmodule Ankh.HTTP.Request do
           scheme: HTTP.scheme(),
           method: HTTP.method(),
           path: HTTP.path(),
-          headers: [HTTP.header()],
-          trailers: [HTTP.header()],
+          headers: list(HTTP.header()),
+          trailers: list(HTTP.header()),
           body: HTTP.body(),
           options: keyword()
         }
@@ -23,33 +23,33 @@ defmodule Ankh.HTTP.Request do
             body: nil,
             options: []
 
-  @spec put_header(%__MODULE__{}, HTTP.header_name(), HTTP.header_value()) :: %__MODULE__{}
-  def put_header(%__MODULE__{headers: headers} = request, header, value),
-    do: %__MODULE__{request | headers: [{String.downcase(header), value} | headers]}
+  @spec put_header(t(), HTTP.header_name(), HTTP.header_value()) :: t()
+  def put_header(%{headers: headers} = request, header, value),
+    do: %{request | headers: [{header, value} | headers]}
 
-  @spec put_trailer(%__MODULE__{}, HTTP.header_name(), HTTP.header_value()) :: %__MODULE__{}
-  def put_trailer(%__MODULE__{trailers: trailers} = request, trailer, value),
-    do: %__MODULE__{request | trailers: [{String.downcase(trailer), value} | trailers]}
+  @spec put_trailer(t(), HTTP.header_name(), HTTP.header_value()) :: t()
+  def put_trailer(%{trailers: trailers} = request, trailer, value),
+    do: %{request | trailers: [{trailer, value} | trailers]}
 
-  @spec put_option(%__MODULE__{}, atom, any()) :: %__MODULE__{}
-  def put_option(%__MODULE__{options: options} = request, option, value),
-    do: %__MODULE__{request | options: [{option, value} | options]}
+  @spec put_option(t(), atom, any()) :: t()
+  def put_option(%{options: options} = request, option, value),
+    do: %{request | options: [{option, value} | options]}
 
-  @spec set_scheme(%__MODULE__{}, String.t()) :: %__MODULE__{}
-  def set_scheme(%__MODULE__{} = request, scheme), do: %__MODULE__{request | scheme: scheme}
+  @spec set_scheme(t(), String.t()) :: t()
+  def set_scheme(request, scheme), do: %{request | scheme: scheme}
 
-  @spec set_host(%__MODULE__{}, String.t()) :: %__MODULE__{}
-  def set_host(%__MODULE__{} = request, host), do: %__MODULE__{request | host: host}
+  @spec set_host(t(), String.t()) ::t()
+  def set_host(request, host), do: %{request | host: host}
 
-  @spec set_body(%__MODULE__{}, iodata) :: %__MODULE__{}
-  def set_body(%__MODULE__{} = request, body), do: %__MODULE__{request | body: body}
+  @spec set_body(t(), iodata) :: t()
+  def set_body(request, body), do: %{request | body: body}
 
-  @spec set_method(%__MODULE__{}, HTTP.method()) :: %__MODULE__{}
-  def set_method(%__MODULE__{} = request, method), do: %__MODULE__{request | method: method}
+  @spec set_method(t(), HTTP.method()) ::t()
+  def set_method(request, method), do: %{request | method: method}
 
-  @spec set_path(%__MODULE__{}, HTTP.path()) :: %__MODULE__{}
-  def set_path(%__MODULE__{} = request, path), do: %__MODULE__{request | path: path}
+  @spec set_path(t(), HTTP.path()) :: t()
+  def set_path(request, path), do: %{request | path: path}
 
-  @spec set_headers(%__MODULE__{}, [HTTP.header()]) :: %__MODULE__{}
-  def set_headers(%__MODULE__{} = request, headers), do: %__MODULE__{request | headers: headers}
+  @spec set_headers(t(), [HTTP.header()]) :: t()
+  def set_headers(request, headers), do: %{request | headers: headers}
 end

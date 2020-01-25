@@ -10,8 +10,8 @@ defmodule Ankh.HTTP.Response do
           scheme: HTTP.scheme(),
           host: HTTP.host(),
           path: HTTP.path(),
-          headers: [HTTP.header()],
-          trailers: [HTTP.header()]
+          headers: list(HTTP.header()),
+          trailers: list(HTTP.header())
         }
   defstruct status: "200",
             scheme: nil,
@@ -22,35 +22,29 @@ defmodule Ankh.HTTP.Response do
             headers: [],
             trailers: []
 
-  @spec put_header(%__MODULE__{}, HTTP.header_name(), HTTP.header_value()) :: %__MODULE__{}
-  def put_header(%__MODULE__{headers: headers} = response, header, value),
-    do: %__MODULE__{response | headers: [{String.downcase(header), value} | headers]}
+  @spec put_header(t(), HTTP.header_name(), HTTP.header_value()) :: t()
+  def put_header(%{headers: headers} = response, header, value),
+    do: %{response | headers: [{String.downcase(header), value} | headers]}
 
-  @spec put_trailer(%__MODULE__{}, HTTP.header_name(), HTTP.header_value()) :: %__MODULE__{}
-  def put_trailer(%__MODULE__{trailers: trailers} = response, trailer, value),
-    do: %__MODULE__{response | trailers: [{String.downcase(trailer), value} | trailers]}
+  @spec put_trailer(t(), HTTP.header_name(), HTTP.header_value()) :: t()
+  def put_trailer(%{trailers: trailers} = response, trailer, value),
+    do: %{response | trailers: [{String.downcase(trailer), value} | trailers]}
 
-  @spec set_status(%__MODULE__{}, String.t()) :: %__MODULE__{}
-  def set_status(%__MODULE__{} = response, status),
-    do: %__MODULE__{response | status: status}
+  @spec set_status(t(), String.t()) :: t()
+  def set_status(response, status), do: %{response | status: status}
 
-  @spec set_method(%__MODULE__{}, HTTP.method()) :: %__MODULE__{}
-  def set_method(%__MODULE__{} = response, method),
-    do: %__MODULE__{response | method: method}
+  @spec set_method(t(), HTTP.method()) :: t()
+  def set_method(response, method), do: %{response | method: method}
 
-  @spec set_scheme(%__MODULE__{}, String.t()) :: %__MODULE__{}
-  def set_scheme(%__MODULE__{} = response, scheme),
-    do: %__MODULE__{response | scheme: scheme}
+  @spec set_scheme(t(), String.t()) :: t()
+  def set_scheme(response, scheme), do: %{response | scheme: scheme}
 
-  @spec set_host(%__MODULE__{}, String.t()) :: %__MODULE__{}
-  def set_host(%__MODULE__{} = response, host),
-    do: %__MODULE__{response | host: host}
+  @spec set_host(t(), String.t()) :: t()
+  def set_host(response, host), do: %{response | host: host}
 
-  @spec set_body(%__MODULE__{}, iodata) :: %__MODULE__{}
-  def set_body(%__MODULE__{} = response, body),
-    do: %__MODULE__{response | body: body}
+  @spec set_body(t(), iodata) :: t()
+  def set_body(response, body), do: %{response | body: body}
 
-  @spec set_path(%__MODULE__{}, HTTP.path()) :: %__MODULE__{}
-  def set_path(%__MODULE__{} = response, path),
-    do: %__MODULE__{response | path: path}
+  @spec set_path(t(), HTTP.path()) :: t()
+  def set_path(response, path), do: %{response | path: path}
 end
