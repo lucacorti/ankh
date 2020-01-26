@@ -37,7 +37,7 @@ defmodule Ankh.TLS do
 
   @impl Transport
   def send(socket, data) do
-    with :ok <- :ssl.send(socket, data), do: Logger.debug(fn -> "SENT #{inspect(data)}" end)
+    :ssl.send(socket, data)
   end
 
   @impl Transport
@@ -48,7 +48,6 @@ defmodule Ankh.TLS do
 
   @impl Transport
   def handle_msg({:ssl, socket, data}) do
-    Logger.debug(fn -> "RECVD #{inspect(data)}" end)
     with :ok <- :ssl.setopts(socket, active: :once), do: {:ok, data}
   end
 

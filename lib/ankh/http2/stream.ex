@@ -481,38 +481,6 @@ defmodule Ankh.HTTP2.Stream do
 
   # HALF CLOSED REMOTE
 
-  # defp recv_frame(
-  #        %{
-  #          state: :half_closed_remote,
-  #          recv_hbf: recv_hbf,
-  #          recv_hbf_type: recv_hbf_type,
-  #          recv_hbf_es: recv_hbf_es
-  #        } = stream,
-  #        %Continuation{
-  #          flags: %Continuation.Flags{end_headers: true},
-  #          payload: %Continuation.Payload{hbf: hbf}
-  #        }
-  #      ) do
-  #   {
-  #     :ok,
-  #     %{stream | recv_hbf_type: nil, recv_hbf_es: false, recv_hbf: []},
-  #     {recv_hbf_type, [hbf | recv_hbf], recv_hbf_es}
-  #   }
-  # end
-
-  # defp recv_frame(
-  #        %{
-  #          state: :half_closed_remote,
-  #          recv_hbf: recv_hbf
-  #        } = stream,
-  #        %Continuation{
-  #          flags: %Continuation.Flags{end_headers: false},
-  #          payload: %Continuation.Payload{hbf: hbf}
-  #        }
-  #      ) do
-  #   {:ok, %{stream | recv_hbf: [hbf | recv_hbf]}}
-  # end
-
   defp recv_frame(%{state: :half_closed_remote} = stream, %Priority{}), do: {:ok, stream}
 
   defp recv_frame(%{state: :half_closed_remote} = stream, %RstStream{

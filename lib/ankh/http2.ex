@@ -130,7 +130,7 @@ defmodule Ankh.HTTP2 do
              {:ok, %{recv_hbf_type: recv_hbf_type} = protocol, responses} ->
                with {:ok, type} <- Frame.Registry.frame_for_type(protocol, type),
                     {:ok, frame} <- Frame.decode(struct(type), data),
-                    :ok <- Logger.debug(fn -> "RECVD #{inspect(frame)}" end),
+                    :ok <- Logger.debug(fn -> "RECVD #{inspect(frame)} #{inspect(data)}" end),
                     {:ok, protocol, response} <- recv_frame(frame, protocol) do
                  case response do
                    {:data, data, end_stream} ->
@@ -279,7 +279,7 @@ defmodule Ankh.HTTP2 do
   defp do_send_frame(%{socket: socket, transport: transport} = protocol, %{stream_id: 0} = frame) do
     with {:ok, _length, _type, data} <- Frame.encode(frame),
          :ok <- transport.send(socket, data) do
-      Logger.debug(fn -> "SENT #{inspect(frame)}" end)
+      Logger.debug(fn -> "SENT #{inspect(frame)} #{inspect(data)}" end)
       {:ok, protocol}
     end
   end
@@ -298,7 +298,7 @@ defmodule Ankh.HTTP2 do
       |> Enum.reduce_while({:ok, protocol}, fn frame, _ ->
         with {:ok, length, _type, data} <- Frame.encode(frame),
              :ok <- transport.send(socket, data) do
-          Logger.debug(fn -> "SENT #{inspect(%{frame | length: length})}" end)
+          Logger.debug(fn -> "SENT #{inspect(%{frame | length: length})} #{inspect(data)}" end)
 
           {:cont, {:ok, %{protocol | streams: Map.put(streams, stream_id, stream)}}}
         else
