@@ -1,4 +1,4 @@
-defmodule Ankh.Transport.TLS do
+defmodule Ankh.TLS do
   @moduledoc """
   TLS transport module
   """

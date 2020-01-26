@@ -6,12 +6,11 @@ defmodule Ankh.HTTP2 do
   import Ankh.HTTP2.Stream, only: [is_local_stream: 2]
   require Logger
 
-  alias Ankh.{Protocol, Transport}
+  alias Ankh.{Protocol, TLS}
   alias Ankh.HTTP.{Request, Response}
   alias Ankh.HTTP2.Frame
   alias Frame.{Data, GoAway, Headers, Ping, Priority, Settings, Splittable, WindowUpdate}
   alias HPack.Table
-  alias Transport.TLS
 
   @behaviour Protocol
 
@@ -74,7 +73,7 @@ defmodule Ankh.HTTP2 do
     case transport.recv(socket, 24) do
       {:ok, @preface} ->
         with {:ok, protocol} <- send_settings(%{protocol | socket: socket}),
-             {:ok, socket} <- TLS.accept(socket, options) do
+             {:ok, socket} <- transport.accept(socket, options) do
           {
             :ok,
             %{
