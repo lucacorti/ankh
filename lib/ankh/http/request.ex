@@ -38,13 +38,13 @@ defmodule Ankh.HTTP.Request do
   @spec set_scheme(t(), String.t()) :: t()
   def set_scheme(request, scheme), do: %{request | scheme: scheme}
 
-  @spec set_host(t(), String.t()) ::t()
+  @spec set_host(t(), String.t()) :: t()
   def set_host(request, host), do: %{request | host: host}
 
   @spec set_body(t(), iodata) :: t()
   def set_body(request, body), do: %{request | body: body}
 
-  @spec set_method(t(), HTTP.method()) ::t()
+  @spec set_method(t(), HTTP.method()) :: t()
   def set_method(request, method), do: %{request | method: method}
 
   @spec set_path(t(), HTTP.path()) :: t()

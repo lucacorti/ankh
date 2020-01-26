@@ -310,6 +310,31 @@ defmodule Ankh.HTTP2 do
     end
   end
 
+  defp send_settings(%{send_hpack: send_hpack, recv_settings: recv_settings} = protocol) do
+    header_table_size = Keyword.get(recv_settings, :header_table_size)
+
+    with :ok <- Table.resize(header_table_size, send_hpack),
+         {:ok, protocol} <-
+           send_frame(protocol, %Settings{payload: %Settings.Payload{settings: recv_settings}}) do
+      {:ok, protocol}
+    else
+      _ ->
+        {:error, :compression_error}
+    end
+  end
+
+  defp send_error(protocol, last_stream_id, reason) do
+    with {:ok, _protocol} <-
+           send_frame(protocol, %GoAway{
+             payload: %GoAway.Payload{
+               last_stream_id: last_stream_id,
+               error_code: reason
+             }
+           }) do
+      {:error, reason}
+    end
+  end
+
   defp max_frame_size(%{send_settings: settings, window_size: window_size} = _protocol) do
     settings
     |> Keyword.get(:max_frame_size)
@@ -339,7 +364,6 @@ defmodule Ankh.HTTP2 do
 
       {:error, reason} ->
         send_error(protocol, llid - 2, reason)
-        {:error, reason}
     end
   end
 
@@ -365,11 +389,9 @@ defmodule Ankh.HTTP2 do
     else
       {:error, :not_found} ->
         send_error(protocol, llid - 2, :protocol_error)
-        {:error, :protocol_error}
 
       {:error, reason} ->
         send_error(protocol, llid - 2, reason)
-        {:error, reason}
     end
   end
 
@@ -402,21 +424,20 @@ defmodule Ankh.HTTP2 do
     else
       {:error, reason} ->
         send_error(protocol, llid - 2, reason)
-        {:error, reason}
 
       _stream ->
         send_error(protocol, llid - 2, :protocol_error)
-        {:error, :protocol_error}
     end
   end
 
   defp process_connection_frame(
-         %Settings{flags: %{ack: false} = flags, payload: %{settings: settings}},
+         %Settings{flags: %{ack: false}, payload: %{settings: settings}},
          %{send_hpack: send_hpack, send_settings: send_settings} = protocol
        ) do
-    settings_ack = %Settings{flags: %Settings.Flags{flags | ack: true}, payload: nil}
     new_settings = Keyword.merge(send_settings, settings)
     header_table_size = Keyword.get(new_settings, :header_table_size)
+
+    settings_ack = %Settings{flags: %Settings.Flags{ack: true}, payload: nil}
 
     with {:ok, protocol} <- send_frame(protocol, settings_ack),
          :ok <- Table.resize(header_table_size, send_hpack) do
@@ -467,18 +488,7 @@ defmodule Ankh.HTTP2 do
          } = protocol
        )
        when window_size + increment > @max_window_size do
-    reason = :flow_control_error
-
-    frame = %GoAway{
-      payload: %GoAway.Payload{
-        last_stream_id: last_stream_id - 2,
-        error_code: reason
-      }
-    }
-
-    send_frame(protocol, frame)
-
-    {:error, reason}
+    send_error(protocol, last_stream_id - 2, :flow_control_error)
   end
 
   defp process_connection_frame(
@@ -495,33 +505,6 @@ defmodule Ankh.HTTP2 do
 
   defp process_connection_frame(_frame, _protocol) do
     {:error, :protocol_error}
-  end
-
-  defp send_settings(
-         %{
-           send_hpack: send_hpack,
-           recv_settings: recv_settings
-         } = protocol
-       ) do
-    header_table_size = Keyword.get(recv_settings, :header_table_size)
-
-    with :ok <- Table.resize(header_table_size, send_hpack),
-         {:ok, protocol} <-
-           send_frame(protocol, %Settings{payload: %Settings.Payload{settings: recv_settings}}) do
-      {:ok, protocol}
-    else
-      _ ->
-        {:error, :compression_error}
-    end
-  end
-
-  defp send_error(protocol, last_stream_id, error) do
-    send_frame(protocol, %GoAway{
-      payload: %GoAway.Payload{
-        last_stream_id: last_stream_id,
-        error_code: error
-      }
-    })
   end
 
   defp process_recv_data(protocol, length, stream_id) when length > 0 do
