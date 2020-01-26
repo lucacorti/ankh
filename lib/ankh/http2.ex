@@ -497,7 +497,6 @@ defmodule Ankh.HTTP2 do
   defp process_recv_headers(%{recv_hpack: recv_hpack}, hbf) do
     headers =
       hbf
-      |> Enum.reverse()
       |> Enum.join()
       |> HPack.decode(recv_hpack)
 

@@ -183,7 +183,7 @@ defmodule Ankh.HTTP2.Stream do
           recv_hbf_es: end_stream,
           recv_hbf: []
       },
-      {:headers, [hbf | recv_hbf], end_stream}
+      {:headers, Enum.reverse([hbf | recv_hbf]), end_stream}
     }
   end
 
@@ -275,7 +275,7 @@ defmodule Ankh.HTTP2.Stream do
           recv_hbf_es: false,
           recv_hbf: []
       },
-      {:headers, [hbf | recv_hbf], end_stream}
+      {:headers, Enum.reverse([hbf | recv_hbf]), end_stream}
     }
   end
 
@@ -363,7 +363,7 @@ defmodule Ankh.HTTP2.Stream do
     {
       :ok,
       %{stream | recv_hbf_type: nil, recv_hbf_es: false, recv_hbf: []},
-      {recv_hbf_type, [hbf | recv_hbf], recv_hbf_es}
+      {recv_hbf_type, Enum.reverse([hbf | recv_hbf]), recv_hbf_es}
     }
   end
 
@@ -429,7 +429,7 @@ defmodule Ankh.HTTP2.Stream do
           recv_hbf_es: false,
           recv_hbf: []
       },
-      {:headers, [hbf | recv_hbf], end_stream}
+      {:headers, Enum.reverse([hbf | recv_hbf]), end_stream}
     }
   end
 
