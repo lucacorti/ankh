@@ -61,6 +61,7 @@ defmodule Ankh.HTTP do
     HTTP2.respond(protocol, reference, response)
   end
 
+  @spec stream(Protocol.t(), any()) :: {:ok, Protocol.t(), any()}
   def stream(protocol, msg) do
     HTTP2.stream(protocol, msg)
   end

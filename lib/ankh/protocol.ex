@@ -43,5 +43,5 @@ defmodule Ankh.Protocol do
   @doc """
   Handles transport messages
   """
-  @callback stream(t(), any()) :: {:ok, binary, t()} | {:other, t()} | {:error, any()}
+  @callback stream(t(), any()) :: {:ok, binary, t()} | {:error, any()}
 end

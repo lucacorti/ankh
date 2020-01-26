@@ -14,25 +14,25 @@ defmodule Ankh.Transport do
   @doc """
   Closes the connection
   """
-  @callback close(t) :: :ok | {:error, any()}
+  @callback close(t()) :: :ok | {:error, any()}
 
   @doc """
   Connects to an host
   """
-  @callback connect(URI.t(), Keyword.t()) :: {:ok, t} | {:error, any()}
+  @callback connect(URI.t(), Keyword.t()) :: {:ok, t()} | {:error, any()}
 
   @doc """
   Sends data
   """
-  @callback send(t, iodata) :: :ok | {:error, any()}
+  @callback send(t(), iodata()) :: :ok | {:error, any()}
 
   @doc """
   Receives data
   """
-  @callback recv(t, integer) :: {:ok, binary} | {:error, any()}
+  @callback recv(t(), integer) :: {:ok, iodata()} | {:error, any()}
 
   @doc """
   Handles transport messages
   """
-  @callback handle_msg(any()) :: {:ok, binary} | {:error, any()}
+  @callback handle_msg(any()) :: {:ok, iodata()} | {:error, any()}
 end
