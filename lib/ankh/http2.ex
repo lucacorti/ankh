@@ -167,12 +167,10 @@ defmodule Ankh.HTTP2 do
               {:ok, protocol} = recv_data(protocol, length, id)
 
               {:cont,
-               {:ok, %{protocol | buffer: rest},
-                [{:data, id, data, end_stream} | responses]}}
+               {:ok, %{protocol | buffer: rest}, [{:data, id, data, end_stream} | responses]}}
 
             {:error, error} ->
-              {:cont,
-               {:ok, %{protocol | buffer: rest}, [{:error, id, error, true} | responses]}}
+              {:cont, {:ok, %{protocol | buffer: rest}, [{:error, id, error, true} | responses]}}
 
             {type, hbf, end_stream} when type in [:headers, :push_promise] ->
               case recv_headers(protocol, hbf) do
@@ -198,9 +196,10 @@ defmodule Ankh.HTTP2 do
     end)
   end
 
-  defp get_stream(protocol, 0) do
-    max_frame_size = max_frame_size(protocol)
-    {:ok, protocol, __MODULE__.Stream.new(0, max_frame_size)}
+  defp get_stream(protocol, 0 = stream_id) do
+    with {:ok, stream} <- new_stream(protocol, stream_id) do
+      {:ok, protocol, stream}
+    end
   end
 
   defp get_stream(%{last_stream_id: last_stream_id}, id)
@@ -216,12 +215,18 @@ defmodule Ankh.HTTP2 do
          nil = _id
        ) do
     stream_id = last_local_stream_id + 2
-    max_frame_size = max_frame_size(protocol)
-    stream = __MODULE__.Stream.new(stream_id, max_frame_size)
 
-    {:ok,
-     %{protocol | last_local_stream_id: stream_id, streams: Map.put(streams, stream_id, stream)},
-     stream}
+    with {:ok, stream} <- new_stream(protocol, stream_id) do
+      {
+        :ok,
+        %{
+          protocol
+          | last_local_stream_id: stream_id,
+            streams: Map.put(streams, stream_id, stream)
+        },
+        stream
+      }
+    end
   end
 
   defp get_stream(
@@ -236,13 +241,19 @@ defmodule Ankh.HTTP2 do
         {:ok, protocol, stream}
 
       nil when not is_local_stream(last_local_stream_id, stream_id) ->
-        max_frame_size = max_frame_size(protocol)
-        stream = __MODULE__.Stream.new(stream_id, max_frame_size)
-        {:ok, %{protocol | streams: Map.put(streams, stream_id, stream)}, stream}
+        with {:ok, stream} <- new_stream(protocol, stream_id) do
+          {:ok, %{protocol | streams: Map.put(streams, stream_id, stream)}, stream}
+        end
 
       _ ->
         {:error, :protocol_error}
     end
+  end
+
+  defp new_stream(%{send_settings: send_settings}, stream_id) do
+    window_size = Keyword.get(send_settings, :initial_window_size)
+    max_frame_size = Keyword.get(send_settings, :max_frame_size)
+    {:ok, __MODULE__.Stream.new(stream_id, max_frame_size, window_size)}
   end
 
   defp send_frame(
@@ -320,20 +331,18 @@ defmodule Ankh.HTTP2 do
     end
   end
 
-  defp max_frame_size(%{send_settings: settings, window_size: window_size} = _protocol) do
+  defp max_frame_size(%{send_settings: settings} = _protocol) do
     settings
     |> Keyword.get(:max_frame_size)
-    |> min(window_size)
   end
 
   defp max_frame_size(
          protocol,
-         %{max_frame_size: max_frame_size, window_size: window_size} = _stream
+         %{max_frame_size: max_frame_size} = _stream
        ) do
     protocol
     |> max_frame_size()
     |> min(max_frame_size)
-    |> min(window_size)
   end
 
   defp recv_frame(protocol, %{stream_id: 0} = frame) do
@@ -407,16 +416,23 @@ defmodule Ankh.HTTP2 do
 
   defp process_connection_frame(
          %Settings{flags: %{ack: false}, payload: %{settings: settings}},
-         %{send_hpack: send_hpack, send_settings: send_settings} = protocol
+         %{send_settings: send_settings} = protocol
        ) do
-    new_settings = Keyword.merge(send_settings, settings)
-    header_table_size = Keyword.get(new_settings, :header_table_size)
+    new_send_settings = Keyword.merge(send_settings, settings)
+
+    old_header_table_size = Keyword.get(send_settings, :header_table_size)
+    new_header_table_size = Keyword.get(new_send_settings, :header_table_size)
+    old_window_size = Keyword.get(send_settings, :initial_window_size)
+    new_window_size = Keyword.get(new_send_settings, :initial_window_size)
 
     settings_ack = %Settings{flags: %Settings.Flags{ack: true}, payload: nil}
 
     with {:ok, protocol} <- send_frame(protocol, settings_ack),
-         :ok <- Table.resize(header_table_size, send_hpack) do
-      {:ok, %{protocol | send_settings: new_settings}}
+         {:ok, protocol} <-
+           adjust_header_table_size(protocol, old_header_table_size, new_header_table_size),
+         {:ok, protocol} <- adjust_window_size(protocol, old_window_size, new_window_size),
+         {:ok, protocol} <- adjust_streams_window_size(protocol, old_window_size, new_window_size) do
+      {:ok, %{protocol | send_settings: new_send_settings}}
     else
       _ ->
         {:error, :compression_error}
@@ -519,9 +535,9 @@ defmodule Ankh.HTTP2 do
   end
 
   defp send_headers(protocol, %{id: stream_id}, %{
-    headers: headers,
-    body: body
-  }) do
+         headers: headers,
+         body: body
+       }) do
     send_frame(protocol, %Headers{
       stream_id: stream_id,
       flags: %Headers.Flags{end_stream: body == nil},
@@ -547,5 +563,43 @@ defmodule Ankh.HTTP2 do
       flags: %Headers.Flags{end_stream: true},
       payload: %Headers.Payload{hbf: trailers}
     })
+  end
+
+  def adjust_header_table_size(%{send_hpack: send_hpack} = protocol, old_size, new_size)
+      when new_size != old_size do
+    with :ok <- Table.resize(new_size, send_hpack), do: {:ok, protocol}
+  end
+
+  def adjust_header_table_size(protocol, _old_size, _new_size), do: {:ok, protocol}
+
+  def adjust_window_size(
+        %{window_size: prev_window_size} = protocol,
+        old_window_size,
+        new_window_size
+      ) do
+    window_size = prev_window_size + (new_window_size - old_window_size)
+
+    Logger.debug(fn ->
+      "window_size: #{prev_window_size} + (#{new_window_size} - #{old_window_size}) = #{
+        window_size
+      }"
+    end)
+
+    {:ok, %{protocol | window_size: window_size}}
+  end
+
+  def adjust_streams_window_size(%{streams: streams} = protocol, old_window_size, new_window_size) do
+    streams =
+      Enum.reduce_while(streams, streams, fn {id, stream}, streams ->
+        with {:ok, stream} <-
+               __MODULE__.Stream.adjust_window_size(stream, old_window_size, new_window_size) do
+          {:cont, Map.put(streams, id, stream)}
+        else
+          error ->
+            {:halt, error}
+        end
+      end)
+
+    {:ok, %{protocol | streams: streams}}
   end
 end

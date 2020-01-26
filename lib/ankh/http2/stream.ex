@@ -64,17 +64,37 @@ defmodule Ankh.HTTP2.Stream do
   @doc """
   Starts a new stream fot the provided connection
   """
-  @spec new(id(), integer, state) :: t
+  @spec new(id(), integer, integer) :: t
   def new(
         id,
         max_frame_size,
-        state \\ :idle
+        window_size
       ) do
     %__MODULE__{
       id: id,
-      state: state,
+      window_size: window_size,
       max_frame_size: max_frame_size
     }
+  end
+
+  @doc """
+  Adjusts the stream window size
+  """
+  @spec adjust_window_size(t(), integer, integer) :: {:ok, t()}
+  def adjust_window_size(
+        %{id: id, window_size: prev_window_size} = stream,
+        old_window_size,
+        new_window_size
+      ) do
+    window_size = prev_window_size + (new_window_size - old_window_size)
+
+    Logger.debug(fn ->
+      "STREAM #{id} window_size: #{prev_window_size} + (#{new_window_size} - #{old_window_size}) = #{
+        window_size
+      }"
+    end)
+
+    {:ok, %{stream | window_size: window_size}}
   end
 
   @doc """
