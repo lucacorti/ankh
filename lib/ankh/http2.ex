@@ -33,9 +33,9 @@ defmodule Ankh.HTTP2 do
 
   @opaque t :: %__MODULE__{}
   defstruct buffer: <<>>,
-            last_stream_id: nil,
-            last_local_stream_id: nil,
-            last_remote_stream_id: nil,
+            last_stream_id: 0,
+            last_local_stream_id: 0,
+            last_remote_stream_id: 0,
             open_streams: 0,
             recv_hbf_type: nil,
             recv_hpack: nil,
@@ -51,10 +51,7 @@ defmodule Ankh.HTTP2 do
   @impl Protocol
   def new(options) do
     settings = Keyword.get(options, :settings, [])
-
-    recv_settings =
-      @default_settings
-      |> Keyword.merge(settings)
+    recv_settings = Keyword.merge(@default_settings, settings)
 
     with {:ok, send_hpack} <- Table.start_link(4_096),
          header_table_size <- Keyword.get(recv_settings, :header_table_size),
@@ -74,17 +71,7 @@ defmodule Ankh.HTTP2 do
       {:ok, @preface} ->
         with {:ok, protocol} <- send_settings(%{protocol | socket: socket}),
              {:ok, socket} <- transport.accept(socket, options) do
-          {
-            :ok,
-            %{
-              protocol
-              | socket: socket,
-                last_local_stream_id: 2,
-                last_remote_stream_id: 1,
-                last_stream_id: 2,
-                uri: uri
-            }
-          }
+          {:ok, %{protocol | socket: socket, uri: uri}}
         end
 
       _ ->
@@ -101,17 +88,10 @@ defmodule Ankh.HTTP2 do
   def connect(%{transport: transport} = protocol, uri, options) do
     options = Keyword.merge(options, @tls_options)
 
-    protocol = %{
-      protocol
-      | last_local_stream_id: 1,
-        last_remote_stream_id: 2,
-        last_stream_id: 1,
-        uri: uri
-    }
-
     with {:ok, socket} <- transport.connect(uri, options),
          :ok <- transport.send(socket, @preface),
-         {:ok, protocol} <- send_settings(%{protocol | socket: socket}) do
+         {:ok, protocol} <-
+           send_settings(%{protocol | last_local_stream_id: -1, uri: uri, socket: socket}) do
       {:ok, protocol}
     end
   end
@@ -226,33 +206,35 @@ defmodule Ankh.HTTP2 do
 
   defp get_stream(
          %{
-           last_local_stream_id: llid,
+           last_local_stream_id: last_local_stream_id,
            streams: streams
          } = protocol,
          nil = _id
        ) do
+    stream_id = last_local_stream_id + 2
     max_frame_size = max_frame_size(protocol)
-    stream = __MODULE__.Stream.new(llid, max_frame_size)
+    stream = __MODULE__.Stream.new(stream_id, max_frame_size)
 
-    {:ok, %{protocol | last_local_stream_id: llid + 2, streams: Map.put(streams, llid, stream)},
+    {:ok,
+     %{protocol | last_local_stream_id: stream_id, streams: Map.put(streams, stream_id, stream)},
      stream}
   end
 
   defp get_stream(
          %{
            streams: streams,
-           last_local_stream_id: llid
+           last_local_stream_id: last_local_stream_id
          } = protocol,
-         id
+         stream_id
        ) do
-    case Map.get(streams, id) do
+    case Map.get(streams, stream_id) do
       stream when not is_nil(stream) ->
         {:ok, protocol, stream}
 
-      nil when not is_local_stream(llid, id) ->
+      nil when not is_local_stream(last_local_stream_id, stream_id) ->
         max_frame_size = max_frame_size(protocol)
-        stream = __MODULE__.Stream.new(id, max_frame_size)
-        {:ok, %{protocol | streams: Map.put(streams, id, stream)}, stream}
+        stream = __MODULE__.Stream.new(stream_id, max_frame_size)
+        {:ok, %{protocol | streams: Map.put(streams, stream_id, stream)}, stream}
 
       _ ->
         {:error, :protocol_error}
@@ -322,7 +304,7 @@ defmodule Ankh.HTTP2 do
     end
   end
 
-  defp send_error(protocol, last_stream_id, reason) do
+  defp send_error(%{last_stream_id: last_stream_id} = protocol, reason) do
     with {:ok, _protocol} <-
            send_frame(protocol, %GoAway{
              payload: %GoAway.Payload{
@@ -350,10 +332,7 @@ defmodule Ankh.HTTP2 do
     |> min(window_size)
   end
 
-  defp recv_frame(
-         %{stream_id: 0} = frame,
-         %{last_local_stream_id: llid} = protocol
-       ) do
+  defp recv_frame(%{stream_id: 0} = frame, protocol) do
     case process_connection_frame(frame, protocol) do
       {:ok, protocol} ->
         {:ok, protocol, nil}
@@ -362,53 +341,46 @@ defmodule Ankh.HTTP2 do
         {:ok, protocol, nil}
 
       {:error, reason} ->
-        send_error(protocol, llid - 2, reason)
+        send_error(protocol, reason)
     end
   end
 
-  defp recv_frame(
-         %{stream_id: id} = frame,
-         %{last_local_stream_id: llid} = protocol
-       )
-       when is_local_stream(llid, id) do
+  defp recv_frame(%{stream_id: stream_id} = frame, %{last_local_stream_id: llid} = protocol)
+       when is_local_stream(llid, stream_id) do
     with {:ok, %{streams: streams} = protocol, stream} when not is_nil(stream) <-
-           get_stream(protocol, id),
+           get_stream(protocol, stream_id),
          {:ok, %{recv_hbf_type: recv_hbf_type} = stream, response} <-
            __MODULE__.Stream.recv(stream, frame) do
       {
         :ok,
         %{
           protocol
-          | last_local_stream_id: max(llid, id),
+          | last_local_stream_id: max(llid, stream_id),
             recv_hbf_type: recv_hbf_type,
-            streams: Map.put(streams, id, stream)
+            streams: Map.put(streams, stream_id, stream)
         },
         response
       }
     else
       {:error, :not_found} ->
-        send_error(protocol, llid - 2, :protocol_error)
+        send_error(protocol, :protocol_error)
 
       {:error, reason} ->
-        send_error(protocol, llid - 2, reason)
+        send_error(protocol, reason)
     end
   end
 
   defp recv_frame(
-         %{stream_id: id} = frame,
-         %{
-           last_local_stream_id: llid,
-           last_remote_stream_id: lrid,
-           streams: streams
-         } = protocol
+         %{stream_id: stream_id} = frame,
+         %{last_remote_stream_id: lrid, streams: streams} = protocol
        ) do
     is_priority = Priority.type() == frame.type()
 
-    with {:ok, protocol, stream} when is_priority or id >= lrid <-
-           get_stream(protocol, id),
+    with {:ok, protocol, stream} when is_priority or stream_id >= lrid <-
+           get_stream(protocol, stream_id),
          {:ok, %{recv_hbf_type: recv_hbf_type} = stream, response} <-
            __MODULE__.Stream.recv(stream, frame) do
-      lrid = if is_priority, do: lrid, else: id
+      lrid = if is_priority, do: lrid, else: stream_id
 
       {
         :ok,
@@ -416,16 +388,16 @@ defmodule Ankh.HTTP2 do
           protocol
           | last_remote_stream_id: lrid,
             recv_hbf_type: recv_hbf_type,
-            streams: Map.put(streams, id, stream)
+            streams: Map.put(streams, stream_id, stream)
         },
         response
       }
     else
       {:error, reason} ->
-        send_error(protocol, llid - 2, reason)
+        send_error(protocol, reason)
 
       _stream ->
-        send_error(protocol, llid - 2, :protocol_error)
+        send_error(protocol, :protocol_error)
     end
   end
 
@@ -480,14 +452,10 @@ defmodule Ankh.HTTP2 do
 
   defp process_connection_frame(
          %WindowUpdate{payload: %{increment: increment}},
-         %{
-           last_stream_id: last_stream_id,
-           protocol: protocol,
-           window_size: window_size
-         } = protocol
+         %{window_size: window_size} = protocol
        )
        when window_size + increment > @max_window_size do
-    send_error(protocol, last_stream_id - 2, :flow_control_error)
+    send_error(protocol, :flow_control_error)
   end
 
   defp process_connection_frame(

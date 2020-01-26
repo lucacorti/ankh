@@ -124,11 +124,11 @@ defmodule Ankh.HTTP2.Stream do
     end
   end
 
-  defp recv_frame(%{id: id}, %{stream_id: stream_id}) when stream_id !== id do
+  defp recv_frame(%{id: id}, %{stream_id: stream_id}) when stream_id != id do
     {:error, :stream_id_mismatch}
   end
 
-  defp recv_frame(_stream, %{stream_id: stream_id}) when stream_id === 0 do
+  defp recv_frame(_stream, %{stream_id: stream_id}) when stream_id == 0 do
     {:error, :stream_id_zero}
   end
 
@@ -517,11 +517,11 @@ defmodule Ankh.HTTP2.Stream do
 
   defp recv_frame(%{}, _), do: {:error, :protocol_error}
 
-  defp send_frame(%{id: id}, %{stream_id: stream_id}) when stream_id !== id do
+  defp send_frame(%{id: id}, %{stream_id: stream_id}) when stream_id != id do
     {:error, :stream_id_mismatch}
   end
 
-  defp send_frame(_stream, %{stream_id: stream_id}) when stream_id === 0 do
+  defp send_frame(_stream, %{stream_id: stream_id}) when stream_id == 0 do
     {:error, :stream_id_zero}
   end
 
