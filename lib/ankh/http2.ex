@@ -565,14 +565,14 @@ defmodule Ankh.HTTP2 do
     })
   end
 
-  def adjust_header_table_size(%{send_hpack: send_hpack} = protocol, old_size, new_size)
+  defp adjust_header_table_size(%{send_hpack: send_hpack} = protocol, old_size, new_size)
       when new_size != old_size do
     with :ok <- Table.resize(new_size, send_hpack), do: {:ok, protocol}
   end
 
-  def adjust_header_table_size(protocol, _old_size, _new_size), do: {:ok, protocol}
+  defp adjust_header_table_size(protocol, _old_size, _new_size), do: {:ok, protocol}
 
-  def adjust_window_size(
+  defp adjust_window_size(
         %{window_size: prev_window_size} = protocol,
         old_window_size,
         new_window_size
@@ -588,7 +588,7 @@ defmodule Ankh.HTTP2 do
     {:ok, %{protocol | window_size: window_size}}
   end
 
-  def adjust_streams_window_size(%{streams: streams} = protocol, old_window_size, new_window_size) do
+  defp adjust_streams_window_size(%{streams: streams} = protocol, old_window_size, new_window_size) do
     streams = Enum.reduce(streams, streams, fn {id, stream}, streams ->
         stream = __MODULE__.Stream.adjust_window_size(stream, old_window_size, new_window_size)
         Map.put(streams, id, stream)
