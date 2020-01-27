@@ -80,7 +80,7 @@ defmodule Ankh.HTTP2.Stream do
   @doc """
   Adjusts the stream window size
   """
-  @spec adjust_window_size(t(), integer, integer) :: {:ok, t()}
+  @spec adjust_window_size(t(), integer, integer) :: t()
   def adjust_window_size(
         %{id: id, window_size: prev_window_size} = stream,
         old_window_size,
@@ -94,7 +94,7 @@ defmodule Ankh.HTTP2.Stream do
       }"
     end)
 
-    {:ok, %{stream | window_size: window_size}}
+    %{stream | window_size: window_size}
   end
 
   @doc """

@@ -589,15 +589,9 @@ defmodule Ankh.HTTP2 do
   end
 
   def adjust_streams_window_size(%{streams: streams} = protocol, old_window_size, new_window_size) do
-    streams =
-      Enum.reduce_while(streams, streams, fn {id, stream}, streams ->
-        with {:ok, stream} <-
-               __MODULE__.Stream.adjust_window_size(stream, old_window_size, new_window_size) do
-          {:cont, Map.put(streams, id, stream)}
-        else
-          error ->
-            {:halt, error}
-        end
+    streams = Enum.reduce(streams, streams, fn {id, stream}, streams ->
+        stream = __MODULE__.Stream.adjust_window_size(stream, old_window_size, new_window_size)
+        Map.put(streams, id, stream)
       end)
 
     {:ok, %{protocol | streams: streams}}
