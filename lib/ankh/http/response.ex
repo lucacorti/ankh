@@ -10,6 +10,7 @@ defmodule Ankh.HTTP.Response do
           scheme: HTTP.scheme(),
           host: HTTP.host(),
           path: HTTP.path(),
+          body: HTTP.body() | nil,
           headers: list(HTTP.header()),
           trailers: list(HTTP.header())
         }
@@ -17,10 +18,12 @@ defmodule Ankh.HTTP.Response do
             scheme: nil,
             host: nil,
             path: nil,
-            method: nil,
-            body: [],
+            body: nil,
             headers: [],
             trailers: []
+
+  @spec new(keyword) :: t()
+  def new(attrs \\ []), do: Enum.into(attrs, %__MODULE__{})
 
   @spec put_header(t(), HTTP.header_name(), HTTP.header_value()) :: t()
   def put_header(%{headers: headers} = response, header, value),
@@ -33,9 +36,6 @@ defmodule Ankh.HTTP.Response do
   @spec set_status(t(), String.t()) :: t()
   def set_status(response, status), do: %{response | status: status}
 
-  @spec set_method(t(), HTTP.method()) :: t()
-  def set_method(response, method), do: %{response | method: method}
-
   @spec set_scheme(t(), String.t()) :: t()
   def set_scheme(response, scheme), do: %{response | scheme: scheme}
 
@@ -47,4 +47,10 @@ defmodule Ankh.HTTP.Response do
 
   @spec set_path(t(), HTTP.path()) :: t()
   def set_path(response, path), do: %{response | path: path}
+
+  @spec set_headers(t(), [HTTP.header()]) :: t()
+  def set_headers(response, headers), do: %{response | headers: headers}
+
+  @spec set_trailers(t(), [HTTP.header()]) :: t()
+  def set_trailers(response, trailers), do: %{response | trailers: trailers}
 end

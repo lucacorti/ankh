@@ -11,7 +11,7 @@ defmodule Ankh.HTTP.Request do
           path: HTTP.path(),
           headers: list(HTTP.header()),
           trailers: list(HTTP.header()),
-          body: HTTP.body(),
+          body: HTTP.body() | nil,
           options: keyword()
         }
   defstruct host: nil,
@@ -22,6 +22,9 @@ defmodule Ankh.HTTP.Request do
             trailers: [],
             body: nil,
             options: []
+
+  @spec new(keyword) :: t()
+  def new(attrs \\ []), do: Enum.into(attrs, %__MODULE__{})
 
   @spec put_header(t(), HTTP.header_name(), HTTP.header_value()) :: t()
   def put_header(%{headers: headers} = request, header, value),
@@ -52,4 +55,7 @@ defmodule Ankh.HTTP.Request do
 
   @spec set_headers(t(), [HTTP.header()]) :: t()
   def set_headers(request, headers), do: %{request | headers: headers}
+
+  @spec set_trailers(t(), [HTTP.header()]) :: t()
+  def set_trailers(request, trailers), do: %{request | trailers: trailers}
 end
