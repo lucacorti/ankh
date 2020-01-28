@@ -20,18 +20,21 @@ defimpl Ankh.HTTP2.Frame.Splittable, for: Ankh.HTTP2.Frame.Headers do
   end
 
   defp do_split(
-    %{stream_id: id, payload: %{hbf: hbf} = payload} = frame,
-    frame_size,
-    frames
-  ) when byte_size(hbf) > frame_size do
+         %{stream_id: id, payload: %{hbf: hbf} = payload} = frame,
+         frame_size,
+         frames
+       )
+       when byte_size(hbf) > frame_size do
     <<chunk::size(frame_size), rest::binary>> = hbf
 
     frames = [
-    %Continuation{
-      stream_id: id,
-      flags: %Continuation.Flags{end_headers: false},
-      payload: %Continuation.Payload{payload | hbf: chunk}
-    } | frames]
+      %Continuation{
+        stream_id: id,
+        flags: %Continuation.Flags{end_headers: false},
+        payload: %Continuation.Payload{payload | hbf: chunk}
+      }
+      | frames
+    ]
 
     do_split(%{frame | payload: %{payload | hbf: rest}}, frame_size, frames)
   end
