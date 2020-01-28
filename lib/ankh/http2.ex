@@ -202,12 +202,6 @@ defmodule Ankh.HTTP2 do
     end)
   end
 
-  defp get_stream(protocol, 0 = stream_id) do
-    with {:ok, stream} <- new_stream(protocol, stream_id) do
-      {:ok, protocol, stream}
-    end
-  end
-
   defp get_stream(%{last_stream_id: last_stream_id}, id)
        when (not is_nil(id) and id >= @max_stream_id) or last_stream_id >= @max_stream_id do
     {:error, :stream_limit_reached}
@@ -294,7 +288,7 @@ defmodule Ankh.HTTP2 do
          max_frame_size <- Keyword.get(send_settings, :max_frame_size) do
       frame
       |> Splittable.split(max_frame_size)
-      |> Enum.reduce_while({:ok, protocol}, fn frame, _ ->
+      |> Enum.reduce_while({:ok, protocol}, fn frame, {:ok, protocol} ->
         with {:ok, length, _type, data} <- Frame.encode(frame),
              {:ok, stream} <- __MODULE__.Stream.send(stream, %{frame | length: length}),
              :ok <- transport.send(socket, data) do
@@ -471,7 +465,9 @@ defmodule Ankh.HTTP2 do
          %WindowUpdate{payload: %{increment: increment}},
          %{window_size: window_size} = protocol
        ) do
-    {:ok, %{protocol | window_size: window_size + increment}}
+    new_window_size = window_size + increment
+    Logger.debug(fn -> "window_size: #{window_size} + #{increment} = #{new_window_size}" end)
+    {:ok, %{protocol | window_size: new_window_size}}
   end
 
   defp process_connection_frame(%GoAway{payload: %{error_code: reason}}, protocol) do

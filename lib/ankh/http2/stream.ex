@@ -211,10 +211,12 @@ defmodule Ankh.HTTP2.Stream do
     {:ok, %{stream | state: :closed}, {:error, reason}}
   end
 
-  defp recv_frame(%{state: :reserved_local, window_size: window_size} = stream, %WindowUpdate{
+  defp recv_frame(%{id: id, state: :reserved_local, window_size: window_size} = stream, %WindowUpdate{
          payload: %WindowUpdate.Payload{increment: increment}
        }) do
-    {:ok, %{stream | window_size: window_size + increment}}
+    new_window_size = window_size + increment
+    Logger.debug(fn -> "STREAM #{id} window_size: #{window_size} + #{increment} = #{new_window_size}" end)
+    {:ok, %{stream | window_size: new_window_size}}
   end
 
   # RESERVED REMOTE
@@ -479,10 +481,12 @@ defmodule Ankh.HTTP2.Stream do
     {:ok, %{stream | state: :closed}, {:error, reason}}
   end
 
-  defp recv_frame(%{state: :half_closed_remote, window_size: window_size} = stream, %WindowUpdate{
+  defp recv_frame(%{id: id, state: :half_closed_remote, window_size: window_size} = stream, %WindowUpdate{
          payload: %WindowUpdate.Payload{increment: increment}
        }) do
-    {:ok, %{stream | window_size: window_size + increment}}
+    new_window_size = window_size + increment
+    Logger.debug(fn -> "STREAM #{id} window_size: #{window_size} + #{increment} = #{new_window_size}" end)
+    {:ok, %{stream | window_size: new_window_size}}
   end
 
   defp recv_frame(%{state: :half_closed_remote}, _), do: {:error, :stream_closed}
@@ -497,10 +501,12 @@ defmodule Ankh.HTTP2.Stream do
     {:ok, stream, {:error, reason}}
   end
 
-  defp recv_frame(%{state: :closed, window_size: window_size} = stream, %WindowUpdate{
+  defp recv_frame(%{id: id, state: :closed, window_size: window_size} = stream, %WindowUpdate{
          payload: %WindowUpdate.Payload{increment: increment}
        }) do
-    {:ok, %{stream | window_size: window_size + increment}}
+    new_window_size = window_size + increment
+    Logger.debug(fn -> "STREAM #{id} window_size: #{window_size} + #{increment} = #{new_window_size}" end)
+    {:ok, %{stream | window_size: new_window_size}}
   end
 
   defp recv_frame(%{state: :closed}, _), do: {:error, :stream_closed}
