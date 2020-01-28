@@ -211,11 +211,18 @@ defmodule Ankh.HTTP2.Stream do
     {:ok, %{stream | state: :closed}, {:error, reason}}
   end
 
-  defp recv_frame(%{id: id, state: :reserved_local, window_size: window_size} = stream, %WindowUpdate{
-         payload: %WindowUpdate.Payload{increment: increment}
-       }) do
+  defp recv_frame(
+         %{id: id, state: :reserved_local, window_size: window_size} = stream,
+         %WindowUpdate{
+           payload: %WindowUpdate.Payload{increment: increment}
+         }
+       ) do
     new_window_size = window_size + increment
-    Logger.debug(fn -> "STREAM #{id} window_size: #{window_size} + #{increment} = #{new_window_size}" end)
+
+    Logger.debug(fn ->
+      "STREAM #{id} window_size: #{window_size} + #{increment} = #{new_window_size}"
+    end)
+
     {:ok, %{stream | window_size: new_window_size}}
   end
 
@@ -481,11 +488,18 @@ defmodule Ankh.HTTP2.Stream do
     {:ok, %{stream | state: :closed}, {:error, reason}}
   end
 
-  defp recv_frame(%{id: id, state: :half_closed_remote, window_size: window_size} = stream, %WindowUpdate{
-         payload: %WindowUpdate.Payload{increment: increment}
-       }) do
+  defp recv_frame(
+         %{id: id, state: :half_closed_remote, window_size: window_size} = stream,
+         %WindowUpdate{
+           payload: %WindowUpdate.Payload{increment: increment}
+         }
+       ) do
     new_window_size = window_size + increment
-    Logger.debug(fn -> "STREAM #{id} window_size: #{window_size} + #{increment} = #{new_window_size}" end)
+
+    Logger.debug(fn ->
+      "STREAM #{id} window_size: #{window_size} + #{increment} = #{new_window_size}"
+    end)
+
     {:ok, %{stream | window_size: new_window_size}}
   end
 
@@ -505,7 +519,11 @@ defmodule Ankh.HTTP2.Stream do
          payload: %WindowUpdate.Payload{increment: increment}
        }) do
     new_window_size = window_size + increment
-    Logger.debug(fn -> "STREAM #{id} window_size: #{window_size} + #{increment} = #{new_window_size}" end)
+
+    Logger.debug(fn ->
+      "STREAM #{id} window_size: #{window_size} + #{increment} = #{new_window_size}"
+    end)
+
     {:ok, %{stream | window_size: new_window_size}}
   end
 

@@ -158,8 +158,7 @@ defmodule Ankh.HTTP2 do
       {rest, nil}, {:ok, protocol, responses} ->
         {:halt, {:ok, %{protocol | buffer: rest}, responses}}
 
-      {_rest, {length, _, _, _}},
-      {:ok, protocol, _responses} when length > max_frame_size ->
+      {_rest, {length, _, _, _}}, {:ok, protocol, _responses} when length > max_frame_size ->
         send_error(protocol, :protocol_error)
 
       {rest, {length, type, id, data}},
@@ -281,15 +280,18 @@ defmodule Ankh.HTTP2 do
   end
 
   defp do_send_frame(
-         %{send_settings: send_settings, socket: socket, streams: streams, transport: transport} = protocol,
+         %{send_settings: send_settings, socket: socket, streams: streams, transport: transport} =
+           protocol,
          %{stream_id: stream_id} = frame
        ) do
-    with {:ok, protocol, stream} <- get_stream(protocol, stream_id),
+    with {:ok, protocol, %{window_size: stream_window_size} = _stream} <-
+           get_stream(protocol, stream_id),
          max_frame_size <- Keyword.get(send_settings, :max_frame_size) do
       frame
-      |> Splittable.split(max_frame_size)
+      |> Splittable.split(min(max_frame_size, stream_window_size))
       |> Enum.reduce_while({:ok, protocol}, fn frame, {:ok, protocol} ->
         with {:ok, length, _type, data} <- Frame.encode(frame),
+             {:ok, protocol, stream} <- get_stream(protocol, stream_id),
              {:ok, stream} <- __MODULE__.Stream.send(stream, %{frame | length: length}),
              :ok <- transport.send(socket, data) do
           Logger.debug(fn -> "SENT #{inspect(%{frame | length: length})} #{inspect(data)}" end)
@@ -551,17 +553,17 @@ defmodule Ankh.HTTP2 do
   end
 
   defp adjust_header_table_size(%{send_hpack: send_hpack} = protocol, old_size, new_size)
-      when new_size != old_size do
+       when new_size != old_size do
     with :ok <- Table.resize(new_size, send_hpack), do: {:ok, protocol}
   end
 
   defp adjust_header_table_size(protocol, _old_size, _new_size), do: {:ok, protocol}
 
   defp adjust_window_size(
-        %{window_size: prev_window_size} = protocol,
-        old_window_size,
-        new_window_size
-      ) do
+         %{window_size: prev_window_size} = protocol,
+         old_window_size,
+         new_window_size
+       ) do
     window_size = prev_window_size + (new_window_size - old_window_size)
 
     Logger.debug(fn ->
@@ -573,8 +575,13 @@ defmodule Ankh.HTTP2 do
     {:ok, %{protocol | window_size: window_size}}
   end
 
-  defp adjust_streams_window_size(%{streams: streams} = protocol, old_window_size, new_window_size) do
-    streams = Enum.reduce(streams, streams, fn {id, stream}, streams ->
+  defp adjust_streams_window_size(
+         %{streams: streams} = protocol,
+         old_window_size,
+         new_window_size
+       ) do
+    streams =
+      Enum.reduce(streams, streams, fn {id, stream}, streams ->
         stream = __MODULE__.Stream.adjust_window_size(stream, old_window_size, new_window_size)
         Map.put(streams, id, stream)
       end)
