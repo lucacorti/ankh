@@ -149,12 +149,18 @@ defmodule Ankh.HTTP2 do
     end
   end
 
-  defp process_buffer(protocol, data) do
+  defp process_buffer(%{recv_settings: recv_settings} = protocol, data) do
+    max_frame_size = Keyword.get(recv_settings, :max_frame_size)
+
     data
     |> Frame.stream()
     |> Enum.reduce_while({:ok, %{protocol | buffer: data}, []}, fn
       {rest, nil}, {:ok, protocol, responses} ->
         {:halt, {:ok, %{protocol | buffer: rest}, responses}}
+
+      {_rest, {length, _, _, _}},
+      {:ok, protocol, _responses} when length > max_frame_size ->
+        send_error(protocol, :protocol_error)
 
       {rest, {length, type, id, data}},
       {:ok, %{recv_hbf_type: recv_hbf_type} = protocol, responses} ->
@@ -252,8 +258,7 @@ defmodule Ankh.HTTP2 do
 
   defp new_stream(%{send_settings: send_settings}, stream_id) do
     window_size = Keyword.get(send_settings, :initial_window_size)
-    max_frame_size = Keyword.get(send_settings, :max_frame_size)
-    {:ok, __MODULE__.Stream.new(stream_id, max_frame_size, window_size)}
+    {:ok, __MODULE__.Stream.new(stream_id, window_size)}
   end
 
   defp send_frame(
@@ -274,26 +279,24 @@ defmodule Ankh.HTTP2 do
   defp send_frame(protocol, frame), do: do_send_frame(protocol, frame)
 
   defp do_send_frame(%{socket: socket, transport: transport} = protocol, %{stream_id: 0} = frame) do
-    with {:ok, _length, _type, data} <- Frame.encode(frame),
+    with {:ok, length, _type, data} <- Frame.encode(frame),
          :ok <- transport.send(socket, data) do
-      Logger.debug(fn -> "SENT #{inspect(frame)} #{inspect(data)}" end)
+      Logger.debug(fn -> "SENT #{inspect(%{frame | length: length})} #{inspect(data)}" end)
       {:ok, protocol}
     end
   end
 
   defp do_send_frame(
-         %{socket: socket, streams: streams, transport: transport} = protocol,
+         %{send_settings: send_settings, socket: socket, streams: streams, transport: transport} = protocol,
          %{stream_id: stream_id} = frame
        ) do
-    with {:ok, protocol, stream} <-
-           get_stream(protocol, stream_id),
-         {:ok, stream} <- __MODULE__.Stream.send(stream, frame) do
-      frame_size = max_frame_size(protocol, stream)
-
+    with {:ok, protocol, stream} <- get_stream(protocol, stream_id),
+         max_frame_size <- Keyword.get(send_settings, :max_frame_size) do
       frame
-      |> Splittable.split(frame_size)
+      |> Splittable.split(max_frame_size)
       |> Enum.reduce_while({:ok, protocol}, fn frame, _ ->
         with {:ok, length, _type, data} <- Frame.encode(frame),
+             {:ok, stream} <- __MODULE__.Stream.send(stream, %{frame | length: length}),
              :ok <- transport.send(socket, data) do
           Logger.debug(fn -> "SENT #{inspect(%{frame | length: length})} #{inspect(data)}" end)
 
@@ -329,20 +332,6 @@ defmodule Ankh.HTTP2 do
            }) do
       {:error, reason}
     end
-  end
-
-  defp max_frame_size(%{send_settings: settings} = _protocol) do
-    settings
-    |> Keyword.get(:max_frame_size)
-  end
-
-  defp max_frame_size(
-         protocol,
-         %{max_frame_size: max_frame_size} = _stream
-       ) do
-    protocol
-    |> max_frame_size()
-    |> min(max_frame_size)
   end
 
   defp recv_frame(protocol, %{stream_id: 0} = frame) do

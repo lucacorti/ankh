@@ -54,7 +54,6 @@ defmodule Ankh.HTTP2.Stream do
            when rem(last_local_stream_id, 2) == rem(stream_id, 2)
 
   defstruct id: 0,
-            max_frame_size: 16_384,
             state: :idle,
             recv_hbf_type: nil,
             recv_hbf_es: false,
@@ -64,16 +63,14 @@ defmodule Ankh.HTTP2.Stream do
   @doc """
   Starts a new stream fot the provided connection
   """
-  @spec new(id(), integer, integer) :: t
+  @spec new(id(), integer) :: t
   def new(
         id,
-        max_frame_size,
         window_size
       ) do
     %__MODULE__{
       id: id,
-      window_size: window_size,
-      max_frame_size: max_frame_size
+      window_size: window_size
     }
   end
 
@@ -122,39 +119,12 @@ defmodule Ankh.HTTP2.Stream do
     end
   end
 
-  @doc """
-  Process and send a frame on the stream
-  """
-  @spec send(t(), Frame.t()) :: {:ok, t()} | {:error, any()}
-  def send(%{id: id, state: state} = stream, %{stream_id: id} = frame) do
-    case send_frame(stream, frame) do
-      {:ok, %{state: new_state, recv_hbf_type: recv_hbf_type} = stream} ->
-        Logger.debug(fn ->
-          "STREAM #{id} #{inspect(state)} -> #{inspect(new_state)} hbf: #{inspect(recv_hbf_type)}"
-        end)
-
-        {:ok, stream}
-
-      {:error, reason} = error ->
-        Logger.error(fn ->
-          "STREAM #{id} #{state} SEND ERROR #{inspect(reason)} ON #{inspect(frame)}"
-        end)
-
-        error
-    end
-  end
-
   defp recv_frame(%{id: id}, %{stream_id: stream_id}) when stream_id != id do
     {:error, :stream_id_mismatch}
   end
 
   defp recv_frame(_stream, %{stream_id: stream_id}) when stream_id == 0 do
     {:error, :stream_id_zero}
-  end
-
-  defp recv_frame(%{max_frame_size: max_frame_size}, %{length: length})
-       when length > max_frame_size do
-    {:error, :frame_size_error}
   end
 
   defp recv_frame(%{recv_hbf_type: recv_hbf_type}, %{type: type})
@@ -536,6 +506,28 @@ defmodule Ankh.HTTP2.Stream do
   defp recv_frame(%{state: :closed}, _), do: {:error, :stream_closed}
 
   defp recv_frame(%{}, _), do: {:error, :protocol_error}
+
+  @doc """
+  Process and send a frame on the stream
+  """
+  @spec send(t(), Frame.t()) :: {:ok, t()} | {:error, any()}
+  def send(%{id: id, state: state} = stream, %{stream_id: id} = frame) do
+    case send_frame(stream, frame) do
+      {:ok, %{state: new_state, recv_hbf_type: recv_hbf_type} = stream} ->
+        Logger.debug(fn ->
+          "STREAM #{id} #{inspect(state)} -> #{inspect(new_state)} hbf: #{inspect(recv_hbf_type)}"
+        end)
+
+        {:ok, stream}
+
+      {:error, reason} = error ->
+        Logger.error(fn ->
+          "STREAM #{id} #{state} SEND ERROR #{inspect(reason)} ON #{inspect(frame)}"
+        end)
+
+        error
+    end
+  end
 
   defp send_frame(%{id: id}, %{stream_id: stream_id}) when stream_id != id do
     {:error, :stream_id_mismatch}
