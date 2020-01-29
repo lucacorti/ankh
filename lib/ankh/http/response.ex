@@ -23,7 +23,7 @@ defmodule Ankh.HTTP.Response do
             trailers: []
 
   @spec new(keyword) :: t()
-  def new(attrs \\ []), do: Enum.into(attrs, %__MODULE__{})
+  def new(attrs \\ []), do: struct(__MODULE__, attrs)
 
   @spec put_header(t(), HTTP.header_name(), HTTP.header_value()) :: t()
   def put_header(%{headers: headers} = response, header, value),
