@@ -16,5 +16,5 @@ jobs:
           elixir-version: ${{matrix.elixir}}
       - run: mix deps.get
       - run: mix credo --strict --all
-      - run: mix dialyxer
+      - run: mix dialyzer
       - run: mix test
