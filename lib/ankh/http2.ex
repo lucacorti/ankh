@@ -6,7 +6,19 @@ defmodule Ankh.HTTP2 do
   alias Ankh.{Protocol, TLS}
   alias Ankh.HTTP.{Request, Response}
   alias Ankh.HTTP2.Frame
-  alias Frame.{Data, GoAway, Headers, Ping, Priority, Settings, Splittable, WindowUpdate}
+
+  alias Frame.{
+    Data,
+    GoAway,
+    Headers,
+    Ping,
+    Priority,
+    RstStream,
+    Settings,
+    Splittable,
+    WindowUpdate
+  }
+
   alias HPack.Table
 
   import Ankh.HTTP2.Stream, only: [is_local_stream: 2]
@@ -15,6 +27,7 @@ defmodule Ankh.HTTP2 do
 
   @behaviour Protocol
 
+  @initial_window_size 65_535
   @max_window_size 2_147_483_647
   @max_stream_id 2_147_483_647
   @preface "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
@@ -27,7 +40,7 @@ defmodule Ankh.HTTP2 do
     header_table_size: 4_096,
     enable_push: true,
     max_concurrent_streams: 128,
-    initial_window_size: 65_535,
+    initial_window_size: @initial_window_size,
     max_frame_size: 16_384,
     max_header_list_size: 128
   ]
@@ -47,7 +60,7 @@ defmodule Ankh.HTTP2 do
             streams: %{},
             transport: TLS,
             uri: nil,
-            window_size: 65_535
+            window_size: @initial_window_size
 
   @impl Protocol
   def new(options) do
@@ -159,7 +172,7 @@ defmodule Ankh.HTTP2 do
         {:halt, {:ok, %{protocol | buffer: rest}, responses}}
 
       {_rest, {length, _, _, _}}, {:ok, protocol, _responses} when length > max_frame_size ->
-        send_error(protocol, :protocol_error)
+        {:halt, send_error(protocol, :protocol_error)}
 
       {rest, {length, type, id, data}},
       {:ok, %{recv_hbf_type: recv_hbf_type} = protocol, responses} ->
@@ -284,25 +297,23 @@ defmodule Ankh.HTTP2 do
            protocol,
          %{stream_id: stream_id} = frame
        ) do
-    with {:ok, protocol, %{window_size: stream_window_size} = _stream} <-
-           get_stream(protocol, stream_id),
-         max_frame_size <- Keyword.get(send_settings, :max_frame_size) do
-      frame
-      |> Splittable.split(min(max_frame_size, stream_window_size))
-      |> Enum.reduce_while({:ok, protocol}, fn frame, {:ok, protocol} ->
-        with {:ok, length, _type, data} <- Frame.encode(frame),
-             {:ok, protocol, stream} <- get_stream(protocol, stream_id),
-             {:ok, stream} <- __MODULE__.Stream.send(stream, %{frame | length: length}),
-             :ok <- transport.send(socket, data) do
-          Logger.debug(fn -> "SENT #{inspect(%{frame | length: length})} #{inspect(data)}" end)
+    max_frame_size = Keyword.get(send_settings, :max_frame_size)
 
-          {:cont, {:ok, %{protocol | streams: Map.put(streams, stream_id, stream)}}}
-        else
-          error ->
-            {:halt, error}
-        end
-      end)
-    end
+    frame
+    |> Splittable.split(max_frame_size)
+    |> Enum.reduce_while({:ok, protocol}, fn frame, {:ok, protocol} ->
+      with {:ok, length, _type, data} <- Frame.encode(frame),
+           {:ok, protocol, stream} <- get_stream(protocol, stream_id),
+           {:ok, stream} <- __MODULE__.Stream.send(stream, %{frame | length: length}),
+           :ok <- transport.send(socket, data) do
+        Logger.debug(fn -> "SENT #{inspect(%{frame | length: length})} #{inspect(data)}" end)
+
+        {:cont, {:ok, %{protocol | streams: Map.put(streams, stream_id, stream)}}}
+      else
+        error ->
+          {:halt, error}
+      end
+    end)
   end
 
   defp send_settings(%{send_hpack: send_hpack, recv_settings: recv_settings} = protocol) do
@@ -328,6 +339,13 @@ defmodule Ankh.HTTP2 do
            }) do
       {:error, reason}
     end
+  end
+
+  defp send_stream_error(protocol, stream_id, reason) do
+    send_frame(protocol, %RstStream{
+      stream_id: stream_id,
+      payload: %RstStream.Payload{error_code: reason}
+    })
   end
 
   defp recv_frame(protocol, %{stream_id: 0} = frame) do
@@ -360,6 +378,9 @@ defmodule Ankh.HTTP2 do
         response
       }
     else
+      {:error, :flow_control_error} ->
+        {:ok, protocol, nil}
+
       {:error, :not_found} ->
         send_error(protocol, :protocol_error)
 
@@ -391,6 +412,10 @@ defmodule Ankh.HTTP2 do
         response
       }
     else
+      {:error, :flow_control_error = reason} ->
+        {:ok, protocol} = send_stream_error(protocol, stream_id, reason)
+        {:ok, protocol, nil}
+
       {:error, reason} ->
         send_error(protocol, reason)
 

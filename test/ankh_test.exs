@@ -13,11 +13,7 @@ defmodule AnkhTest do
 
     request = %Request{}
 
-    assert {:ok, protocol} = Ankh.HTTP.connect(URI.parse(url))
-    assert {:ok, protocol, reference} = Ankh.HTTP.request(protocol, request)
-
-    receive_response(protocol, reference)
-
+    assert {:ok, protocol} = url |> URI.parse() |> Ankh.HTTP.connect()
     assert {:ok, protocol, reference} = Ankh.HTTP.request(protocol, request)
 
     receive_response(protocol, reference)

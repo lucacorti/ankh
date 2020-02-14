@@ -20,6 +20,7 @@ defmodule Ankh.HTTP2.Stream do
     WindowUpdate
   }
 
+  @initial_window_size 65_535
   @max_window_size 2_147_483_647
 
   @typedoc "Stream states"
@@ -58,7 +59,7 @@ defmodule Ankh.HTTP2.Stream do
             recv_hbf_type: nil,
             recv_hbf_es: false,
             recv_hbf: [],
-            window_size: 65_535
+            window_size: @initial_window_size
 
   @doc """
   Starts a new stream fot the provided connection
@@ -97,7 +98,7 @@ defmodule Ankh.HTTP2.Stream do
   @doc """
   Process a received frame for the stream
   """
-  @spec recv(t(), Frame.t()) :: {:ok, t()} | {:ok, t(), data} | {:error, any()}
+  @spec recv(t(), Frame.t()) :: {:ok, t(), data} | {:error, any()}
   def recv(%{id: id, state: state} = stream, frame) do
     case recv_frame(stream, frame) do
       {:ok, %{state: new_state, recv_hbf_type: recv_hbf_type} = stream, data} ->
