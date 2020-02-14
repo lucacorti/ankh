@@ -33,8 +33,8 @@ defmodule Ankh.Mixfile do
   defp deps do
     [
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
-      {:dialyxir, "~> 0.5.1", only: [:dev, :test], runtime: false},
-      {:credo, "~> 1.2.0", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 0.5.1", only: [:dev], runtime: false},
+      {:credo, "~> 1.2.0", only: [:dev], runtime: false},
       {:hpack, "~> 1.1.0"},
       {:castore, "~> 0.1.0"},
       {:ssl_verify_fun, "~> 1.1"}
