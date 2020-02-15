@@ -8,10 +8,7 @@ defprotocol Ankh.HTTP2.Frame.Splittable do
   @fallback_to_any true
 
   @typedoc "Data type conforming to the `Ankh.HTTP2.Frame.Splittable` protocol"
-  @type t :: any() | nil
-
-  @typedoc "Encode/Decode options"
-  @type options :: Keyword.t()
+  @type t :: any()
 
   @doc """
   Returns N frames for `frame` with the specified `frame_size`.
