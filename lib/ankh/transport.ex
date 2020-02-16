@@ -2,38 +2,37 @@ defmodule Ankh.Transport do
   @moduledoc """
   Transport behavior
   """
-  alias Ankh.Connection.Receiver
 
-  @typedoc "Transport reference"
-  @type t :: term
+  @type t :: any()
+  @type options :: Keyword.t()
 
   @doc """
   Accepts a client connection
   """
-  @callback accept(t, Receiver.t(), Keyword.t()) :: {:ok, t} | {:error, term}
+  @callback accept(t, Keyword.t()) :: {:ok, t} | {:error, any()}
 
   @doc """
   Closes the connection
   """
-  @callback close(t) :: :ok | {:error, term}
+  @callback close(t()) :: :ok | {:error, any()}
 
   @doc """
   Connects to an host
   """
-  @callback connect(URI.t(), Receiver.t(), Keyword.t()) :: {:ok, t} | {:error, term}
+  @callback connect(URI.t(), Keyword.t()) :: {:ok, t()} | {:error, any()}
 
   @doc """
   Sends data
   """
-  @callback send(t, iodata) :: :ok | {:error, term}
+  @callback send(t(), iodata()) :: :ok | {:error, any()}
 
   @doc """
   Receives data
   """
-  @callback recv(t, integer) :: {:ok, binary} | {:error, term}
+  @callback recv(t(), integer) :: {:ok, iodata()} | {:error, any()}
 
   @doc """
   Handles transport messages
   """
-  @callback handle_msg(term) :: {:data, binary} | {:error, term} | :closed
+  @callback handle_msg(any()) :: {:ok, iodata()} | {:error, any()}
 end
