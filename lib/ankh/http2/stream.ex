@@ -55,6 +55,7 @@ defmodule Ankh.HTTP2.Stream do
            when rem(last_local_stream_id, 2) == rem(stream_id, 2)
 
   defstruct id: 0,
+            reference: nil,
             state: :idle,
             recv_hbf_type: nil,
             recv_hbf_es: false,
@@ -71,6 +72,7 @@ defmodule Ankh.HTTP2.Stream do
       ) do
     %__MODULE__{
       id: id,
+      reference: make_ref(),
       window_size: window_size
     }
   end

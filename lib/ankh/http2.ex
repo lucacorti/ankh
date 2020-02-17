@@ -6,6 +6,7 @@ defmodule Ankh.HTTP2 do
   alias Ankh.{Protocol, TLS}
   alias Ankh.HTTP.{Request, Response}
   alias Ankh.HTTP2.Frame
+  alias Ankh.HTTP2.Stream, as: HTTP2Stream
 
   alias Frame.{
     Data,
@@ -54,6 +55,7 @@ defmodule Ankh.HTTP2 do
             recv_hbf_type: nil,
             recv_hpack: nil,
             recv_settings: @default_settings,
+            references: %{},
             send_hpack: nil,
             send_settings: @default_settings,
             socket: nil,
@@ -120,45 +122,35 @@ defmodule Ankh.HTTP2 do
 
   @impl Protocol
   def request(
-        %{uri: %{authority: authority, host: host, scheme: scheme}} = protocol,
+        %{uri: %{authority: authority, scheme: scheme}} = protocol,
         %{method: method, path: path} = request
       ) do
     request =
       request
-      |> Request.set_scheme(scheme)
-      |> Request.set_host(host)
-      |> Request.set_path(path)
-      |> Request.set_scheme(scheme)
-      |> Request.put_header(":method", method)
+      |> Request.put_header(":method", Atom.to_string(method))
       |> Request.put_header(":authority", authority)
       |> Request.put_header(":scheme", scheme)
       |> Request.put_header(":path", path)
 
-    with {:ok, protocol, %{id: id} = stream} <- get_stream(protocol, nil),
+    with {:ok, protocol, %{reference: reference} = stream} <- get_stream(protocol, nil),
          {:ok, protocol} <- send_headers(protocol, stream, request),
          {:ok, protocol} <- send_data(protocol, stream, request),
          {:ok, protocol} <- send_trailers(protocol, stream, request) do
-      {:ok, protocol, id}
+      {:ok, protocol, reference}
     end
   end
 
   @impl Protocol
-  def respond(
-        %{uri: %{host: host, scheme: scheme}} = protocol,
-        stream_id,
-        %{status: status} = response
-      ) do
+  def respond(protocol, reference, %{status: status} = response) do
     response =
       response
-      |> Response.set_scheme(scheme)
-      |> Response.set_host(host)
       |> Response.put_header(":status", status)
 
-    with {:ok, protocol, stream} <- get_stream(protocol, stream_id),
+    with {:ok, protocol, stream} <- get_stream(protocol, reference),
          {:ok, protocol} <- send_headers(protocol, stream, response),
          {:ok, protocol} <- send_data(protocol, stream, response),
          {:ok, protocol} <- send_trailers(protocol, stream, response) do
-      {:ok, protocol, stream_id}
+      {:ok, protocol, reference}
     end
   end
 
@@ -181,21 +173,21 @@ defmodule Ankh.HTTP2 do
              :ok <- Logger.debug(fn -> "RECVD #{inspect(frame)} #{inspect(data)}" end),
              {:ok, protocol, response} <- recv_frame(protocol, frame) do
           case response do
-            {:data, data, end_stream} ->
+            {ref, {:data, data, end_stream}} ->
               {:ok, protocol} = recv_data(protocol, length, id)
 
               {:cont,
-               {:ok, %{protocol | buffer: rest}, [{:data, id, data, end_stream} | responses]}}
+               {:ok, %{protocol | buffer: rest}, [{:data, ref, data, end_stream} | responses]}}
 
-            {:error, error} ->
-              {:cont, {:ok, %{protocol | buffer: rest}, [{:error, id, error, true} | responses]}}
+            {ref, {:error, error}} ->
+              {:cont, {:ok, %{protocol | buffer: rest}, [{:error, ref, error, true} | responses]}}
 
-            {type, hbf, end_stream} when type in [:headers, :push_promise] ->
+            {ref, {type, hbf, end_stream}} when type in [:headers, :push_promise] ->
               case recv_headers(protocol, hbf) do
                 {:ok, headers} ->
                   {:cont,
                    {:ok, %{protocol | buffer: rest},
-                    [{type, id, headers, end_stream} | responses]}}
+                    [{type, ref, headers, end_stream} | responses]}}
 
                 error ->
                   {:halt, error}
@@ -214,37 +206,28 @@ defmodule Ankh.HTTP2 do
     end)
   end
 
+  defp get_stream(%{references: references} = protocol, reference) when is_reference(reference) do
+    stream_id = Map.get(references, reference)
+    get_stream(protocol, stream_id)
+  end
+
   defp get_stream(%{last_stream_id: last_stream_id}, id)
        when (not is_nil(id) and id >= @max_stream_id) or last_stream_id >= @max_stream_id do
     {:error, :stream_limit_reached}
+  end
+
+  defp get_stream(%{last_local_stream_id: last_local_stream_id} = protocol, nil = _id) do
+    stream_id = last_local_stream_id + 2
+
+    with {:ok, protocol, stream} <- new_stream(protocol, stream_id) do
+      {:ok, %{protocol | last_local_stream_id: stream_id}, stream}
+    end
   end
 
   defp get_stream(
          %{
            last_local_stream_id: last_local_stream_id,
            streams: streams
-         } = protocol,
-         nil = _id
-       ) do
-    stream_id = last_local_stream_id + 2
-
-    with {:ok, stream} <- new_stream(protocol, stream_id) do
-      {
-        :ok,
-        %{
-          protocol
-          | last_local_stream_id: stream_id,
-            streams: Map.put(streams, stream_id, stream)
-        },
-        stream
-      }
-    end
-  end
-
-  defp get_stream(
-         %{
-           streams: streams,
-           last_local_stream_id: last_local_stream_id
          } = protocol,
          stream_id
        ) do
@@ -253,8 +236,8 @@ defmodule Ankh.HTTP2 do
         {:ok, protocol, stream}
 
       nil when not is_local_stream(last_local_stream_id, stream_id) ->
-        with {:ok, stream} <- new_stream(protocol, stream_id) do
-          {:ok, %{protocol | streams: Map.put(streams, stream_id, stream)}, stream}
+        with {:ok, protocol, stream} <- new_stream(protocol, stream_id) do
+          {:ok, protocol, stream}
         end
 
       _ ->
@@ -262,9 +245,22 @@ defmodule Ankh.HTTP2 do
     end
   end
 
-  defp new_stream(%{send_settings: send_settings}, stream_id) do
+  defp new_stream(
+         %{references: references, send_settings: send_settings, streams: streams} = protocol,
+         stream_id
+       ) do
     window_size = Keyword.get(send_settings, :initial_window_size)
-    {:ok, __MODULE__.Stream.new(stream_id, window_size)}
+    stream = HTTP2Stream.new(stream_id, window_size)
+
+    {
+      :ok,
+      %{
+        protocol
+        | references: Map.put(references, stream.reference, stream_id),
+          streams: Map.put(streams, stream_id, stream)
+      },
+      stream
+    }
   end
 
   defp send_frame(
@@ -304,7 +300,7 @@ defmodule Ankh.HTTP2 do
     |> Enum.reduce_while({:ok, protocol}, fn frame, {:ok, protocol} ->
       with {:ok, length, _type, data} <- Frame.encode(frame),
            {:ok, protocol, stream} <- get_stream(protocol, stream_id),
-           {:ok, stream} <- __MODULE__.Stream.send(stream, %{frame | length: length}),
+           {:ok, stream} <- HTTP2Stream.send(stream, %{frame | length: length}),
            :ok <- transport.send(socket, data) do
         Logger.debug(fn -> "SENT #{inspect(%{frame | length: length})} #{inspect(data)}" end)
 
@@ -365,8 +361,8 @@ defmodule Ankh.HTTP2 do
        when is_local_stream(llid, stream_id) do
     with {:ok, %{streams: streams} = protocol, stream} when not is_nil(stream) <-
            get_stream(protocol, stream_id),
-         {:ok, %{recv_hbf_type: recv_hbf_type} = stream, response} <-
-           __MODULE__.Stream.recv(stream, frame) do
+         {:ok, %{reference: reference, recv_hbf_type: recv_hbf_type} = stream, response} <-
+           HTTP2Stream.recv(stream, frame) do
       {
         :ok,
         %{
@@ -375,12 +371,9 @@ defmodule Ankh.HTTP2 do
             recv_hbf_type: recv_hbf_type,
             streams: Map.put(streams, stream_id, stream)
         },
-        response
+        {reference, response}
       }
     else
-      {:error, :flow_control_error} ->
-        {:ok, protocol, nil}
-
       {:error, :not_found} ->
         send_error(protocol, :protocol_error)
 
@@ -397,8 +390,8 @@ defmodule Ankh.HTTP2 do
 
     with {:ok, protocol, stream} when is_priority or stream_id >= lrid <-
            get_stream(protocol, stream_id),
-         {:ok, %{recv_hbf_type: recv_hbf_type} = stream, response} <-
-           __MODULE__.Stream.recv(stream, frame) do
+         {:ok, %{reference: reference, recv_hbf_type: recv_hbf_type} = stream, response} <-
+           HTTP2Stream.recv(stream, frame) do
       lrid = if is_priority, do: lrid, else: stream_id
 
       {
@@ -409,7 +402,7 @@ defmodule Ankh.HTTP2 do
             recv_hbf_type: recv_hbf_type,
             streams: Map.put(streams, stream_id, stream)
         },
-        response
+        {reference, response}
       }
     else
       {:error, :flow_control_error = reason} ->
@@ -607,7 +600,7 @@ defmodule Ankh.HTTP2 do
        ) do
     streams =
       Enum.reduce(streams, streams, fn {id, stream}, streams ->
-        stream = __MODULE__.Stream.adjust_window_size(stream, old_window_size, new_window_size)
+        stream = HTTP2Stream.adjust_window_size(stream, old_window_size, new_window_size)
         Map.put(streams, id, stream)
       end)
 

@@ -7,7 +7,7 @@ defmodule Ankh.HTTP do
   @type host :: String.t()
 
   @typedoc "HTTP method"
-  @type method :: String.t()
+  @type method :: :CONNECT | :DELETE | :GET | :HEAD | :OPTIONS | :PATCH | :POST | :PUT | :TRACE
 
   @typedoc "HTTP path"
   @type path :: String.t()
@@ -64,8 +64,7 @@ defmodule Ankh.HTTP do
 
   Needs a connection to be established via `connect` beforehand.
   """
-  @spec request(Protocol.t(), Request.t()) ::
-          {:ok, Protocol.t(), Protocol.request_reference()} | {:error, any()}
+  @spec request(Protocol.t(), Request.t()) :: {:ok, Protocol.t(), reference()} | {:error, any()}
   def request(protocol, request) do
     HTTP2.request(protocol, request)
   end
@@ -75,7 +74,7 @@ defmodule Ankh.HTTP do
 
   Needs a connection to be accepted via `accept` beforehand.
   """
-  @spec respond(Protocol.t(), Protocol.request_reference(), Response.t()) ::
+  @spec respond(Protocol.t(), reference(), Response.t()) ::
           {:ok, Protocol.t()} | {:error, any()}
   def respond(protocol, reference, response) do
     HTTP2.respond(protocol, reference, response)

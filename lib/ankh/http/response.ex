@@ -47,10 +47,4 @@ defmodule Ankh.HTTP.Response do
 
   @spec set_path(t(), HTTP.path()) :: t()
   def set_path(response, path), do: %{response | path: path}
-
-  @spec set_headers(t(), [HTTP.header()]) :: t()
-  def set_headers(response, headers), do: %{response | headers: headers}
-
-  @spec set_trailers(t(), [HTTP.header()]) :: t()
-  def set_trailers(response, trailers), do: %{response | trailers: trailers}
 end

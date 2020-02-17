@@ -6,7 +6,6 @@ defmodule Ankh.Protocol do
   alias Ankh.HTTP.{Request, Response}
 
   @type t :: any()
-  @type request_reference :: any()
 
   @doc """
   Creates a new connection
@@ -27,13 +26,12 @@ defmodule Ankh.Protocol do
   @doc """
   Sends a request
   """
-  @callback request(t(), Request.t()) :: {:ok, reference(), t()} | {:error, any()}
+  @callback request(t(), Request.t()) :: {:ok, t(), reference()} | {:error, any()}
 
   @doc """
-  Sends a request
+  Sends a response
   """
-  @callback respond(t(), request_reference(), Response.t()) ::
-              {:ok, reference(), t()} | {:error, any()}
+  @callback respond(t(), reference(), Response.t()) :: {:ok, t(), reference()} | {:error, any()}
 
   @doc """
   Closes the connection

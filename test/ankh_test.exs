@@ -30,13 +30,13 @@ defmodule AnkhTest do
             receive_response(protocol, reference)
 
           {:ok, protocol, responses} ->
-            end_stream =
+            complete =
               Enum.find(responses, fn
-                {_type, ^reference, _data, _end_stream = true} -> true
+                {_type, ^reference, _data, true = _complete} -> true
                 _ -> false
               end)
 
-            unless end_stream do
+            unless complete do
               receive_response(protocol, reference)
             end
 

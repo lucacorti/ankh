@@ -16,7 +16,7 @@ defmodule Ankh.HTTP.Request do
         }
   defstruct host: nil,
             scheme: nil,
-            method: "GET",
+            method: :GET,
             path: "/",
             headers: [],
             trailers: [],
@@ -28,11 +28,11 @@ defmodule Ankh.HTTP.Request do
 
   @spec put_header(t(), HTTP.header_name(), HTTP.header_value()) :: t()
   def put_header(%{headers: headers} = request, header, value),
-    do: %{request | headers: [{header, value} | headers]}
+    do: %{request | headers: [{String.downcase(header), value} | headers]}
 
   @spec put_trailer(t(), HTTP.header_name(), HTTP.header_value()) :: t()
   def put_trailer(%{trailers: trailers} = request, trailer, value),
-    do: %{request | trailers: [{trailer, value} | trailers]}
+    do: %{request | trailers: [{String.downcase(trailer), value} | trailers]}
 
   @spec put_option(t(), atom, any()) :: t()
   def put_option(%{options: options} = request, option, value),
@@ -52,10 +52,4 @@ defmodule Ankh.HTTP.Request do
 
   @spec set_path(t(), HTTP.path()) :: t()
   def set_path(request, path), do: %{request | path: path}
-
-  @spec set_headers(t(), [HTTP.header()]) :: t()
-  def set_headers(request, headers), do: %{request | headers: headers}
-
-  @spec set_trailers(t(), [HTTP.header()]) :: t()
-  def set_trailers(request, trailers), do: %{request | trailers: trailers}
 end
