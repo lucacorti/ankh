@@ -268,10 +268,12 @@ defmodule Ankh.HTTP2 do
          %Headers{payload: %{hbf: headers} = payload} = frame
        )
        when is_list(headers) do
-    do_send_frame(protocol, %{
-      frame
-      | payload: %{payload | hbf: HPack.encode(headers, send_hpack)}
-    })
+    case HPack.encode(headers, send_hpack) do
+      {:ok, hbf} ->
+        do_send_frame(protocol, %{frame | payload: %{payload | hbf: hbf}})
+      _ ->
+        {:error, :compression_error}
+    end
   end
 
   defp send_frame(%{window_size: window_size} = protocol, %Data{payload: %{data: data}} = frame) do
@@ -520,19 +522,11 @@ defmodule Ankh.HTTP2 do
   defp recv_headers(_protocol, [<<>>]), do: {:ok, []}
 
   defp recv_headers(%{recv_hpack: recv_hpack}, hbf) do
-    headers =
-      hbf
-      |> Enum.join()
-      |> HPack.decode(recv_hpack)
-
-    if Enum.any?(headers, fn
-         :none -> true
-         {":path", ""} -> true
-         _ -> false
-       end) do
+    case  HPack.decode(Enum.join(hbf), recv_hpack) do
+      {:ok, headers} ->
+        {:ok, headers}
+      _ ->
       {:error, :compression_error}
-    else
-      {:ok, headers}
     end
   rescue
     _ ->
