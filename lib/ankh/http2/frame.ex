@@ -47,6 +47,7 @@ defmodule Ankh.HTTP2.Frame do
         """
         @type t :: %__MODULE__{
                 length: integer,
+                type: integer,
                 stream_id: integer,
                 flags: Encodable.t() | nil,
                 payload: Encodable.t() | nil

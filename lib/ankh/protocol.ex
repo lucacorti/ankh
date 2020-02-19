@@ -31,7 +31,7 @@ defmodule Ankh.Protocol do
   @doc """
   Sends a response
   """
-  @callback respond(t(), reference(), Response.t()) :: {:ok, t(), reference()} | {:error, any()}
+  @callback respond(t(), reference(), Response.t()) :: {:ok, t()} | {:error, any()}
 
   @doc """
   Closes the connection

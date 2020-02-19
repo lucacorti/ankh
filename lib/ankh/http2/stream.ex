@@ -7,7 +7,7 @@ defmodule Ankh.HTTP2.Stream do
 
   require Logger
 
-  alias Ankh.HTTP2.Frame
+  alias Ankh.HTTP2.{Error, Frame}
 
   # credo:disable-for-next-line Credo.Check.Readability.AliasOrder
   alias Frame.{
@@ -49,7 +49,7 @@ defmodule Ankh.HTTP2.Stream do
 
   @type data_type :: :headers | :data | :push_promise
 
-  @type data :: {data_type, iodata(), end_stream} | {:error, any()}
+  @type data :: {data_type, reference, iodata(), end_stream} | {:error, reference, Error.t(), end_stream}
 
   defguard is_local_stream(last_local_stream_id, stream_id)
            when rem(last_local_stream_id, 2) == rem(stream_id, 2)
@@ -101,17 +101,21 @@ defmodule Ankh.HTTP2.Stream do
   Process a received frame for the stream
   """
   @spec recv(t(), Frame.t()) :: {:ok, t(), data} | {:error, any()}
-  def recv(%{id: id, state: state} = stream, frame) do
-    case recv_frame(stream, frame) do
-      {:ok, %{state: new_state, recv_hbf_type: recv_hbf_type} = stream, data} ->
+  def recv(%{id: id, reference: reference, state: state} = stream, frame) do
+    case recv_frame(%{state: new_state, recv_hbf_type: recv_hbf_type} = stream, frame) do
+      {:ok, stream} ->
         Logger.debug(fn ->
           "STREAM #{id} #{inspect(state)} -> #{inspect(new_state)} hbf: #{inspect(recv_hbf_type)}"
         end)
 
-        {:ok, stream, data}
+        {:ok, stream}
 
-      {:ok, stream} ->
-        {:ok, stream, nil}
+      {:ok, %{state: new_state, recv_hbf_type: recv_hbf_type} = stream, {type, data, end_stream}} ->
+        Logger.debug(fn ->
+          "STREAM #{id} #{inspect(state)} -> #{inspect(new_state)} hbf: #{inspect(recv_hbf_type)}"
+        end)
+
+        {:ok, stream, {type, reference, data, end_stream}}
 
       {:error, reason} = error ->
         Logger.error(fn ->
@@ -211,7 +215,7 @@ defmodule Ankh.HTTP2.Stream do
   defp recv_frame(%{state: :reserved_local} = stream, %RstStream{
          payload: %RstStream.Payload{error_code: reason}
        }) do
-    {:ok, %{stream | state: :closed}, {:error, reason}}
+    {:ok, %{stream | state: :closed}, {:error, reason, true}}
   end
 
   defp recv_frame(
@@ -249,7 +253,7 @@ defmodule Ankh.HTTP2.Stream do
   defp recv_frame(%{state: :reserved_remote} = stream, %RstStream{
          payload: %RstStream.Payload{error_code: reason}
        }) do
-    {:ok, %{stream | state: :closed}, {:error, reason}}
+    {:ok, %{stream | state: :closed}, {:error, reason, true}}
   end
 
   # OPEN
@@ -397,7 +401,7 @@ defmodule Ankh.HTTP2.Stream do
   defp recv_frame(%{state: :open} = stream, %RstStream{
          payload: %RstStream.Payload{error_code: reason}
        }) do
-    {:ok, %{stream | state: :closed}, {:error, reason}}
+    {:ok, %{stream | state: :closed}, {:error, reason, true}}
   end
 
   defp recv_frame(%{state: :open, recv_hbf_type: recv_hbf_type}, _)
@@ -476,7 +480,7 @@ defmodule Ankh.HTTP2.Stream do
   defp recv_frame(%{state: :half_closed_local} = stream, %RstStream{
          payload: %RstStream.Payload{error_code: reason}
        }) do
-    {:ok, %{stream | state: :closed}, {:error, reason}}
+    {:ok, %{stream | state: :closed}, {:error, reason, true}}
   end
 
   defp recv_frame(%{state: :half_closed_local} = stream, _), do: {:ok, stream}
@@ -488,7 +492,7 @@ defmodule Ankh.HTTP2.Stream do
   defp recv_frame(%{state: :half_closed_remote} = stream, %RstStream{
          payload: %RstStream.Payload{error_code: reason}
        }) do
-    {:ok, %{stream | state: :closed}, {:error, reason}}
+    {:ok, %{stream | state: :closed}, {:error, reason, true}}
   end
 
   defp recv_frame(
@@ -515,7 +519,7 @@ defmodule Ankh.HTTP2.Stream do
   defp recv_frame(%{state: :closed} = stream, %RstStream{
          payload: %RstStream.Payload{error_code: reason}
        }) do
-    {:ok, stream, {:error, reason}}
+    {:ok, stream, {:error, reason, true}}
   end
 
   defp recv_frame(%{id: id, state: :closed, window_size: window_size} = stream, %WindowUpdate{
