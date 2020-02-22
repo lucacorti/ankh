@@ -28,9 +28,15 @@ defmodule Ankh.HTTP2 do
 
   @behaviour Protocol
 
+  @initial_header_table_size 4_096
+  @initial_concurrent_streams 128
+  @initial_frame_size 16_384
   @initial_window_size 65_535
+
   @max_window_size 2_147_483_647
   @max_stream_id 2_147_483_647
+  @max_frame_size 16_777_215
+
   @preface "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
 
   @tls_options versions: [:"tlsv1.2"],
@@ -38,11 +44,11 @@ defmodule Ankh.HTTP2 do
                alpn_advertised_protocols: ["h2"]
 
   @default_settings [
-    header_table_size: 4_096,
+    header_table_size: @initial_header_table_size,
     enable_push: true,
-    max_concurrent_streams: 128,
+    max_concurrent_streams: @initial_concurrent_streams,
     initial_window_size: @initial_window_size,
-    max_frame_size: 16_384,
+    max_frame_size: @initial_frame_size,
     max_header_list_size: 128
   ]
 
@@ -160,7 +166,9 @@ defmodule Ankh.HTTP2 do
   end
 
   defp process_buffer(%{buffer: buffer, recv_settings: recv_settings} = protocol) do
-    max_frame_size = Keyword.get(recv_settings, :max_frame_size)
+    max_frame_size = recv_settings
+      |> Keyword.get(:max_frame_size)
+      |> min(@max_frame_size)
 
     buffer
     |> Frame.stream()
@@ -196,11 +204,6 @@ defmodule Ankh.HTTP2 do
 
   defp get_stream(%{references: references} = protocol, reference) when is_reference(reference) do
     get_stream(protocol, Map.get(references, reference))
-  end
-
-  defp get_stream(%{last_stream_id: last_stream_id}, id)
-       when (not is_nil(id) and id >= @max_stream_id) or last_stream_id >= @max_stream_id do
-    {:error, :stream_limit_reached}
   end
 
   defp get_stream(%{last_local_stream_id: last_local_stream_id} = protocol, nil = _id) do
