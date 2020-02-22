@@ -49,7 +49,9 @@ defmodule Ankh.HTTP2.Stream do
 
   @type data_type :: :headers | :data | :push_promise
 
-  @type data :: {data_type, reference, iodata(), end_stream} | {:error, reference, Error.t(), end_stream}
+  @type data ::
+          {data_type, reference, iodata(), end_stream}
+          | {:error, reference, Error.t(), end_stream}
 
   defguard is_local_stream(last_local_stream_id, stream_id)
            when rem(last_local_stream_id, 2) == rem(stream_id, 2)
@@ -100,7 +102,7 @@ defmodule Ankh.HTTP2.Stream do
   @doc """
   Process a received frame for the stream
   """
-  @spec recv(t(), Frame.t()) :: {:ok, t(), data} | {:error, any()}
+  @spec recv(t(), Frame.t()) :: {:ok, t(), data | nil} | {:error, any()}
   def recv(%{id: id, reference: reference, state: state} = stream, frame) do
     case recv_frame(%{state: new_state, recv_hbf_type: recv_hbf_type} = stream, frame) do
       {:ok, stream} ->
@@ -108,7 +110,7 @@ defmodule Ankh.HTTP2.Stream do
           "STREAM #{id} #{inspect(state)} -> #{inspect(new_state)} hbf: #{inspect(recv_hbf_type)}"
         end)
 
-        {:ok, stream}
+        {:ok, stream, nil}
 
       {:ok, %{state: new_state, recv_hbf_type: recv_hbf_type} = stream, {type, data, end_stream}} ->
         Logger.debug(fn ->
@@ -134,8 +136,8 @@ defmodule Ankh.HTTP2.Stream do
     {:error, :stream_id_zero}
   end
 
-  defp recv_frame(%{recv_hbf_type: recv_hbf_type}, %{type: type})
-       when not is_nil(recv_hbf_type) and type !== 9,
+  defp recv_frame(%{recv_hbf_type: recv_hbf_type}, %frame{})
+       when not is_nil(recv_hbf_type) and frame !== Continuation,
        do: {:error, :protocol_error}
 
   defp recv_frame(%{id: stream_id}, %{payload: %{stream_dependency: depended_id}})
@@ -680,6 +682,10 @@ defmodule Ankh.HTTP2.Stream do
   end
 
   # CLOSED
+
+  defp send_frame(%{state: :closed} = stream, %RstStream{}) do
+    {:ok, stream}
+  end
 
   defp send_frame(%{state: :closed} = stream, %Priority{}) do
     {:ok, stream}

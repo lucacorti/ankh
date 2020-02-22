@@ -52,7 +52,6 @@ defmodule Ankh.HTTP2 do
             last_local_stream_id: 0,
             last_remote_stream_id: 0,
             open_streams: 0,
-            recv_hbf_type: nil,
             recv_hpack: nil,
             recv_settings: @default_settings,
             references: %{},
@@ -115,7 +114,7 @@ defmodule Ankh.HTTP2 do
   @impl Protocol
   def error(protocol) do
     with {:ok, protocol} <- send_error(protocol, :protocol_error),
-         :ok <- close(protocol), do: {:ok, protocol}
+         do: {:ok, protocol}
   end
 
   @impl Protocol
@@ -152,7 +151,7 @@ defmodule Ankh.HTTP2 do
       response
       |> Response.put_header(":status", status)
 
-      with {:ok, protocol, stream} <- get_stream(protocol, reference),
+    with {:ok, protocol, stream} <- get_stream(protocol, reference),
          {:ok, protocol} <- send_headers(protocol, stream, response),
          {:ok, protocol} <- send_data(protocol, stream, response),
          {:ok, protocol} <- send_trailers(protocol, stream, response) do
@@ -171,28 +170,32 @@ defmodule Ankh.HTTP2 do
 
       {_rest, {length, _type, _id, _data}}, {:ok, protocol, _responses}
       when length > max_frame_size ->
+        {:halt, send_error(protocol, :frame_size_error)}
+
+      {_rest, {_length, _type, id, _data}},
+      {:ok, %{last_local_stream_id: llid, last_remote_stream_id: lrid}, _responses}
+      when not is_local_stream(llid, id) and id < lrid ->
         {:halt, send_error(protocol, :protocol_error)}
 
-      {rest, {_length, type, _id, data}},
-      {:ok, %{recv_hbf_type: recv_hbf_type} = protocol, responses} ->
+      {rest, {_length, type, _id, data}}, {:ok, protocol, responses} ->
         with {:ok, type} <- Frame.Registry.frame_for_type(protocol, type),
              {:ok, frame} <- Frame.decode(struct(type), data),
              :ok <- Logger.debug(fn -> "RECVD #{inspect(frame)} #{inspect(data)}" end),
              {:ok, protocol, responses} <- recv_frame(protocol, frame, responses) do
           {:cont, {:ok, %{protocol | buffer: rest}, responses}}
         else
-          {:error, :not_found} when is_nil(recv_hbf_type) ->
+          {:error, :not_found} ->
             {:cont, {:ok, %{protocol | buffer: rest}, responses}}
 
-          error ->
-            {:halt, error}
+          {:error, reason} ->
+            send_error(protocol, reason)
+            {:halt, {:error, reason}}
         end
     end)
   end
 
   defp get_stream(%{references: references} = protocol, reference) when is_reference(reference) do
-    stream_id = Map.get(references, reference)
-    get_stream(protocol, stream_id)
+    get_stream(protocol, Map.get(references, reference))
   end
 
   defp get_stream(%{last_stream_id: last_stream_id}, id)
@@ -316,7 +319,8 @@ defmodule Ankh.HTTP2 do
                last_stream_id: last_stream_id,
                error_code: reason
              }
-           }) do
+           }),
+         :ok <- close(protocol) do
       {:error, reason}
     end
   end
@@ -328,145 +332,10 @@ defmodule Ankh.HTTP2 do
     })
   end
 
-  defp recv_frame(protocol, %{stream_id: 0} = frame, responses) do
-    case process_connection_frame(frame, protocol) do
-      {:ok, protocol} ->
-        {:ok, protocol, responses}
-
-      {:error, :not_found} ->
-        {:ok, protocol, responses}
-
-      {:error, reason} ->
-        send_error(protocol, reason)
-    end
-  end
-
   defp recv_frame(
-         %{last_local_stream_id: llid} = protocol,
-         %{stream_id: stream_id} = frame,
+         %{send_settings: send_settings} = protocol,
+         %Settings{stream_id: 0, flags: %{ack: false}, payload: %{settings: settings}},
          responses
-       )
-       when is_local_stream(llid, stream_id) do
-    with {:ok, %{streams: streams} = protocol, stream} <- get_stream(protocol, stream_id),
-         {:ok, %{recv_hbf_type: recv_hbf_type} = stream, response} <-
-           HTTP2Stream.recv(stream, frame),
-         {:ok, protocol, response} <- process_stream_response(protocol, frame, response) do
-      {
-        :ok,
-        %{
-          protocol
-          | last_local_stream_id: max(llid, stream_id),
-            recv_hbf_type: recv_hbf_type,
-            streams: Map.put(streams, stream_id, stream)
-        },
-        [response | responses]
-      }
-    else
-      {:ok, _stream} ->
-        {:ok, protocol, responses}
-
-      {:error, :not_found} ->
-        send_error(protocol, :protocol_error)
-
-      {:error, reason} ->
-        send_error(protocol, reason)
-    end
-  end
-
-  defp recv_frame(
-         %{last_remote_stream_id: lrid, streams: streams} = protocol,
-         %type{stream_id: stream_id} = frame,
-         responses
-       ) do
-    is_priority = Priority == type
-
-    with {:ok, protocol, stream} when is_priority or stream_id >= lrid <-
-           get_stream(protocol, stream_id),
-         {:ok, %{recv_hbf_type: recv_hbf_type} = stream, response} <-
-           HTTP2Stream.recv(stream, frame),
-         {:ok, protocol, response} <- process_stream_response(protocol, frame, response) do
-      lrid = if is_priority, do: lrid, else: stream_id
-
-      {
-        :ok,
-        %{
-          protocol
-          | last_remote_stream_id: lrid,
-            recv_hbf_type: recv_hbf_type,
-            streams: Map.put(streams, stream_id, stream)
-        },
-        [response | responses]
-      }
-    else
-      {:ok, _stream} ->
-        {:ok, protocol, responses}
-
-      {:error, :flow_control_error = reason} ->
-        send_stream_error(protocol, stream_id, reason)
-        {:ok, protocol, responses}
-
-      {:error, reason} ->
-        send_error(protocol, reason)
-
-      _stream ->
-        send_error(protocol, :protocol_error)
-    end
-  end
-
-  defp process_stream_response(
-         protocol,
-         %{length: 0},
-         {:data, _ref, _hbf, _end_stream} = response
-       ),
-       do: {:ok, protocol, response}
-
-  defp process_stream_response(
-         protocol,
-         %{lenght: length, stream_id: stream_id},
-         {:data, _ref, _hbf, _end_stream} = response
-       ) do
-    window_update = %WindowUpdate{payload: %WindowUpdate.Payload{increment: length}}
-
-    with {:ok, protocol} <- send_frame(protocol, window_update),
-         {:ok, protocol} <- send_frame(protocol, %{window_update | stream_id: stream_id}) do
-      {:ok, protocol, response}
-    end
-  end
-
-  defp process_stream_response(protocol, _frame, {type, _ref, [<<>>], _end_stream} = response)
-       when type in [:headers, :push_promise],
-       do: {:ok, protocol, response}
-
-  defp process_stream_response(
-         %{recv_hpack: recv_hpack} = protocol,
-         _frame,
-         {type, ref, hbf, end_stream}
-       )
-       when type in [:headers, :push_promise] do
-    headers =
-      hbf
-      |> Enum.join()
-      |> HPack.decode(recv_hpack)
-
-    if Enum.any?(headers, fn
-         :none -> true
-         {":path", ""} -> true
-         _ -> false
-       end) do
-      {:error, :compression_error}
-    else
-      {:ok, protocol, {type, ref, headers, end_stream}}
-    end
-  rescue
-    _ ->
-      {:error, :compression_error}
-  end
-
-  defp process_stream_response(protocol, _frame, response), do: {:ok, protocol, response}
-
-  defp process_connection_frame(
-         %Settings{flags: %{ack: false}, payload: %{settings: settings}},
-         %{send_settings: send_settings} = protocol
        ) do
     new_send_settings = Keyword.merge(send_settings, settings)
 
@@ -482,69 +351,177 @@ defmodule Ankh.HTTP2 do
            adjust_header_table_size(protocol, old_header_table_size, new_header_table_size),
          {:ok, protocol} <- adjust_window_size(protocol, old_window_size, new_window_size),
          {:ok, protocol} <- adjust_streams_window_size(protocol, old_window_size, new_window_size) do
-      {:ok, %{protocol | send_settings: new_send_settings}}
+      {:ok, %{protocol | send_settings: new_send_settings}, responses}
     else
       _ ->
         {:error, :compression_error}
     end
   end
 
-  defp process_connection_frame(%Settings{length: 0, flags: %{ack: true}}, protocol) do
-    {:ok, protocol}
+  defp recv_frame(protocol, %Settings{stream_id: 0, length: 0, flags: %{ack: true}}, responses) do
+    {:ok, protocol, responses}
   end
 
-  defp process_connection_frame(%Settings{flags: %{ack: true}}, _protocol) do
+  defp recv_frame(_protocol, %Settings{stream_id: 0, flags: %{ack: true}}, _responses) do
     {:error, :frame_size_error}
   end
 
-  defp process_connection_frame(%Ping{length: 8, flags: %{ack: true}}, protocol) do
-    {:ok, protocol}
+  defp recv_frame(protocol, %Ping{stream_id: 0, length: 8, flags: %{ack: true}}, responses) do
+    {:ok, protocol, responses}
   end
 
-  defp process_connection_frame(%Ping{length: length}, _protocol) when length != 8 do
+  defp recv_frame(_protocol, %Ping{stream_id: 0, length: length}, _responses) when length != 8 do
     {:error, :frame_size_error}
   end
 
-  defp process_connection_frame(%Ping{flags: %{ack: false} = flags} = frame, protocol) do
-    send_frame(protocol, %Ping{frame | flags: %{flags | ack: true}})
+  defp recv_frame(protocol, %Ping{stream_id: 0, flags: %{ack: false} = flags} = frame, responses) do
+    with {:ok, protocol} <- send_frame(protocol, %Ping{frame | flags: %{flags | ack: true}}) do
+      {:ok, protocol, responses}
+    end
   end
 
-  defp process_connection_frame(%WindowUpdate{length: length}, _protocol) when length != 4 do
+  defp recv_frame(_protocol, %WindowUpdate{stream_id: 0, length: length}, _responses)
+       when length != 4 do
     {:error, :frame_size_error}
   end
 
-  defp process_connection_frame(
-         %WindowUpdate{payload: %{increment: 0}},
-         _protocol
-       ) do
-    {:error, :protocol_error}
+  defp recv_frame(protocol, %WindowUpdate{stream_id: 0, payload: %{increment: 0}}, _responses) do
+    send_error(protocol, :protocol_error)
   end
 
-  defp process_connection_frame(
-         %WindowUpdate{payload: %{increment: increment}},
-         %{window_size: window_size} = protocol
+  defp recv_frame(
+         %{window_size: window_size} = _protocol,
+         %WindowUpdate{stream_id: 0, payload: %{increment: increment}},
+         _responses
        )
        when window_size + increment > @max_window_size do
-    send_error(protocol, :flow_control_error)
+    {:error, :flow_control_error}
   end
 
-  defp process_connection_frame(
-         %WindowUpdate{payload: %{increment: increment}},
-         %{window_size: window_size} = protocol
+  defp recv_frame(
+         %{window_size: window_size} = protocol,
+         %WindowUpdate{stream_id: 0, payload: %{increment: increment}},
+         responses
        ) do
     new_window_size = window_size + increment
     Logger.debug(fn -> "window_size: #{window_size} + #{increment} = #{new_window_size}" end)
-    {:ok, %{protocol | window_size: new_window_size}}
+    {:ok, %{protocol | window_size: new_window_size}, responses}
   end
 
-  defp process_connection_frame(%GoAway{payload: %{error_code: reason}}, protocol) do
-    Logger.error(fn -> "Received connection error #{inspect(reason)}, closing" end)
-    with :ok <- close(protocol), do: {:ok, protocol}
+  defp recv_frame(_protocol, %GoAway{stream_id: 0, payload: %{error_code: reason}}, _responses) do
+    {:error, reason}
   end
 
-  defp process_connection_frame(_frame, _protocol) do
+  defp recv_frame(%{stream_id: 0} = _frame, _protocol, _responses) do
     {:error, :protocol_error}
   end
+
+  defp recv_frame(protocol, %{stream_id: stream_id} = frame, responses) do
+    with {:ok, protocol, stream} <-
+           get_stream(protocol, stream_id),
+         {:ok, stream, response} <-
+           HTTP2Stream.recv(stream, frame),
+         {:ok, protocol} <- calculate_last_stream_ids(protocol, frame),
+         {:ok, %{streams: streams} = protocol, responses} <-
+           process_stream_response(protocol, frame, responses, response) do
+      {
+        :ok,
+        %{protocol | streams: Map.put(streams, stream_id, stream)},
+        responses
+      }
+    else
+      {:error, reason}
+      when reason in [:protocol_error, :compression_error, :stream_closed] ->
+        {:error, reason}
+
+      {:error, reason} ->
+        send_stream_error(protocol, stream_id, reason)
+        {:ok, protocol, responses}
+    end
+  end
+
+  defp calculate_last_stream_ids(
+         %{last_stream_id: lsid, last_local_stream_id: llid} = protocol,
+         %{stream_id: stream_id} = _frame
+       )
+       when is_local_stream(llid, stream_id) do
+    llid = max(llid, stream_id)
+    {:ok, %{protocol | last_local_stream_id: llid, last_stream_id: max(llid, lsid)}}
+  end
+
+  defp calculate_last_stream_ids(protocol, %Priority{} = _frame) do
+    {:ok, protocol}
+  end
+
+  defp calculate_last_stream_ids(
+         %{last_stream_id: lsid, last_remote_stream_id: lrid} = protocol,
+         %{stream_id: stream_id} = _frame
+       ) do
+    lrid = max(lrid, stream_id)
+    {:ok, %{protocol | last_remote_stream_id: lrid, last_stream_id: max(lrid, lsid)}}
+  end
+
+  defp process_stream_response(
+         protocol,
+         %{length: 0},
+         responses,
+         {:data, _ref, _hbf, _end_stream} = response
+       ),
+       do: {:ok, protocol, [response | responses]}
+
+  defp process_stream_response(
+         protocol,
+         %{lenght: length, stream_id: stream_id},
+         responses,
+         {:data, _ref, _hbf, _end_stream} = response
+       ) do
+    window_update = %WindowUpdate{payload: %WindowUpdate.Payload{increment: length}}
+
+    with {:ok, protocol} <- send_frame(protocol, window_update),
+         {:ok, protocol} <- send_frame(protocol, %{window_update | stream_id: stream_id}) do
+      {:ok, protocol, [response | responses]}
+    end
+  end
+
+  defp process_stream_response(
+         protocol,
+         _frame,
+         responses,
+         {type, _ref, [<<>>], _end_stream} = response
+       )
+       when type in [:headers, :push_promise],
+       do: {:ok, protocol, [response | responses]}
+
+  defp process_stream_response(
+         %{recv_hpack: recv_hpack} = protocol,
+         _frame,
+         responses,
+         {type, ref, hbf, end_stream}
+       )
+       when type in [:headers, :push_promise] do
+    headers =
+      hbf
+      |> Enum.join()
+      |> HPack.decode(recv_hpack)
+
+    if Enum.any?(headers, fn
+         :none -> true
+         {":path", ""} -> true
+         _ -> false
+       end) do
+      {:error, :compression_error}
+    else
+      {:ok, protocol, [{type, ref, headers, end_stream} | responses]}
+    end
+  rescue
+    _ ->
+      {:error, :compression_error}
+  end
+
+  defp process_stream_response(protocol, _frame, responses, nil), do: {:ok, protocol, responses}
+
+  defp process_stream_response(protocol, _frame, responses, response),
+    do: {:ok, protocol, [response | responses]}
 
   defp send_headers(protocol, %{id: stream_id}, %{
          headers: headers,

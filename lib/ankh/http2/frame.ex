@@ -111,20 +111,22 @@ defmodule Ankh.HTTP2.Frame do
   end
 
   def encode(%{type: type, flags: nil, stream_id: id, payload: payload}, options) do
-    with {:ok, payload} <- Encodable.encode(payload, options),
-         length <- IO.iodata_length(payload),
-         do: {:ok, length, type, [<<length::24, type::8, 0::8, 0::1, id::31>> | payload]}
+    with {:ok, payload} <- Encodable.encode(payload, options) do
+      length = IO.iodata_length(payload)
+      {:ok, length, type, [<<length::24, type::8, 0::8, 0::1, id::31>> | payload]}
+    end
   end
 
   def encode(%{type: type, stream_id: id, flags: flags, payload: payload}, options) do
     payload_options = Keyword.put(options, :flags, flags)
 
     with {:ok, payload} <- Encodable.encode(payload, payload_options),
-         length <- IO.iodata_length(payload),
-         {:ok, flags} <- Encodable.encode(flags, options),
-         do:
-           {:ok, length, type,
-            [<<length::24, type::8, flags::binary-size(1), 0::1, id::31>> | payload]}
+         {:ok, flags} <- Encodable.encode(flags, options) do
+      length = IO.iodata_length(payload)
+
+      {:ok, length, type,
+       [<<length::24, type::8, flags::binary-size(1), 0::1, id::31>> | payload]}
+    end
   end
 
   @doc """
