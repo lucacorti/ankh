@@ -8,20 +8,30 @@ defmodule Ankh.Protocol do
   @type t :: any()
 
   @doc """
-  Creates a new connection
-  """
-  @callback new(keyword) :: t()
-
-  @doc """
   Accepts a client connection
   """
   @callback accept(t(), URI.t(), Transport.t(), Transport.options()) ::
               {:ok, t()} | {:error, any()}
 
   @doc """
+  Closes the connection
+  """
+  @callback close(t()) :: :ok | {:error, any()}
+
+  @doc """
   Connects to an host
   """
   @callback connect(t(), URI.t(), Transport.options()) :: {:ok, t()} | {:error, any()}
+
+  @doc """
+  Reports a connection error
+  """
+  @callback error(t()) :: {:ok, t()}
+
+  @doc """
+  Creates a new connection
+  """
+  @callback new(keyword) :: t()
 
   @doc """
   Sends a request
@@ -32,11 +42,6 @@ defmodule Ankh.Protocol do
   Sends a response
   """
   @callback respond(t(), reference(), Response.t()) :: {:ok, t()} | {:error, any()}
-
-  @doc """
-  Closes the connection
-  """
-  @callback close(t()) :: :ok | {:error, any()}
 
   @doc """
   Handles transport messages

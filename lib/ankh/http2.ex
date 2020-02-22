@@ -113,6 +113,12 @@ defmodule Ankh.HTTP2 do
   end
 
   @impl Protocol
+  def error(protocol) do
+    with {:ok, protocol} <- send_error(protocol, :protocol_error),
+         :ok <- close(protocol), do: {:ok, protocol}
+  end
+
+  @impl Protocol
   def stream(%{buffer: buffer, transport: transport} = protocol, msg) do
     with {:ok, data} <- transport.handle_msg(msg),
          {:ok, protocol, responses} <- process_buffer(%{protocol | buffer: buffer <> data}) do
@@ -369,10 +375,10 @@ defmodule Ankh.HTTP2 do
 
   defp recv_frame(
          %{last_remote_stream_id: lrid, streams: streams} = protocol,
-         %{stream_id: stream_id} = frame,
+         %type{stream_id: stream_id} = frame,
          responses
        ) do
-    is_priority = Priority.type() == frame.type()
+    is_priority = Priority == type
 
     with {:ok, protocol, stream} when is_priority or stream_id >= lrid <-
            get_stream(protocol, stream_id),

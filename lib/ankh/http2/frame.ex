@@ -61,8 +61,6 @@ defmodule Ankh.HTTP2.Frame do
                   stream_id: 0,
                   flags: flags,
                   payload: payload
-
-        def type, do: unquote(type)
       end
     else
       :error ->
