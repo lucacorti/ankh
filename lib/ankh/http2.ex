@@ -58,6 +58,7 @@ defmodule Ankh.HTTP2 do
             last_local_stream_id: 0,
             last_remote_stream_id: 0,
             open_streams: 0,
+            recv_hbf_type: nil,
             recv_hpack: nil,
             recv_settings: @default_settings,
             references: %{},
@@ -185,13 +186,16 @@ defmodule Ankh.HTTP2 do
       when not is_local_stream(llid, id) and id < lrid ->
         {:halt, send_error(protocol, :protocol_error)}
 
-      {rest, {_length, type, _id, data}}, {:ok, protocol, responses} ->
+      {rest, {_length, type, _id, data}}, {:ok, %{recv_hbf_type: recv_hbf_type} = protocol, responses} ->
         with {:ok, type} <- Frame.Registry.frame_for_type(protocol, type),
              {:ok, frame} <- Frame.decode(struct(type), data),
              :ok <- Logger.debug(fn -> "RECVD #{inspect(frame)} #{inspect(data)}" end),
              {:ok, protocol, responses} <- recv_frame(protocol, frame, responses) do
           {:cont, {:ok, %{protocol | buffer: rest}, responses}}
         else
+          {:error, :not_found} when not is_nil(recv_hbf_type) ->
+            {:halt, {:error, :protocol_error}}
+
           {:error, :not_found} ->
             {:cont, {:ok, %{protocol | buffer: rest}, responses}}
 
@@ -422,14 +426,14 @@ defmodule Ankh.HTTP2 do
   defp recv_frame(protocol, %{stream_id: stream_id} = frame, responses) do
     with {:ok, protocol, stream} <-
            get_stream(protocol, stream_id),
-         {:ok, stream, response} <-
+         {:ok, %{recv_hbf_type: recv_hbf_type} = stream, response} <-
            HTTP2Stream.recv(stream, frame),
          {:ok, protocol} <- calculate_last_stream_ids(protocol, frame),
          {:ok, %{streams: streams} = protocol, responses} <-
            process_stream_response(protocol, frame, responses, response) do
       {
         :ok,
-        %{protocol | streams: Map.put(streams, stream_id, stream)},
+        %{protocol | recv_hbf_type: recv_hbf_type, streams: Map.put(streams, stream_id, stream)},
         responses
       }
     else
