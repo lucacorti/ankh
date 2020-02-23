@@ -102,29 +102,30 @@ defmodule Ankh.HTTP2.Frame do
     - struct: struct using `Ankh.HTTP2.Frame`
     - options: options to pass as context to the encoding function
   """
-  @spec encode(t, options) :: {:ok, length, type, data} | {:error, any()}
+  @spec encode(t(), options) :: {:ok, t(), data} | {:error, any()}
   def encode(frame, options \\ [])
 
-  def encode(%{type: type, flags: flags, stream_id: id, payload: nil}, options) do
-    with {:ok, flags} <- Encodable.encode(flags, options),
-         do: {:ok, 0, type, [<<0::24, type::8, flags::binary-size(1), 0::1, id::31>>]}
-  end
-
-  def encode(%{type: type, flags: nil, stream_id: id, payload: payload}, options) do
-    with {:ok, payload} <- Encodable.encode(payload, options) do
-      length = IO.iodata_length(payload)
-      {:ok, length, type, [<<length::24, type::8, 0::8, 0::1, id::31>> | payload]}
+  def encode(%{type: type, flags: flags, stream_id: id, payload: nil} = frame, options) do
+    with {:ok, flags} <- Encodable.encode(flags, options) do
+      {:ok, frame, [<<0::24, type::8, flags::binary-size(1), 0::1, id::31>>]}
     end
   end
 
-  def encode(%{type: type, stream_id: id, flags: flags, payload: payload}, options) do
+  def encode(%{type: type, flags: nil, stream_id: id, payload: payload} = frame, options) do
+    with {:ok, payload} <- Encodable.encode(payload, options) do
+      length = IO.iodata_length(payload)
+      {:ok, %{frame | length: length}, [<<length::24, type::8, 0::8, 0::1, id::31>> | payload]}
+    end
+  end
+
+  def encode(%{type: type, stream_id: id, flags: flags, payload: payload} = frame, options) do
     payload_options = Keyword.put(options, :flags, flags)
 
     with {:ok, payload} <- Encodable.encode(payload, payload_options),
          {:ok, flags} <- Encodable.encode(flags, options) do
       length = IO.iodata_length(payload)
 
-      {:ok, length, type,
+      {:ok, %{frame | length: length},
        [<<length::24, type::8, flags::binary-size(1), 0::1, id::31>> | payload]}
     end
   end

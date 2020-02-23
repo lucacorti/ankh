@@ -277,9 +277,9 @@ defmodule Ankh.HTTP2 do
   defp send_frame(protocol, frame), do: do_send_frame(protocol, frame)
 
   defp do_send_frame(%{socket: socket, transport: transport} = protocol, %{stream_id: 0} = frame) do
-    with {:ok, length, _type, data} <- Frame.encode(frame),
+    with {:ok, frame, data} <- Frame.encode(frame),
          :ok <- transport.send(socket, data) do
-      Logger.debug(fn -> "SENT #{inspect(%{frame | length: length})} #{inspect(data)}" end)
+      Logger.debug(fn -> "SENT #{inspect(frame)} #{inspect(data)}" end)
       {:ok, protocol}
     end
   end
@@ -294,11 +294,11 @@ defmodule Ankh.HTTP2 do
     frame
     |> Splittable.split(max_frame_size)
     |> Enum.reduce_while({:ok, protocol}, fn frame, {:ok, protocol} ->
-      with {:ok, length, _type, data} <- Frame.encode(frame),
+      with {:ok, frame, data} <- Frame.encode(frame),
            {:ok, protocol, stream} <- get_stream(protocol, stream_id),
-           {:ok, stream} <- HTTP2Stream.send(stream, %{frame | length: length}),
+           {:ok, stream} <- HTTP2Stream.send(stream, frame),
            :ok <- transport.send(socket, data) do
-        Logger.debug(fn -> "SENT #{inspect(%{frame | length: length})} #{inspect(data)}" end)
+        Logger.debug(fn -> "SENT #{inspect(frame)} #{inspect(data)}" end)
 
         {:cont, {:ok, %{protocol | streams: Map.put(streams, stream_id, stream)}}}
       else
