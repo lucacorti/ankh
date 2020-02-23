@@ -289,7 +289,7 @@ defmodule Ankh.HTTP2 do
            protocol,
          %{stream_id: stream_id} = frame
        ) do
-    max_frame_size = Keyword.get(send_settings, :max_frame_size)
+    max_frame_size = min(Keyword.get(send_settings, :max_frame_size), @max_frame_size)
 
     frame
     |> Splittable.split(max_frame_size)
