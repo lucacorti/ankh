@@ -604,6 +604,12 @@ defmodule Ankh.HTTP2.Stream do
     {:ok, stream}
   end
 
+  # CLOSED
+
+  defp send_frame(%{state: :closed}, _frame) do
+    {:error, :stream_closed}
+  end
+
   # Otherwise this is a PROTOCOL_ERROR
 
   defp send_frame(%{}, _), do: {:error, :protocol_error}
