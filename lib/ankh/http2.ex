@@ -167,7 +167,8 @@ defmodule Ankh.HTTP2 do
   end
 
   defp process_buffer(%{buffer: buffer, recv_settings: recv_settings} = protocol) do
-    max_frame_size = recv_settings
+    max_frame_size =
+      recv_settings
       |> Keyword.get(:max_frame_size)
       |> min(@max_frame_size)
 
@@ -186,7 +187,8 @@ defmodule Ankh.HTTP2 do
       when not is_local_stream(llid, id) and id < lrid ->
         {:halt, send_error(protocol, :protocol_error)}
 
-      {rest, {_length, type, _id, data}}, {:ok, %{recv_hbf_type: recv_hbf_type} = protocol, responses} ->
+      {rest, {_length, type, _id, data}},
+      {:ok, %{recv_hbf_type: recv_hbf_type} = protocol, responses} ->
         with {:ok, type} <- Frame.Registry.frame_for_type(protocol, type),
              {:ok, frame} <- Frame.decode(struct(type), data),
              :ok <- Logger.debug(fn -> "RECVD #{inspect(frame)} #{inspect(data)}" end),
