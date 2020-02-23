@@ -146,7 +146,7 @@ defmodule Ankh.HTTP2.Stream do
   # Only CONTINUATION during headers
 
   defp recv_frame(%{recv_hbf_type: recv_hbf_type}, %type{})
-       when not is_nil(recv_hbf_type) and type !== Continuation,
+       when not is_nil(recv_hbf_type) and type != Continuation,
        do: {:error, :protocol_error}
 
   # WINDOW_UPDATE
