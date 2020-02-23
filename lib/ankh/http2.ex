@@ -34,7 +34,6 @@ defmodule Ankh.HTTP2 do
   @initial_window_size 65_535
 
   @max_window_size 2_147_483_647
-  # @max_stream_id 2_147_483_647
   @max_frame_size 16_777_215
 
   @preface "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
@@ -57,7 +56,6 @@ defmodule Ankh.HTTP2 do
             last_stream_id: 0,
             last_local_stream_id: 0,
             last_remote_stream_id: 0,
-            open_streams: 0,
             recv_hbf_type: nil,
             recv_hpack: nil,
             recv_settings: @default_settings,
