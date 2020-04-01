@@ -508,18 +508,15 @@ defmodule Ankh.HTTP2 do
          {type, ref, hbf, end_stream}
        )
        when type in [:headers, :push_promise] do
-    headers =
-      hbf
-      |> Enum.join()
-      |> HPack.decode(recv_hpack)
-      |> case do
-        {:ok, headers} ->
-          {:ok, headers}
-        _ ->
-          {:error, :compression_error}
-      end
-
-    {:ok, protocol, [{type, ref, headers, end_stream} | responses]}
+    hbf
+    |> Enum.join()
+    |> HPack.decode(recv_hpack)
+    |> case do
+      {:ok, headers} ->
+        {:ok, protocol, [{type, ref, headers, end_stream} | responses]}
+      _ ->
+        {:error, :compression_error}
+    end
   end
 
   defp process_stream_response(protocol, _frame, responses, nil), do: {:ok, protocol, responses}
