@@ -95,4 +95,12 @@ defmodule Ankh.HTTP do
   def close(protocol) do
     HTTP2.close(protocol)
   end
+
+  @doc """
+  Reports a connection error
+  """
+  @spec error(Protocol.t()) :: :ok | {:error, any()}
+  def error(protocol) do
+    HTTP2.error(protocol)
+  end
 end
