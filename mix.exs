@@ -35,7 +35,7 @@ defmodule Ankh.Mixfile do
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:dialyxir, "~> 1.0.0", only: [:dev], runtime: false},
       {:credo, "~> 1.3.1", only: [:dev], runtime: false},
-      {:hpack, "~> 1.1.0"},
+      {:hpack, "~> 2.0.0"},
       {:castore, "~> 0.1.0"}
     ]
   end
