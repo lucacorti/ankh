@@ -262,10 +262,12 @@ defmodule Ankh.HTTP2 do
          %Headers{payload: %{hbf: headers} = payload} = frame
        )
        when is_list(headers) do
-    do_send_frame(protocol, %{
-      frame
-      | payload: %{payload | hbf: HPack.encode(headers, send_hpack)}
-    })
+    case HPack.encode(headers, send_hpack) do
+      {:ok, hbf} ->
+        do_send_frame(protocol, %{frame | payload: %{payload | hbf: hbf}})
+      _ ->
+        {:error, :compression_error}
+    end
   end
 
   defp send_frame(%{window_size: window_size} = protocol, %Data{payload: %{data: data}} = frame) do
@@ -506,23 +508,15 @@ defmodule Ankh.HTTP2 do
          {type, ref, hbf, end_stream}
        )
        when type in [:headers, :push_promise] do
-    headers =
-      hbf
-      |> Enum.join()
-      |> HPack.decode(recv_hpack)
-
-    if Enum.any?(headers, fn
-         :none -> true
-         {":path", ""} -> true
-         _ -> false
-       end) do
-      {:error, :compression_error}
-    else
-      {:ok, protocol, [{type, ref, headers, end_stream} | responses]}
+    hbf
+    |> Enum.join()
+    |> HPack.decode(recv_hpack)
+    |> case do
+      {:ok, headers} ->
+        {:ok, protocol, [{type, ref, headers, end_stream} | responses]}
+      _ ->
+        {:error, :compression_error}
     end
-  rescue
-    _ ->
-      {:error, :compression_error}
   end
 
   defp process_stream_response(protocol, _frame, responses, nil), do: {:ok, protocol, responses}
