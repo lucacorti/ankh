@@ -7,44 +7,50 @@ defmodule Ankh.HTTP.Response do
 
   @type t() :: %__MODULE__{
           status: HTTP.status(),
-          scheme: HTTP.scheme(),
-          host: HTTP.host(),
           path: HTTP.path(),
-          body: HTTP.body() | nil,
-          headers: list(HTTP.header()),
-          trailers: list(HTTP.header())
+          body: HTTP.body(),
+          headers: HTTP.headers(),
+          trailers: HTTP.headers(),
+          body_fetched: boolean(),
+          complete: boolean()
         }
-  defstruct status: "200",
-            scheme: nil,
-            host: nil,
+  defstruct status: 200,
             path: nil,
-            body: nil,
+            body: [],
             headers: [],
-            trailers: []
+            trailers: [],
+            body_fetched: false,
+            complete: false
 
   @spec new(keyword) :: t()
   def new(attrs \\ []), do: struct(__MODULE__, attrs)
 
   @spec put_header(t(), HTTP.header_name(), HTTP.header_value()) :: t()
-  def put_header(%{headers: headers} = response, header, value),
-    do: %{response | headers: [{String.downcase(header), value} | headers]}
+  def put_header(%{headers: headers} = response, name, value),
+    do: %{response | headers: [{String.downcase(name), value} | headers]}
 
   @spec put_trailer(t(), HTTP.header_name(), HTTP.header_value()) :: t()
-  def put_trailer(%{trailers: trailers} = response, trailer, value),
-    do: %{response | trailers: [{String.downcase(trailer), value} | trailers]}
+  def put_trailer(%{trailers: trailers} = response, name, value),
+    do: %{response | trailers: [{String.downcase(name), value} | trailers]}
 
-  @spec set_status(t(), String.t()) :: t()
+  @spec set_status(t(), HTTP.status()) :: t()
   def set_status(response, status), do: %{response | status: status}
-
-  @spec set_scheme(t(), String.t()) :: t()
-  def set_scheme(response, scheme), do: %{response | scheme: scheme}
-
-  @spec set_host(t(), String.t()) :: t()
-  def set_host(response, host), do: %{response | host: host}
 
   @spec set_body(t(), iodata) :: t()
   def set_body(response, body), do: %{response | body: body}
 
   @spec set_path(t(), HTTP.path()) :: t()
   def set_path(response, path), do: %{response | path: path}
+
+  @spec fetch_body(t()) :: t()
+  def fetch_body(%__MODULE__{body_fetched: false, body: body} = response) do
+    body =
+      body
+      |> Enum.reverse()
+      |> Enum.join()
+
+    %{response | body_fetched: true, body: body}
+  end
+
+  def fetch_body(%__MODULE__{body_fetched: true} = response), do: response
 end

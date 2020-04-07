@@ -11,7 +11,7 @@ defmodule AnkhTest do
     # url = "https://localhost:8000"
     url = "https://www.google.com"
 
-    request = %Request{}
+    request = Request.new()
 
     assert {:ok, protocol} = url |> URI.parse() |> Ankh.HTTP.connect()
     assert {:ok, protocol, reference} = Ankh.HTTP.request(protocol, request)

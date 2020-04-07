@@ -3,7 +3,15 @@ defmodule Ankh.Transport do
   Transport behavior
   """
 
+  @typedoc "Transport socket"
   @type t :: any()
+
+  @typedoc """
+  Transport options
+
+  Valid options are:
+    - `transport_opts`: Transport options for the tcp/ssl erlang modules
+  """
   @type options :: Keyword.t()
 
   @doc """

@@ -4,27 +4,46 @@ defmodule Ankh.HTTP.Request do
   """
   alias Ankh.HTTP
 
+  @typedoc """
+  HTTP request options
+
+  Available options are
+    - `follow_redirects`: If true, when an HTTP redirect is received a new request is made to the redirect URL, else the redirect is returned. Defaults to `true`
+    - `max_redirects`: Maximum number of redirects to follow, defaults to `10`
+    - `request_timeout`: Timeout for the request, defaults to `20_000` milliseconds
+  """
+  @type options :: Keyword.t()
+
+  @typedoc "HTTP Request"
   @type t() :: %__MODULE__{
-          host: HTTP.host(),
-          scheme: HTTP.scheme(),
           method: HTTP.method(),
           path: HTTP.path(),
-          headers: list(HTTP.header()),
-          trailers: list(HTTP.header()),
+          query: HTTP.query(),
+          headers: HTTP.headers(),
+          trailers: HTTP.headers(),
           body: HTTP.body() | nil,
-          options: keyword()
+          options: options()
         }
-  defstruct host: nil,
-            scheme: nil,
-            method: :GET,
+  defstruct method: :GET,
             path: "/",
+            query: "",
             headers: [],
             trailers: [],
-            body: nil,
+            body: [],
             options: []
 
   @spec new(keyword) :: t()
   def new(attrs \\ []), do: struct(__MODULE__, attrs)
+
+  @spec to_uri(t()) :: URI.t()
+  def to_uri(%{path: path, query: query}) do
+    %URI{path: path, query: query}
+  end
+
+  @spec put_uri(t(), URI.t()) :: t()
+  def put_uri(request, %URI{path: path, query: query}) do
+    %{request | path: path || "/", query: query || ""}
+  end
 
   @spec put_header(t(), HTTP.header_name(), HTTP.header_value()) :: t()
   def put_header(%{headers: headers} = request, header, value),
@@ -34,15 +53,9 @@ defmodule Ankh.HTTP.Request do
   def put_trailer(%{trailers: trailers} = request, trailer, value),
     do: %{request | trailers: [{String.downcase(trailer), value} | trailers]}
 
-  @spec put_option(t(), atom, any()) :: t()
-  def put_option(%{options: options} = request, option, value),
-    do: %{request | options: [{option, value} | options]}
-
-  @spec set_scheme(t(), String.t()) :: t()
-  def set_scheme(request, scheme), do: %{request | scheme: scheme}
-
-  @spec set_host(t(), String.t()) :: t()
-  def set_host(request, host), do: %{request | host: host}
+  @spec put_options(t(), options()) :: t()
+  def put_options(%{options: options} = request, new_options),
+    do: %{request | options: Keyword.merge(options, new_options)}
 
   @spec set_body(t(), iodata) :: t()
   def set_body(request, body), do: %{request | body: body}
@@ -52,4 +65,7 @@ defmodule Ankh.HTTP.Request do
 
   @spec set_path(t(), HTTP.path()) :: t()
   def set_path(request, path), do: %{request | path: path}
+
+  @spec set_query(t(), HTTP.path()) :: t()
+  def set_query(request, query), do: %{request | query: query}
 end

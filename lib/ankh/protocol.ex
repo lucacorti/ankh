@@ -1,11 +1,15 @@
 defmodule Ankh.Protocol do
   @moduledoc """
-  Transport behavior
+  Protocol behavior
   """
   alias Ankh.Transport
   alias Ankh.HTTP.{Request, Response}
 
+  @typedoc "Ankh protocol"
   @type t :: any()
+
+  @typedoc "Protocol options"
+  @type options :: Keyword.t()
 
   @doc """
   Accepts a client connection
@@ -31,7 +35,7 @@ defmodule Ankh.Protocol do
   @doc """
   Creates a new connection
   """
-  @callback new(keyword) :: t()
+  @callback new(options()) :: t()
 
   @doc """
   Sends a request

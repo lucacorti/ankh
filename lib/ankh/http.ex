@@ -3,20 +3,17 @@ defmodule Ankh.HTTP do
   Ankh HTTP public API
   """
 
-  @typedoc "HTTP host"
-  @type host :: String.t()
-
   @typedoc "HTTP method"
   @type method :: :CONNECT | :DELETE | :GET | :HEAD | :OPTIONS | :PATCH | :POST | :PUT | :TRACE
 
   @typedoc "HTTP path"
   @type path :: String.t()
 
-  @typedoc "HTTP scheme"
-  @type scheme :: String.t()
+  @typedoc "HTTP query"
+  @type query :: String.t()
 
   @typedoc "HTTP status"
-  @type status :: String.t()
+  @type status :: integer()
 
   @typedoc "HTTP body"
   @type body :: iodata()
@@ -30,6 +27,9 @@ defmodule Ankh.HTTP do
   @typedoc "HTTP Header"
   @type header :: {header_name(), header_value()}
 
+  @typedoc "HTTP Headers"
+  @type headers :: [header()]
+
   alias Ankh.{HTTP, HTTP2, Protocol, Transport}
   alias HTTP.{Request, Response}
 
@@ -39,7 +39,8 @@ defmodule Ankh.HTTP do
   After accepting the connection, `stream` will receive requests from the client and `respond`
   can be used to send replies.
   """
-  @spec accept(URI.t(), Transport.t(), keyword) :: {:ok, Protocol.t()} | {:error, any()}
+  @spec accept(URI.t(), Transport.t(), Transport.options()) ::
+          {:ok, Protocol.t()} | {:error, any()}
   def accept(uri, socket, options \\ []) do
     with {:ok, protocol} <- HTTP2.new(options),
          {:ok, protocol} <- HTTP2.accept(protocol, uri, socket, options),
@@ -64,7 +65,8 @@ defmodule Ankh.HTTP do
 
   Needs a connection to be established via `connect` beforehand.
   """
-  @spec request(Protocol.t(), Request.t()) :: {:ok, Protocol.t(), reference()} | {:error, any()}
+  @spec request(Protocol.t(), Request.t()) ::
+          {:ok, Protocol.t(), reference()} | {:error, any()}
   def request(protocol, request) do
     HTTP2.request(protocol, request)
   end
@@ -83,7 +85,7 @@ defmodule Ankh.HTTP do
   @doc """
   Receives data form the the other and and returns responses
   """
-  @spec stream(Protocol.t(), any()) :: {:ok, Protocol.t(), any()}
+  @spec stream(Protocol.t(), any()) :: {:ok, Protocol.t(), any()} | {:error, any()}
   def stream(protocol, msg) do
     HTTP2.stream(protocol, msg)
   end
