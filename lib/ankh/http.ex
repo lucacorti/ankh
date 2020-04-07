@@ -66,7 +66,7 @@ defmodule Ankh.HTTP do
   Needs a connection to be established via `connect` beforehand.
   """
   @spec request(Protocol.t(), Request.t()) ::
-          {:ok, Protocol.t(), reference()} | {:error, any()}
+          {:ok, Protocol.t(), Protocol.request_ref()} | {:error, any()}
   def request(protocol, request) do
     HTTP2.request(protocol, request)
   end
@@ -76,7 +76,7 @@ defmodule Ankh.HTTP do
 
   Needs a connection to be accepted via `accept` beforehand.
   """
-  @spec respond(Protocol.t(), reference(), Response.t()) ::
+  @spec respond(Protocol.t(), Protocol.request_ref(), Response.t()) ::
           {:ok, Protocol.t()} | {:error, any()}
   def respond(protocol, reference, response) do
     HTTP2.respond(protocol, reference, response)

@@ -11,6 +11,9 @@ defmodule Ankh.Protocol do
   @typedoc "Protocol options"
   @type options :: Keyword.t()
 
+  @typedoc "Request reference"
+  @type request_ref :: reference()
+
   @doc """
   Accepts a client connection
   """
@@ -40,12 +43,12 @@ defmodule Ankh.Protocol do
   @doc """
   Sends a request
   """
-  @callback request(t(), Request.t()) :: {:ok, t(), reference()} | {:error, any()}
+  @callback request(t(), Request.t()) :: {:ok, t(), request_ref()} | {:error, any()}
 
   @doc """
   Sends a response
   """
-  @callback respond(t(), reference(), Response.t()) :: {:ok, t()} | {:error, any()}
+  @callback respond(t(), request_ref(), Response.t()) :: {:ok, t()} | {:error, any()}
 
   @doc """
   Handles transport messages
