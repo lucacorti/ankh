@@ -191,6 +191,10 @@ defmodule Ankh.HTTP2.Stream do
     {:error, :protocol_error}
   end
 
+  defp recv_frame(stream, %RstStream{payload: %RstStream.Payload{error_code: :no_error}}) do
+    {:ok, %{stream | state: :closed}}
+  end
+
   defp recv_frame(stream, %RstStream{payload: %RstStream.Payload{error_code: reason}}) do
     {:ok, %{stream | state: :closed}, {:error, reason, true}}
   end
