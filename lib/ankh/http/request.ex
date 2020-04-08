@@ -43,12 +43,15 @@ defmodule Ankh.HTTP.Request do
   def to_uri(%{path: path}), do: URI.parse(path)
 
   @spec from_uri(URI.t()) :: t()
-  def from_uri(%URI{path: nil, query: nil}), do: new()
-  def from_uri(%URI{path: path, query: nil}), do: set_path(new(), path)
-  def from_uri(%URI{path: nil, query: query}), do: set_query(new(), query)
+  def from_uri(uri), do: put_uri(new(), uri)
 
-  def from_uri(%URI{path: path, query: query}) do
-    new()
+  @spec put_uri(t(), URI.t()) :: t()
+  def put_uri(request, %URI{path: nil, query: nil}), do: request
+  def put_uri(request, %URI{path: path, query: nil}), do: set_path(request, path)
+  def put_uri(request, %URI{path: nil, query: query}), do: set_query(request, query)
+
+  def put_uri(request, %URI{path: path, query: query}) do
+    request
     |> set_path(path)
     |> set_query(URI.decode_query(query))
   end
