@@ -5,9 +5,11 @@ defmodule Ankh.HTTP.Response do
 
   alias Ankh.HTTP
 
+  @typedoc "Response status"
+  @type status :: non_neg_integer()
+
   @type t() :: %__MODULE__{
-          status: HTTP.status(),
-          path: HTTP.path(),
+          status: status(),
           body: HTTP.body(),
           headers: HTTP.headers(),
           trailers: HTTP.headers(),
@@ -15,7 +17,6 @@ defmodule Ankh.HTTP.Response do
           complete: boolean()
         }
   defstruct status: 200,
-            path: nil,
             body: [],
             headers: [],
             trailers: [],
@@ -33,14 +34,11 @@ defmodule Ankh.HTTP.Response do
   def put_trailer(%{trailers: trailers} = response, name, value),
     do: %{response | trailers: [{String.downcase(name), value} | trailers]}
 
-  @spec set_status(t(), HTTP.status()) :: t()
+  @spec set_status(t(), status()) :: t()
   def set_status(response, status), do: %{response | status: status}
 
   @spec set_body(t(), iodata) :: t()
   def set_body(response, body), do: %{response | body: body}
-
-  @spec set_path(t(), HTTP.path()) :: t()
-  def set_path(response, path), do: %{response | path: path}
 
   @spec fetch_body(t()) :: t()
   def fetch_body(%__MODULE__{body_fetched: false, body: body} = response) do

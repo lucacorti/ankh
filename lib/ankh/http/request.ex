@@ -14,11 +14,16 @@ defmodule Ankh.HTTP.Request do
   """
   @type options :: Keyword.t()
 
+  @typedoc "Request method"
+  @type method :: :CONNECT | :DELETE | :GET | :HEAD | :OPTIONS | :PATCH | :POST | :PUT | :TRACE
+
+  @typedoc "Request path"
+  @type path :: String.t()
+
   @typedoc "HTTP Request"
   @type t() :: %__MODULE__{
-          method: HTTP.method(),
-          path: HTTP.path(),
-          query: HTTP.query(),
+          method: method(),
+          path: path(),
           headers: HTTP.headers(),
           trailers: HTTP.headers(),
           body: HTTP.body() | nil,
@@ -26,7 +31,6 @@ defmodule Ankh.HTTP.Request do
         }
   defstruct method: :GET,
             path: "/",
-            query: "",
             headers: [],
             trailers: [],
             body: [],
@@ -36,13 +40,17 @@ defmodule Ankh.HTTP.Request do
   def new(attrs \\ []), do: struct(__MODULE__, attrs)
 
   @spec to_uri(t()) :: URI.t()
-  def to_uri(%{path: path, query: query}) do
-    %URI{path: path, query: query}
-  end
+  def to_uri(%{path: path}), do: URI.parse(path)
 
-  @spec put_uri(t(), URI.t()) :: t()
-  def put_uri(request, %URI{path: path, query: query}) do
-    %{request | path: path || "/", query: query || ""}
+  @spec from_uri(URI.t()) :: t()
+  def from_uri(%URI{path: nil, query: nil}), do: new()
+  def from_uri(%URI{path: path, query: nil}), do: set_path(new(), path)
+  def from_uri(%URI{path: nil, query: query}), do: set_query(new(), query)
+
+  def from_uri(%URI{path: path, query: query}) do
+    new()
+    |> set_path(path)
+    |> set_query(URI.decode_query(query))
   end
 
   @spec put_header(t(), HTTP.header_name(), HTTP.header_value()) :: t()
@@ -60,12 +68,53 @@ defmodule Ankh.HTTP.Request do
   @spec set_body(t(), iodata) :: t()
   def set_body(request, body), do: %{request | body: body}
 
-  @spec set_method(t(), HTTP.method()) :: t()
+  @spec set_method(t(), method()) :: t()
   def set_method(request, method), do: %{request | method: method}
 
-  @spec set_path(t(), HTTP.path()) :: t()
+  @spec set_path(t(), path()) :: t()
   def set_path(request, path), do: %{request | path: path}
 
-  @spec set_query(t(), HTTP.path()) :: t()
-  def set_query(request, query), do: %{request | query: query}
+  @spec put_path(t(), path()) :: t()
+  def put_path(request, path) do
+    %URI{query: query} = to_uri(request)
+
+    new_path =
+      case query do
+        nil -> path
+        query -> path <> "?" <> query
+      end
+
+    %{request | path: new_path}
+  end
+
+  @spec set_query(t(), Enum.t()) :: t()
+  def set_query(request, query) do
+    %URI{path: path} = to_uri(request)
+
+    new_path =
+      case query do
+        nil -> path
+        query -> path <> "?" <> URI.encode_query(query)
+      end
+
+    %{request | path: new_path}
+  end
+
+  @spec put_query(t(), Enum.t()) :: t()
+  def put_query(request, query) do
+    %URI{query: old_query} = to_uri(request)
+
+    query =
+      case old_query do
+        nil ->
+          query
+
+        old_query ->
+          old_query
+          |> URI.decode_query()
+          |> Map.merge(query)
+      end
+
+    set_query(request, query)
+  end
 end

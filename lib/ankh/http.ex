@@ -3,18 +3,6 @@ defmodule Ankh.HTTP do
   Ankh HTTP public API
   """
 
-  @typedoc "HTTP method"
-  @type method :: :CONNECT | :DELETE | :GET | :HEAD | :OPTIONS | :PATCH | :POST | :PUT | :TRACE
-
-  @typedoc "HTTP path"
-  @type path :: String.t()
-
-  @typedoc "HTTP query"
-  @type query :: String.t()
-
-  @typedoc "HTTP status"
-  @type status :: integer()
-
   @typedoc "HTTP body"
   @type body :: iodata()
 
