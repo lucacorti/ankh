@@ -41,8 +41,17 @@ defmodule Ankh.HTTP.Response do
   def set_body(response, body), do: %{response | body: body}
 
   @spec fetch_header_values(t(), HTTP.header_name()) :: [HTTP.header_value()]
-  def fetch_header_values(%{headers: headers}, name),
-    do: Enum.map(headers, fn {^name, value} -> value end)
+  def fetch_header_values(%{headers: headers}, name) do
+    headers
+    |> Enum.reduce([], fn
+      {^name, value}, acc ->
+        [value | acc]
+
+      _, acc ->
+        acc
+    end)
+    |> Enum.reverse()
+  end
 
   @spec fetch_body(t()) :: t()
   def fetch_body(%__MODULE__{body_fetched: false, body: body} = response) do
