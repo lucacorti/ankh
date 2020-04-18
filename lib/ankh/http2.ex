@@ -39,7 +39,12 @@ defmodule Ankh.HTTP2 do
   @preface "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
 
   @tls_options versions: [:"tlsv1.2"],
-               ciphers: ['ECDHE-ECDSA-AES128-SHA256', 'ECDHE-ECDSA-AES128-SHA'],
+               ciphers:
+                 :ssl.cipher_suites(:default, :"tlsv1.2")
+                 |> :ssl.filter_cipher_suites(
+                   key_exchange: &(&1 == :ecdhe_rsa or &1 == :ecdhe_ecdsa),
+                   mac: &(&1 == :aead)
+                 ),
                alpn_advertised_protocols: ["h2"]
 
   @default_settings [
