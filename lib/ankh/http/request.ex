@@ -3,15 +3,9 @@ defmodule Ankh.HTTP.Request do
   Ankh HTTP Request
   """
   alias Ankh.HTTP
+  alias Ankh.HTTP.Query
 
-  @typedoc """
-  HTTP request options
-
-  Available options are
-    - `follow_redirects`: If true, when an HTTP redirect is received a new request is made to the redirect URL, else the redirect is returned. Defaults to `true`
-    - `max_redirects`: Maximum number of redirects to follow, defaults to `10`
-    - `request_timeout`: Timeout for the request, defaults to `20_000` milliseconds
-  """
+  @typedoc "HTTP request options"
   @type options :: Keyword.t()
 
   @typedoc "Request method"
@@ -51,9 +45,11 @@ defmodule Ankh.HTTP.Request do
   def put_uri(request, %URI{path: nil, query: query}), do: set_query(request, query)
 
   def put_uri(request, %URI{path: path, query: query}) do
+    query = Query.decode(query)
+
     request
     |> set_path(path)
-    |> set_query(URI.decode_query(query))
+    |> set_query(query)
   end
 
   @spec put_header(t(), HTTP.header_name(), HTTP.header_value()) :: t()
@@ -96,8 +92,12 @@ defmodule Ankh.HTTP.Request do
 
     new_path =
       case query do
-        nil -> path
-        query -> path <> "?" <> URI.encode_query(query)
+        nil ->
+          path
+
+        query ->
+          query = Query.encode(query)
+          path <> "?" <> query
       end
 
     %{request | path: new_path}
@@ -114,7 +114,7 @@ defmodule Ankh.HTTP.Request do
 
         old_query ->
           old_query
-          |> URI.decode_query()
+          |> Query.decode()
           |> Map.merge(query)
       end
 

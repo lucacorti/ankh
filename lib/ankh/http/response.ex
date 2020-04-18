@@ -58,7 +58,7 @@ defmodule Ankh.HTTP.Response do
     body =
       body
       |> Enum.reverse()
-      |> Enum.join()
+      |> IO.iodata_to_binary()
 
     %{response | body_fetched: true, body: body}
   end
