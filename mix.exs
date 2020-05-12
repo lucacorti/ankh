@@ -36,7 +36,7 @@ defmodule Ankh.Mixfile do
       {:castore, "~> 0.1.0"},
       {:bypass, "~> 1.0.0", only: [:test], runtime: false},
       {:credo, "~> 1.0", only: [:dev], runtime: false},
-      {:ex_doc, "~> 0.21.0", only: [:dev], runtime: false},
+      {:ex_doc, "~> 0.22.0", only: [:dev], runtime: false},
       {:dialyxir, "~> 1.0.0", only: [:dev], runtime: false}
     ]
   end
