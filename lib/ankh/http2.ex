@@ -149,7 +149,8 @@ defmodule Ankh.HTTP2 do
 
     with {:ok, protocol, %{reference: reference} = stream} <- get_stream(protocol, nil),
          {:ok, protocol} <- send_headers(protocol, stream, request),
-         {:ok, protocol} <- send_data(protocol, stream, request) do
+         {:ok, protocol} <- send_data(protocol, stream, request),
+         {:ok, protocol} <- send_trailers(protocol, stream, request) do
       {:ok, protocol, reference}
     end
   end
