@@ -19,6 +19,7 @@ defmodule Ankh.HTTP.Request do
           method: method(),
           path: path(),
           headers: HTTP.headers(),
+          headers: HTTP.trailers(),
           body: HTTP.body() | nil,
           options: options()
         }
@@ -26,6 +27,7 @@ defmodule Ankh.HTTP.Request do
   defstruct method: :GET,
             path: "/",
             headers: [],
+            trailers: [],
             body: [],
             options: []
 
@@ -59,6 +61,15 @@ defmodule Ankh.HTTP.Request do
   def put_headers(request, headers),
     do:
       Enum.reduce(headers, request, fn {header, value}, acc -> put_header(acc, header, value) end)
+
+  @spec put_trailer(t(), HTTP.header_name(), HTTP.header_value()) :: t()
+  def put_trailer(%{trailers: trailers} = request, header, value),
+    do: %{request | trailers: [{String.downcase(header), value} | trailers]}
+
+  @spec put_trailers(t(), HTTP.headers()) :: t()
+  def put_trailers(request, trailers),
+    do:
+      Enum.reduce(trailers, request, fn {header, value}, acc -> put_trailer(acc, header, value) end)
 
   @spec put_options(t(), options()) :: t()
   def put_options(%{options: options} = request, new_options),

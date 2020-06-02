@@ -30,9 +30,19 @@ defmodule Ankh.HTTP.Response do
   def put_header(%{headers: headers} = response, name, value),
     do: %{response | headers: [{String.downcase(name), value} | headers]}
 
+  @spec put_headers(t(), HTTP.headers()) :: t()
+  def put_headers(response, headers),
+    do:
+      Enum.reduce(headers, response, fn {header, value}, acc -> put_header(acc, header, value) end)
+
   @spec put_trailer(t(), HTTP.header_name(), HTTP.header_value()) :: t()
   def put_trailer(%{trailers: trailers} = response, name, value),
     do: %{response | trailers: [{String.downcase(name), value} | trailers]}
+
+  @spec put_trailers(t(), HTTP.headers()) :: t()
+  def put_trailers(response, trailers),
+    do:
+      Enum.reduce(trailers, response, fn {header, value}, acc -> put_trailer(acc, header, value) end)
 
   @spec set_status(t(), status()) :: t()
   def set_status(response, status), do: %{response | status: status}
@@ -41,7 +51,12 @@ defmodule Ankh.HTTP.Response do
   def set_body(response, body), do: %{response | body: body}
 
   @spec fetch_header_values(t(), HTTP.header_name()) :: [HTTP.header_value()]
-  def fetch_header_values(%{headers: headers}, name) do
+  def fetch_header_values(%{headers: headers}, name), do: fetch_values(headers, name)
+
+  @spec fetch_trailer_values(t(), HTTP.header_name()) :: [HTTP.header_value()]
+  def fetch_trailer_values(%{trailers: trailers}, name), do: fetch_values(trailers, name)
+
+  defp fetch_values(headers, name) do
     headers
     |> Enum.reduce([], fn
       {^name, value}, acc ->
