@@ -15,7 +15,6 @@ defmodule Ankh.HTTP2.Stream do
     Continuation,
     Headers,
     Priority,
-    PushPromise,
     RstStream,
     WindowUpdate
   }
@@ -33,11 +32,8 @@ defmodule Ankh.HTTP2.Stream do
           | :reserved_remote
           | :reserved_local
 
-  @typedoc "Stream process"
-  @type t :: %__MODULE__{}
-
   @typedoc "Stream id"
-  @type id :: integer
+  @type id :: non_neg_integer()
 
   @typedoc "Stream HBF type"
   @type hbf_type :: :headers | :push_promise | nil
@@ -56,11 +52,20 @@ defmodule Ankh.HTTP2.Stream do
   defguard is_local_stream(last_local_stream_id, stream_id)
            when rem(last_local_stream_id, 2) == rem(stream_id, 2)
 
+  @typedoc "Stream struct"
+  @type t :: %__MODULE__{
+          id: id(),
+          reference: reference(),
+          state: state(),
+          recv_hbf_type: hbf_type(),
+          recv_hbf: iodata(),
+          window_size: non_neg_integer()
+        }
   defstruct id: 0,
             reference: nil,
             state: :idle,
             recv_hbf_type: nil,
-            recv_hbf_es: false,
+            recv_end_stream: false,
             recv_hbf: [],
             window_size: @initial_window_size
 
@@ -128,7 +133,7 @@ defmodule Ankh.HTTP2.Stream do
     end
   end
 
-  # Stream ID assertions
+  # Stream ID validity checks
 
   defp recv_frame(%{id: id} = _stream, %{stream_id: stream_id}) when stream_id != id do
     raise "FATAL: tried to recv frame with stream id #{stream_id} on stream with id #{id}"
@@ -138,15 +143,47 @@ defmodule Ankh.HTTP2.Stream do
     raise "FATAL: tried to recv frame with stream id 0 on stream with id #{id}"
   end
 
-  # Stream depending on itself
   defp recv_frame(%{id: stream_id}, %{payload: %{stream_dependency: depended_id}})
        when stream_id == depended_id,
        do: {:error, :protocol_error}
 
-  # Only CONTINUATION during headers
+  # CONTINUATION
 
-  defp recv_frame(%{recv_hbf_type: recv_hbf_type}, %type{})
-       when not is_nil(recv_hbf_type) and type != Continuation,
+  defp recv_frame(
+         %{
+           recv_hbf: recv_hbf,
+           recv_hbf_type: recv_hbf_type,
+           recv_end_stream: recv_end_stream
+         } = stream,
+         %Continuation{
+           flags: %Continuation.Flags{end_headers: true},
+           payload: %Continuation.Payload{hbf: hbf}
+         }
+       )
+       when not is_nil(recv_hbf_type) do
+    {
+      :ok,
+      %{stream | recv_hbf_type: nil, recv_hbf: []},
+      {recv_hbf_type, Enum.reverse([hbf | recv_hbf]), recv_end_stream}
+    }
+  end
+
+  defp recv_frame(
+         %{
+           recv_hbf: recv_hbf,
+           recv_hbf_type: recv_hbf_type
+         } = stream,
+         %Continuation{
+           flags: %Continuation.Flags{end_headers: false},
+           payload: %Continuation.Payload{hbf: hbf}
+         }
+       )
+       when not is_nil(recv_hbf_type) do
+    {:ok, %{stream | recv_hbf: [hbf | recv_hbf]}}
+  end
+
+  defp recv_frame(%{recv_hbf_type: recv_hbf_type}, _frame)
+       when not is_nil(recv_hbf_type),
        do: {:error, :protocol_error}
 
   # WINDOW_UPDATE
@@ -208,23 +245,45 @@ defmodule Ankh.HTTP2.Stream do
            recv_hbf_type: recv_hbf_type
          } = stream,
          %Headers{
-           flags: %Headers.Flags{end_headers: true, end_stream: end_stream},
+           flags: %Headers.Flags{end_headers: true, end_stream: true},
            payload: %Headers.Payload{hbf: hbf}
          }
        )
        when is_nil(recv_hbf_type) do
-    state = if end_stream, do: :half_closed_remote, else: :open
-
     {
       :ok,
       %{
         stream
-        | state: state,
+        | state: :half_closed_remote,
           recv_hbf_type: nil,
-          recv_hbf_es: end_stream,
+          recv_end_stream: true,
           recv_hbf: []
       },
-      {:headers, Enum.reverse([hbf | recv_hbf]), end_stream}
+      {:headers, Enum.reverse([hbf | recv_hbf]), true}
+    }
+  end
+
+  defp recv_frame(
+         %{
+           state: :idle,
+           recv_hbf: recv_hbf,
+           recv_hbf_type: recv_hbf_type
+         } = stream,
+         %Headers{
+           flags: %Headers.Flags{end_headers: true, end_stream: false},
+           payload: %Headers.Payload{hbf: hbf}
+         }
+       )
+       when is_nil(recv_hbf_type) do
+    {
+      :ok,
+      %{
+        stream
+        | state: :open,
+          recv_hbf_type: nil,
+          recv_hbf: []
+      },
+      {:headers, Enum.reverse([hbf | recv_hbf]), false}
     }
   end
 
@@ -246,7 +305,7 @@ defmodule Ankh.HTTP2.Stream do
         stream
         | state: :open,
           recv_hbf_type: :headers,
-          recv_hbf_es: end_stream,
+          recv_end_stream: end_stream,
           recv_hbf: [hbf | recv_hbf]
       }
     }
@@ -276,23 +335,21 @@ defmodule Ankh.HTTP2.Stream do
            recv_hbf_type: recv_hbf_type
          } = stream,
          %Headers{
-           flags: %Headers.Flags{end_headers: true, end_stream: end_stream},
+           flags: %Headers.Flags{end_headers: true, end_stream: true},
            payload: %Headers.Payload{hbf: hbf}
          }
        )
        when is_nil(recv_hbf_type) do
-    state = if end_stream, do: :half_closed_remote, else: :open
-
     {
       :ok,
       %{
         stream
-        | state: state,
+        | state: :half_closed_remote,
           recv_hbf_type: nil,
-          recv_hbf_es: false,
+          recv_end_stream: true,
           recv_hbf: []
       },
-      {:headers, Enum.reverse([hbf | recv_hbf]), end_stream}
+      {:headers, Enum.reverse([hbf | recv_hbf]), true}
     }
   end
 
@@ -303,85 +360,19 @@ defmodule Ankh.HTTP2.Stream do
            recv_hbf_type: recv_hbf_type
          } = stream,
          %Headers{
-           flags: %Headers.Flags{end_headers: false, end_stream: end_stream},
+           flags: %Headers.Flags{end_headers: true, end_stream: false},
            payload: %Headers.Payload{hbf: hbf}
          }
        )
        when is_nil(recv_hbf_type) do
-    state = if end_stream, do: :half_closed_remote, else: :open
-
     {
       :ok,
       %{
         stream
-        | state: state,
-          recv_hbf_type: :headers,
-          recv_hbf_es: end_stream,
-          recv_hbf: [hbf | recv_hbf]
-      }
-    }
-  end
-
-  defp recv_frame(
-         %{
-           state: :open,
-           recv_hbf: recv_hbf
-         } = stream,
-         %PushPromise{
-           flags: %PushPromise.Flags{end_headers: true},
-           payload: %PushPromise.Payload{hbf: hbf}
-         }
-       ) do
-    {
-      :ok,
-      %{
-        stream
-        | state: :half_closed_remote,
-          recv_hbf_type: nil,
-          recv_hbf_es: false,
+        | recv_hbf_type: nil,
           recv_hbf: []
       },
-      {:push_promise, [hbf | recv_hbf], true}
-    }
-  end
-
-  defp recv_frame(
-         %{
-           state: :open,
-           recv_hbf: recv_hbf
-         } = stream,
-         %PushPromise{
-           flags: %PushPromise.Flags{end_headers: false},
-           payload: %PushPromise.Payload{hbf: hbf}
-         }
-       ) do
-    {:ok,
-     %{
-       stream
-       | state: :half_closed_remote,
-         recv_hbf_type: :push_promise,
-         recv_hbf_es: false,
-         recv_hbf: [hbf | recv_hbf]
-     }}
-  end
-
-  defp recv_frame(
-         %{
-           state: :open,
-           recv_hbf: recv_hbf,
-           recv_hbf_type: recv_hbf_type,
-           recv_hbf_es: recv_hbf_es
-         } = stream,
-         %Continuation{
-           flags: %Continuation.Flags{end_headers: true},
-           payload: %Continuation.Payload{hbf: hbf}
-         }
-       )
-       when not is_nil(recv_hbf_type) do
-    {
-      :ok,
-      %{stream | recv_hbf_type: nil, recv_hbf_es: false, recv_hbf: []},
-      {recv_hbf_type, Enum.reverse([hbf | recv_hbf]), recv_hbf_es}
+      {:headers, Enum.reverse([hbf | recv_hbf]), false}
     }
   end
 
@@ -391,25 +382,64 @@ defmodule Ankh.HTTP2.Stream do
            recv_hbf: recv_hbf,
            recv_hbf_type: recv_hbf_type
          } = stream,
-         %Continuation{
-           flags: %Continuation.Flags{end_headers: false},
-           payload: %Continuation.Payload{hbf: hbf}
+         %Headers{
+           flags: %Headers.Flags{end_headers: false, end_stream: true},
+           payload: %Headers.Payload{hbf: hbf}
          }
        )
-       when not is_nil(recv_hbf_type) do
-    {:ok, %{stream | recv_hbf: [hbf | recv_hbf]}}
+       when is_nil(recv_hbf_type) do
+    {
+      :ok,
+      %{
+        stream
+        | state: :half_closed_remote,
+          recv_hbf_type: :headers,
+          recv_end_stream: true,
+          recv_hbf: [hbf | recv_hbf]
+      }
+    }
+  end
+
+  defp recv_frame(
+         %{
+           state: :open,
+           recv_hbf: recv_hbf,
+           recv_hbf_type: recv_hbf_type
+         } = stream,
+         %Headers{
+           flags: %Headers.Flags{end_headers: false, end_stream: false},
+           payload: %Headers.Payload{hbf: hbf}
+         }
+       )
+       when is_nil(recv_hbf_type) do
+    {
+      :ok,
+      %{
+        stream
+        | recv_hbf_type: :headers,
+          recv_hbf: [hbf | recv_hbf]
+      }
+    }
   end
 
   defp recv_frame(
          %{state: :open} = stream,
          %Data{
-           flags: %Data.Flags{end_stream: end_stream},
+           flags: %Data.Flags{end_stream: true},
            payload: payload
          }
        ) do
-    data = if not is_nil(payload) and not is_nil(payload.data), do: payload.data, else: ""
-    state = if end_stream, do: :half_closed_remote, else: :open
-    {:ok, %{stream | state: state}, {:data, data, end_stream}}
+    {:ok, %{stream | state: :half_closed_remote}, {:data, (payload && payload.data) || "", true}}
+  end
+
+  defp recv_frame(
+         %{state: :open} = stream,
+         %Data{
+           flags: %Data.Flags{end_stream: false},
+           payload: payload
+         }
+       ) do
+    {:ok, stream, {:data, (payload && payload.data) || "", false}}
   end
 
   # HALF CLOSED LOCAL
@@ -421,23 +451,21 @@ defmodule Ankh.HTTP2.Stream do
            recv_hbf_type: recv_hbf_type
          } = stream,
          %Headers{
-           flags: %Headers.Flags{end_headers: true, end_stream: end_stream},
+           flags: %Headers.Flags{end_headers: true, end_stream: true},
            payload: %Headers.Payload{hbf: hbf}
          }
        )
        when is_nil(recv_hbf_type) do
-    state = if end_stream, do: :closed, else: :half_closed_local
-
     {
       :ok,
       %{
         stream
-        | state: state,
+        | state: :closed,
           recv_hbf_type: nil,
-          recv_hbf_es: false,
+          recv_end_stream: true,
           recv_hbf: []
       },
-      {:headers, Enum.reverse([hbf | recv_hbf]), end_stream}
+      {:headers, Enum.reverse([hbf | recv_hbf]), true}
     }
   end
 
@@ -448,20 +476,63 @@ defmodule Ankh.HTTP2.Stream do
            recv_hbf_type: recv_hbf_type
          } = stream,
          %Headers{
-           flags: %Headers.Flags{end_headers: false, end_stream: end_stream},
+           flags: %Headers.Flags{end_headers: true, end_stream: false},
            payload: %Headers.Payload{hbf: hbf}
          }
        )
        when is_nil(recv_hbf_type) do
-    state = if end_stream, do: :closed, else: :half_closed_local
-
     {
       :ok,
       %{
         stream
-        | state: state,
+        | recv_hbf_type: nil,
+          recv_hbf: []
+      },
+      {:headers, Enum.reverse([hbf | recv_hbf]), false}
+    }
+  end
+
+  defp recv_frame(
+         %{
+           state: :half_closed_local,
+           recv_hbf: recv_hbf,
+           recv_hbf_type: recv_hbf_type
+         } = stream,
+         %Headers{
+           flags: %Headers.Flags{end_headers: false, end_stream: true},
+           payload: %Headers.Payload{hbf: hbf}
+         }
+       )
+       when is_nil(recv_hbf_type) do
+    {
+      :ok,
+      %{
+        stream
+        | state: :closed,
           recv_hbf_type: :headers,
-          recv_hbf_es: end_stream,
+          recv_end_stream: true,
+          recv_hbf: [hbf | recv_hbf]
+      }
+    }
+  end
+
+  defp recv_frame(
+         %{
+           state: :half_closed_local,
+           recv_hbf: recv_hbf,
+           recv_hbf_type: recv_hbf_type
+         } = stream,
+         %Headers{
+           flags: %Headers.Flags{end_headers: false, end_stream: false},
+           payload: %Headers.Payload{hbf: hbf}
+         }
+       )
+       when is_nil(recv_hbf_type) do
+    {
+      :ok,
+      %{
+        stream
+        | recv_hbf_type: :headers,
           recv_hbf: [hbf | recv_hbf]
       }
     }
@@ -470,13 +541,21 @@ defmodule Ankh.HTTP2.Stream do
   defp recv_frame(
          %{state: :half_closed_local} = stream,
          %Data{
-           flags: %Data.Flags{end_stream: end_stream},
+           flags: %Data.Flags{end_stream: true},
            payload: payload
          }
        ) do
-    data = if not is_nil(payload) and not is_nil(payload.data), do: payload.data, else: ""
-    state = if end_stream, do: :closed, else: :half_closed_local
-    {:ok, %{stream | state: state}, {:data, data, end_stream}}
+    {:ok, %{stream | state: :closed}, {:data, (payload && payload.data) || "", true}}
+  end
+
+  defp recv_frame(
+         %{state: :half_closed_local} = stream,
+         %Data{
+           flags: %Data.Flags{end_stream: false},
+           payload: payload
+         }
+       ) do
+    {:ok, stream, {:data, (payload && payload.data) || "", false}}
   end
 
   # HALF CLOSED REMOTE
