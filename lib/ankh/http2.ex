@@ -28,6 +28,8 @@ defmodule Ankh.HTTP2 do
 
   @behaviour Protocol
 
+  @connection_preface "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
+
   @initial_header_table_size 4_096
   @initial_concurrent_streams 128
   @initial_frame_size 16_384
@@ -35,7 +37,7 @@ defmodule Ankh.HTTP2 do
   @max_window_size 2_147_483_647
   @max_frame_size 16_777_215
 
-  @preface "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
+  @active_stream_states [:open, :half_closed_local, :half_closed_remote]
 
   @tls_options versions: [:"tlsv1.2"],
                ciphers:
@@ -93,7 +95,7 @@ defmodule Ankh.HTTP2 do
   @impl Protocol
   def accept(%{transport: transport} = protocol, uri, socket, options) do
     case transport.recv(socket, 24) do
-      {:ok, @preface} ->
+      {:ok, @connection_preface} ->
         with {:ok, protocol} <- send_settings(%{protocol | socket: socket}),
              {:ok, socket} <- transport.accept(socket, options) do
           {:ok, %{protocol | socket: socket, uri: uri}}
@@ -114,7 +116,7 @@ defmodule Ankh.HTTP2 do
     options = Keyword.merge(options, @tls_options)
 
     with {:ok, socket} <- transport.connect(uri, options),
-         :ok <- transport.send(socket, @preface),
+         :ok <- transport.send(socket, @connection_preface),
          {:ok, protocol} <-
            send_settings(%{protocol | last_local_stream_id: -1, uri: uri, socket: socket}) do
       {:ok, protocol}
@@ -487,7 +489,7 @@ defmodule Ankh.HTTP2 do
          :idle,
          new_state
        )
-       when new_state in [:open, :half_closed_local, :half_closed_remote] do
+       when new_state in @active_stream_states do
     max_concurrent_streams = Keyword.get(send_settings, :max_concurrent_streams)
 
     case concurrent_streams do
@@ -501,9 +503,10 @@ defmodule Ankh.HTTP2 do
 
   defp check_stream_limit(
          %{concurrent_streams: concurrent_streams} = protocol,
-         _old_state,
-         :closed
-       ),
+         old_state,
+         new_state
+       )
+       when old_state in @active_stream_states and new_state not in @active_stream_states,
        do: {:ok, %{protocol | concurrent_streams: concurrent_streams - 1}}
 
   defp check_stream_limit(protocol, _old_state, _new_state), do: {:ok, protocol}
