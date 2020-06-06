@@ -3,7 +3,7 @@ defmodule Ankh.HTTP2 do
   HTTP/2 implementation
   """
 
-  alias Ankh.{Protocol, TLS}
+  alias Ankh.{Protocol, TLS, Transport}
   alias Ankh.HTTP.{Request, Response}
   alias Ankh.HTTP2.Frame
   alias Ankh.HTTP2.Stream, as: HTTP2Stream
@@ -57,7 +57,24 @@ defmodule Ankh.HTTP2 do
     max_header_list_size: 128
   ]
 
-  @opaque t :: %__MODULE__{}
+  @opaque t :: %__MODULE__{
+            buffer: iodata(),
+            concurrent_streams: non_neg_integer(),
+            last_stream_id: non_neg_integer(),
+            last_local_stream_id: non_neg_integer(),
+            last_remote_stream_id: non_neg_integer(),
+            recv_hbf_type: HTTP2Stream.hbf_type(),
+            recv_hpack: HPack.Table.t(),
+            recv_settings: Keyword.t(),
+            references: %{non_neg_integer() => reference()},
+            send_hpack: HPack.Table.t(),
+            send_settings: Keyword.t(),
+            socket: Transport.t(),
+            streams: %{non_neg_integer() => HTTP2Stream.t()},
+            transport: atom(),
+            uri: URI.t(),
+            window_size: integer()
+          }
   defstruct buffer: <<>>,
             concurrent_streams: 0,
             last_stream_id: 0,
@@ -174,7 +191,7 @@ defmodule Ankh.HTTP2 do
   defp process_buffer(%{buffer: buffer, recv_settings: recv_settings} = protocol) do
     max_frame_size =
       recv_settings
-      |> Keyword.get(:max_frame_size)
+      |> Keyword.fetch!(:max_frame_size)
       |> min(@max_frame_size)
 
     buffer
@@ -279,13 +296,6 @@ defmodule Ankh.HTTP2 do
     end
   end
 
-  defp send_frame(
-         %{window_size: window_size} = protocol,
-         %Data{payload: %{data: data}} = frame
-       ) do
-    do_send_frame(%{protocol | window_size: window_size - byte_size(data)}, frame)
-  end
-
   defp send_frame(protocol, frame), do: do_send_frame(protocol, frame)
 
   defp do_send_frame(
@@ -299,24 +309,17 @@ defmodule Ankh.HTTP2 do
     end
   end
 
-  defp do_send_frame(
-         %{
-           send_settings: send_settings,
-           socket: socket,
-           streams: streams,
-           transport: transport
-         } = protocol,
-         %{stream_id: stream_id} = frame
-       ) do
-    max_frame_size = min(Keyword.get(send_settings, :max_frame_size), @max_frame_size)
+  defp do_send_frame(%{socket: socket, streams: streams, transport: transport} = protocol, frame) do
+    frame_size = frame_size_for(protocol, frame)
 
     frame
-    |> Splittable.split(max_frame_size)
-    |> Enum.reduce_while({:ok, protocol}, fn frame, {:ok, protocol} ->
+    |> Splittable.split(frame_size)
+    |> Enum.reduce_while({:ok, protocol}, fn %{stream_id: stream_id} = frame, {:ok, protocol} ->
       with {:ok, frame, data} <- Frame.encode(frame),
            {:ok, protocol, stream} <- get_stream(protocol, stream_id),
            {:ok, stream} <- HTTP2Stream.send(stream, frame),
-           :ok <- transport.send(socket, data) do
+           :ok <- transport.send(socket, data),
+           {:ok, protocol} <- reduce_window_size_after_send(protocol, frame) do
         Logger.debug(fn -> "SENT #{inspect(frame)} #{inspect(data)}" end)
 
         {:cont, {:ok, %{protocol | streams: Map.put(streams, stream_id, stream)}}}
@@ -326,6 +329,36 @@ defmodule Ankh.HTTP2 do
       end
     end)
   end
+
+  defp frame_size_for(
+         %{send_settings: send_settings, window_size: window_size} = protocol,
+         %Data{stream_id: stream_id}
+       ) do
+    with {:ok, _protocol, %{window_size: stream_window_size}} <- get_stream(protocol, stream_id) do
+      send_settings
+      |> Keyword.fetch!(:max_frame_size)
+      |> min(@max_frame_size)
+      |> min(window_size)
+      |> min(stream_window_size)
+      |> max(1)
+    end
+  end
+
+  defp frame_size_for(%{send_settings: send_settings}, _frame) do
+    send_settings
+    |> Keyword.fetch!(:max_frame_size)
+    |> min(@max_frame_size)
+  end
+
+  defp reduce_window_size_after_send(%{window_size: window_size} = protocol, %Data{length: length}) do
+    new_window_size = window_size - length
+
+    Logger.debug(fn -> "window_size: #{window_size} - #{length} = #{new_window_size}" end)
+
+    {:ok, %{protocol | window_size: new_window_size}}
+  end
+
+  defp reduce_window_size_after_send(protocol, _frame), do: {:ok, protocol}
 
   defp send_settings(%{send_hpack: send_hpack, recv_settings: recv_settings} = protocol) do
     header_table_size = Keyword.get(recv_settings, :header_table_size)

@@ -29,7 +29,7 @@ defprotocol Ankh.HTTP2.Frame.Encodable do
     - data: data type conforming to the `Ankh.HTTP2.Frame.Encodable` protocol
     - options: options to pass as context to the encoding function
   """
-  @spec encode(t, options) :: {:ok, iodata} | {:error, any()}
+  @spec encode(t, options) :: {:ok, iodata()} | {:error, any()}
   def encode(data, options \\ [])
 end
 

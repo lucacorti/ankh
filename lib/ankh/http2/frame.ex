@@ -9,22 +9,22 @@ defmodule Ankh.HTTP2.Frame do
 
   alias Ankh.HTTP2.Frame.Encodable
 
-  @frame_header_size 9
-
   @typedoc "Struct injected by the `Ankh.HTTP2.Frame` __using__ macro."
-  @type t :: any() | nil
+  @type t :: struct()
 
   @typedoc "Frame length"
-  @type length :: integer
+  @type length :: non_neg_integer()
 
   @typedoc "Frame type code"
-  @type type :: integer
+  @type type :: non_neg_integer()
 
   @typedoc "Frame data"
-  @type data :: iodata
+  @type data :: iodata()
 
   @typedoc "Encode/Decode options"
   @type options :: Keyword.t()
+
+  @header_size 9
 
   @doc """
   Injects the frame struct in a module.
@@ -107,14 +107,23 @@ defmodule Ankh.HTTP2.Frame do
 
   def encode(%{type: type, flags: flags, stream_id: id, payload: nil} = frame, options) do
     with {:ok, flags} <- Encodable.encode(flags, options) do
-      {:ok, frame, [<<0::24, type::8, flags::binary-size(1), 0::1, id::31>>]}
+      {
+        :ok,
+        frame,
+        [<<0::24, type::8, flags::binary-size(1), 0::1, id::31>>]
+      }
     end
   end
 
   def encode(%{type: type, flags: nil, stream_id: id, payload: payload} = frame, options) do
     with {:ok, payload} <- Encodable.encode(payload, options) do
       length = IO.iodata_length(payload)
-      {:ok, %{frame | length: length}, [<<length::24, type::8, 0::8, 0::1, id::31>> | payload]}
+
+      {
+        :ok,
+        %{frame | length: length},
+        [<<length::24, type::8, 0::8, 0::1, id::31>> | payload]
+      }
     end
   end
 
@@ -125,8 +134,11 @@ defmodule Ankh.HTTP2.Frame do
          {:ok, flags} <- Encodable.encode(flags, options) do
       length = IO.iodata_length(payload)
 
-      {:ok, %{frame | length: length},
-       [<<length::24, type::8, flags::binary-size(1), 0::1, id::31>> | payload]}
+      {
+        :ok,
+        %{frame | length: length},
+        [<<length::24, type::8, flags::binary-size(1), 0::1, id::31>> | payload]
+      }
     end
   end
 
@@ -140,12 +152,12 @@ defmodule Ankh.HTTP2.Frame do
 
   `{remaining_buffer, nil}`
   """
-  @spec stream(iodata) :: Enumerable.t()
+  @spec stream(iodata()) :: Enumerable.t()
   def stream(data) do
     Stream.unfold(data, fn
       <<length::24, type::8, _flags::binary-size(1), _reserved::1, id::31, rest::binary>> = data
       when byte_size(rest) >= length ->
-        frame_size = @frame_header_size + length
+        frame_size = @header_size + length
         frame_data = binary_part(data, 0, frame_size)
         rest_size = byte_size(data) - frame_size
         rest_data = binary_part(data, frame_size, rest_size)

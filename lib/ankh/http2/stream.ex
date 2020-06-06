@@ -58,7 +58,7 @@ defmodule Ankh.HTTP2.Stream do
           recv_hbf: iodata(),
           reference: reference(),
           state: state(),
-          window_size: non_neg_integer()
+          window_size: integer()
         }
   defstruct id: 0,
             recv_headers: false,
@@ -445,8 +445,17 @@ defmodule Ankh.HTTP2.Stream do
 
   # OPEN
 
-  defp send_frame(%{state: :open} = stream, %Data{flags: %Data.Flags{end_stream: true}}),
-    do: {:ok, %{stream | state: :half_closed_local}}
+  defp send_frame(
+         %{state: :open, window_size: window_size} = stream,
+         %Data{length: length, flags: %Data.Flags{end_stream: false}}
+       ),
+       do: {:ok, %{stream | window_size: window_size - length}}
+
+  defp send_frame(
+         %{state: :open, window_size: window_size} = stream,
+         %Data{length: length, flags: %Data.Flags{end_stream: true}}
+       ),
+       do: {:ok, %{stream | state: :half_closed_local, window_size: window_size - length}}
 
   defp send_frame(
          %{state: :open} = stream,
@@ -463,10 +472,16 @@ defmodule Ankh.HTTP2.Stream do
   # HALF CLOSED REMOTE
 
   defp send_frame(
-         %{state: :half_closed_remote} = stream,
-         %Data{flags: %Data.Flags{end_stream: true}}
+         %{state: :half_closed_remote, window_size: window_size} = stream,
+         %Data{length: length, flags: %Data.Flags{end_stream: false}}
        ),
-       do: {:ok, %{stream | state: :closed}}
+       do: {:ok, %{stream | window_size: window_size - length}}
+
+  defp send_frame(
+         %{state: :half_closed_remote, window_size: window_size} = stream,
+         %Data{length: length, flags: %Data.Flags{end_stream: true}}
+       ),
+       do: {:ok, %{stream | state: :closed, window_size: window_size - length}}
 
   defp send_frame(
          %{state: :half_closed_remote} = stream,

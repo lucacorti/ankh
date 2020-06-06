@@ -49,7 +49,7 @@ defmodule Ankh.HTTP.Response do
   @spec set_status(t(), status()) :: t()
   def set_status(response, status), do: %{response | status: status}
 
-  @spec set_body(t(), iodata) :: t()
+  @spec set_body(t(), iodata()) :: t()
   def set_body(response, body), do: %{response | body: body}
 
   @spec fetch_header_values(t(), HTTP.header_name()) :: [HTTP.header_value()]

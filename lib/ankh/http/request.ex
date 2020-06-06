@@ -77,7 +77,7 @@ defmodule Ankh.HTTP.Request do
   def put_options(%{options: options} = request, new_options),
     do: %{request | options: Keyword.merge(options, new_options)}
 
-  @spec set_body(t(), iodata) :: t()
+  @spec set_body(t(), iodata()) :: t()
   def set_body(request, body), do: %{request | body: body}
 
   @spec set_method(t(), method()) :: t()
