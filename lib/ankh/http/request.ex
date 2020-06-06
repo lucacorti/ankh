@@ -67,9 +67,11 @@ defmodule Ankh.HTTP.Request do
     do: %{request | trailers: [{String.downcase(header), value} | trailers]}
 
   @spec put_trailers(t(), HTTP.headers()) :: t()
-  def put_trailers(request, trailers),
-    do:
-      Enum.reduce(trailers, request, fn {header, value}, acc -> put_trailer(acc, header, value) end)
+  def put_trailers(request, trailers) do
+    Enum.reduce(trailers, request, fn {header, value}, acc ->
+      put_trailer(acc, header, value)
+    end)
+  end
 
   @spec put_options(t(), options()) :: t()
   def put_options(%{options: options} = request, new_options),

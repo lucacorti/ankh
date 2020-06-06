@@ -40,9 +40,11 @@ defmodule Ankh.HTTP.Response do
     do: %{response | trailers: [{String.downcase(name), value} | trailers]}
 
   @spec put_trailers(t(), HTTP.headers()) :: t()
-  def put_trailers(response, trailers),
-    do:
-      Enum.reduce(trailers, response, fn {header, value}, acc -> put_trailer(acc, header, value) end)
+  def put_trailers(response, trailers) do
+    Enum.reduce(trailers, response, fn {header, value}, acc ->
+      put_trailer(acc, header, value)
+    end)
+  end
 
   @spec set_status(t(), status()) :: t()
   def set_status(response, status), do: %{response | status: status}
