@@ -37,16 +37,13 @@ defmodule Ankh.HTTP2.Stream do
   @typedoc "Stream HBF type"
   @type hbf_type :: :headers | :push_promise | nil
 
-  @typedoc "Reserve mode"
-  @type reserve_mode :: :local | :remote
-
   @type end_stream :: boolean()
 
   @type data_type :: :headers | :data | :push_promise
 
   @type data ::
-          {data_type, reference, iodata(), end_stream}
-          | {:error, reference, Error.t(), end_stream}
+          {data_type, reference, iodata(), end_stream()}
+          | {:error, reference, Error.t(), end_stream()}
 
   @doc "Guard to test if a stream id is locally originated"
   defguard is_local_stream(last_local_stream_id, stream_id)
@@ -290,7 +287,7 @@ defmodule Ankh.HTTP2.Stream do
          %{
            state: state,
            recv_hbf: recv_hbf,
-           recv_hbf_type: nil,
+           recv_hbf_type: nil
          } = stream,
          %Headers{
            flags: %Headers.Flags{end_headers: false, end_stream: true},
