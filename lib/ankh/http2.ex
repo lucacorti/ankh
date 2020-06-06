@@ -78,7 +78,7 @@ defmodule Ankh.HTTP2 do
     settings = Keyword.get(options, :settings, [])
     recv_settings = Keyword.merge(@default_settings, settings)
 
-    with {:ok, send_hpack} <- Table.start_link(4_096),
+    with {:ok, send_hpack} <- Table.start_link(@initial_header_table_size),
          header_table_size <- Keyword.get(recv_settings, :header_table_size),
          {:ok, recv_hpack} <- Table.start_link(header_table_size) do
       {:ok,
@@ -535,15 +535,17 @@ defmodule Ankh.HTTP2 do
        do: {:ok, protocol, [response | responses]}
 
   defp process_stream_response(
-         %{recv_hpack: recv_hpack} = protocol,
+         %{recv_hpack: recv_hpack, send_settings: send_settings} = protocol,
          _frame,
          responses,
          {type, ref, hbf, end_stream}
        )
        when type in [:headers, :push_promise] do
+    max_header_table_size = Keyword.get(send_settings, :header_table_size)
+
     hbf
     |> Enum.join()
-    |> HPack.decode(recv_hpack)
+    |> HPack.decode(recv_hpack, max_header_table_size + 1)
     |> case do
       {:ok, headers} ->
         {:ok, protocol, [{type, ref, headers, end_stream} | responses]}
@@ -590,12 +592,12 @@ defmodule Ankh.HTTP2 do
     })
   end
 
-  defp adjust_header_table_size(%{send_hpack: send_hpack} = protocol, old_size, new_size)
-       when new_size != old_size do
-    with :ok <- Table.resize(new_size, send_hpack), do: {:ok, protocol}
+  defp adjust_header_table_size(%{send_hpack: send_hpack} = protocol, old_size, new_size) do
+    case Table.resize(new_size, send_hpack, old_size + 1) do
+      :ok -> {:ok, protocol}
+      _ -> {:error, :compression_error}
+    end
   end
-
-  defp adjust_header_table_size(protocol, _old_size, _new_size), do: {:ok, protocol}
 
   defp adjust_window_size(
          %{window_size: prev_window_size} = protocol,
