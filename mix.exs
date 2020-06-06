@@ -4,7 +4,7 @@ defmodule Ankh.Mixfile do
   def project do
     [
       app: :ankh,
-      version: "0.8.5",
+      version: "0.8.6",
       elixir: "~> 1.7",
       build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod,
@@ -34,7 +34,6 @@ defmodule Ankh.Mixfile do
     [
       {:hpack, "~> 2.0.0"},
       {:castore, "~> 0.1.0"},
-      {:bypass, "~> 1.0.0", only: [:test], runtime: false},
       {:credo, "~> 1.0", only: [:dev], runtime: false},
       {:ex_doc, "~> 0.22.0", only: [:dev], runtime: false},
       {:dialyxir, "~> 1.0.0", only: [:dev], runtime: false}
