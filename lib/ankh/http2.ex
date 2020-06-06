@@ -482,18 +482,29 @@ defmodule Ankh.HTTP2 do
     end
   end
 
-  defp check_stream_limit(%{send_settings: send_settings, concurrent_streams: concurrent_streams} = protocol, :idle, new_state)
-  when new_state in [:open, :half_closed_local, :half_closed_remote] do
+  defp check_stream_limit(
+         %{send_settings: send_settings, concurrent_streams: concurrent_streams} = protocol,
+         :idle,
+         new_state
+       )
+       when new_state in [:open, :half_closed_local, :half_closed_remote] do
     max_concurrent_streams = Keyword.get(send_settings, :max_concurrent_streams)
 
     case concurrent_streams do
-      count when count < max_concurrent_streams -> {:ok, %{protocol | concurrent_streams: concurrent_streams + 1}}
-      _ -> {:error, :refused_stream}
+      count when count < max_concurrent_streams ->
+        {:ok, %{protocol | concurrent_streams: concurrent_streams + 1}}
+
+      _ ->
+        {:error, :refused_stream}
     end
   end
 
-  defp check_stream_limit(%{concurrent_streams: concurrent_streams} = protocol, _old_state, :closed),
-    do: {:ok, %{protocol | concurrent_streams: concurrent_streams - 1}}
+  defp check_stream_limit(
+         %{concurrent_streams: concurrent_streams} = protocol,
+         _old_state,
+         :closed
+       ),
+       do: {:ok, %{protocol | concurrent_streams: concurrent_streams - 1}}
 
   defp check_stream_limit(protocol, _old_state, _new_state), do: {:ok, protocol}
 
