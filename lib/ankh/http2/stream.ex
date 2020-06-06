@@ -55,6 +55,7 @@ defmodule Ankh.HTTP2.Stream do
   @typedoc "Stream"
   @type t :: %__MODULE__{
           id: id(),
+          recv_headers: boolean(),
           recv_end_stream: boolean(),
           recv_hbf_type: hbf_type(),
           recv_hbf: iodata(),
@@ -63,6 +64,7 @@ defmodule Ankh.HTTP2.Stream do
           window_size: non_neg_integer()
         }
   defstruct id: 0,
+            recv_headers: false,
             recv_end_stream: false,
             recv_hbf_type: nil,
             recv_hbf: [],
@@ -236,20 +238,21 @@ defmodule Ankh.HTTP2.Stream do
          %{
            state: state,
            recv_hbf: recv_hbf,
-           recv_hbf_type: recv_hbf_type
+           recv_hbf_type: nil
          } = stream,
          %Headers{
            flags: %Headers.Flags{end_headers: true, end_stream: true},
            payload: %Headers.Payload{hbf: hbf}
          }
        )
-       when is_nil(recv_hbf_type) and state in [:idle, :open, :half_closed_local] do
+       when state in [:idle, :open, :half_closed_local] do
     {
       :ok,
       %{
         stream
         | state: if(state == :half_closed_local, do: :closed, else: :half_closed_remote),
           recv_hbf_type: nil,
+          recv_headers: true,
           recv_end_stream: true,
           recv_hbf: []
       },
@@ -261,19 +264,21 @@ defmodule Ankh.HTTP2.Stream do
          %{
            state: state,
            recv_hbf: recv_hbf,
-           recv_hbf_type: recv_hbf_type
+           recv_hbf_type: nil,
+           recv_headers: false
          } = stream,
          %Headers{
            flags: %Headers.Flags{end_headers: true, end_stream: false},
            payload: %Headers.Payload{hbf: hbf}
          }
        )
-       when is_nil(recv_hbf_type) and state in [:idle, :open, :half_closed_local] do
+       when state in [:idle, :open, :half_closed_local] do
     {
       :ok,
       %{
         stream
         | state: if(state == :idle, do: :open, else: state),
+          recv_headers: true,
           recv_hbf_type: nil,
           recv_hbf: []
       },
@@ -285,14 +290,14 @@ defmodule Ankh.HTTP2.Stream do
          %{
            state: state,
            recv_hbf: recv_hbf,
-           recv_hbf_type: recv_hbf_type
+           recv_hbf_type: nil,
          } = stream,
          %Headers{
            flags: %Headers.Flags{end_headers: false, end_stream: true},
            payload: %Headers.Payload{hbf: hbf}
          }
        )
-       when is_nil(recv_hbf_type) and state in [:idle, :open, :half_closed_local] do
+       when state in [:idle, :open, :half_closed_local] do
     state =
       case state do
         :idle -> :open
@@ -307,6 +312,7 @@ defmodule Ankh.HTTP2.Stream do
         | state: state,
           recv_hbf_type: :headers,
           recv_end_stream: true,
+          recv_headers: true,
           recv_hbf: [hbf | recv_hbf]
       }
     }
@@ -315,21 +321,23 @@ defmodule Ankh.HTTP2.Stream do
   defp recv_frame(
          %{
            state: state,
+           recv_headers: false,
            recv_hbf: recv_hbf,
-           recv_hbf_type: recv_hbf_type
+           recv_hbf_type: nil
          } = stream,
          %Headers{
            flags: %Headers.Flags{end_headers: false, end_stream: false},
            payload: %Headers.Payload{hbf: hbf}
          }
        )
-       when is_nil(recv_hbf_type) and state in [:idle, :open, :half_closed_local] do
+       when state in [:idle, :open, :half_closed_local] do
     {
       :ok,
       %{
         stream
         | state: if(state == :idle, do: :open, else: state),
           recv_hbf_type: :headers,
+          recv_headers: true,
           recv_hbf: [hbf | recv_hbf]
       }
     }
