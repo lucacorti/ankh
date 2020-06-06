@@ -32,7 +32,6 @@ defmodule Ankh.HTTP2 do
   @initial_concurrent_streams 128
   @initial_frame_size 16_384
   @initial_window_size 65_535
-
   @max_window_size 2_147_483_647
   @max_frame_size 16_777_215
 
@@ -58,6 +57,7 @@ defmodule Ankh.HTTP2 do
 
   @opaque t :: %__MODULE__{}
   defstruct buffer: <<>>,
+            concurrent_streams: 0,
             last_stream_id: 0,
             last_local_stream_id: 0,
             last_remote_stream_id: 0,
@@ -455,10 +455,10 @@ defmodule Ankh.HTTP2 do
   end
 
   defp recv_frame(protocol, %{stream_id: stream_id} = frame, responses) do
-    with {:ok, protocol, stream} <-
-           get_stream(protocol, stream_id),
-         {:ok, %{recv_hbf_type: recv_hbf_type} = stream, response} <-
+    with {:ok, protocol, %{state: old_state} = stream} <- get_stream(protocol, stream_id),
+         {:ok, %{state: new_state, recv_hbf_type: recv_hbf_type} = stream, response} <-
            HTTP2Stream.recv(stream, frame),
+         {:ok, protocol} <- check_stream_limit(protocol, old_state, new_state),
          {:ok, protocol} <- calculate_last_stream_ids(protocol, frame),
          {:ok, %{streams: streams} = protocol, responses} <-
            process_stream_response(protocol, frame, responses, response) do
@@ -481,6 +481,21 @@ defmodule Ankh.HTTP2 do
         {:ok, protocol, responses}
     end
   end
+
+  defp check_stream_limit(%{send_settings: send_settings, concurrent_streams: concurrent_streams} = protocol, :idle, new_state)
+  when new_state in [:open, :half_closed_local, :half_closed_remote] do
+    max_concurrent_streams = Keyword.get(send_settings, :max_concurrent_streams)
+
+    case concurrent_streams do
+      count when count < max_concurrent_streams -> {:ok, %{protocol | concurrent_streams: concurrent_streams + 1}}
+      _ -> {:error, :refused_stream}
+    end
+  end
+
+  defp check_stream_limit(%{concurrent_streams: concurrent_streams} = protocol, _old_state, :closed),
+    do: {:ok, %{protocol | concurrent_streams: concurrent_streams - 1}}
+
+  defp check_stream_limit(protocol, _old_state, _new_state), do: {:ok, protocol}
 
   defp calculate_last_stream_ids(
          %{last_stream_id: lsid, last_local_stream_id: llid} = protocol,
