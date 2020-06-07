@@ -57,6 +57,7 @@ defmodule Ankh.HTTP2.Stream do
           recv_hbf_type: hbf_type(),
           recv_hbf: iodata(),
           reference: reference(),
+          send_hbf_type: hbf_type(),
           state: state(),
           window_size: integer()
         }
@@ -66,6 +67,7 @@ defmodule Ankh.HTTP2.Stream do
             recv_hbf_type: nil,
             recv_hbf: [],
             reference: nil,
+            send_hbf_type: nil,
             state: :idle,
             window_size: @initial_window_size
 
@@ -112,21 +114,21 @@ defmodule Ankh.HTTP2.Stream do
     case recv_frame(%{state: new_state, recv_hbf_type: recv_hbf_type} = stream, frame) do
       {:ok, stream} ->
         Logger.debug(fn ->
-          "STREAM #{id} #{inspect(state)} -> #{inspect(new_state)} hbf: #{inspect(recv_hbf_type)}"
+          "STREAM #{id} #{inspect(state)} -> #{inspect(new_state)} hbf: #{inspect(recv_hbf_type)} ON RECV #{inspect(frame)}"
         end)
 
         {:ok, stream, nil}
 
       {:ok, %{state: new_state, recv_hbf_type: recv_hbf_type} = stream, {type, data, end_stream}} ->
         Logger.debug(fn ->
-          "STREAM #{id} #{inspect(state)} -> #{inspect(new_state)} hbf: #{inspect(recv_hbf_type)}"
+          "STREAM #{id} #{inspect(state)} -> #{inspect(new_state)} hbf: #{inspect(recv_hbf_type)} ON RECV #{inspect(frame)}"
         end)
 
         {:ok, stream, {type, reference, data, end_stream}}
 
       {:error, reason} = error ->
         Logger.error(fn ->
-          "STREAM #{id} #{state} RECV ERROR #{inspect(reason)} ON #{inspect(frame)}"
+          "STREAM #{id} #{state} ERROR #{inspect(reason)} ON RECV #{inspect(frame)}"
         end)
 
         error
@@ -388,14 +390,14 @@ defmodule Ankh.HTTP2.Stream do
     case send_frame(stream, frame) do
       {:ok, %{state: new_state, recv_hbf_type: recv_hbf_type} = stream} ->
         Logger.debug(fn ->
-          "STREAM #{id} #{inspect(state)} -> #{inspect(new_state)} hbf: #{inspect(recv_hbf_type)}"
+          "STREAM #{id} #{inspect(state)} -> #{inspect(new_state)} hbf: #{inspect(recv_hbf_type)} ON SEND #{inspect(frame)}"
         end)
 
         {:ok, stream}
 
       {:error, reason} = error ->
         Logger.error(fn ->
-          "STREAM #{id} #{state} SEND ERROR #{inspect(reason)} ON #{inspect(frame)}"
+          "STREAM #{id} #{state} ERROR #{inspect(reason)} ON SEND #{inspect(frame)}"
         end)
 
         error
@@ -416,80 +418,73 @@ defmodule Ankh.HTTP2.Stream do
 
   defp send_frame(stream, %Priority{}), do: {:ok, stream}
 
-  # IDLE
+  # WINDOW_UPDATE
+
+  defp send_frame(stream, %WindowUpdate{}), do: {:ok, stream}
+
+  # CONTINUATION
 
   defp send_frame(
-         %{state: :idle} = stream,
-         %Headers{flags: %Headers.Flags{end_stream: true}}
-       ),
-       do: {:ok, %{stream | state: :half_closed_local}}
+         %{send_hbf_type: send_hbf_type} = stream,
+         %Continuation{flags: %Continuation.Flags{end_headers: end_headers}}
+       )
+       when not is_nil(send_hbf_type),
+       do: {:ok, %{stream | send_hbf_type: if(end_headers, do: nil, else: send_hbf_type)}}
 
-  defp send_frame(%{state: :idle} = stream, %Headers{}), do: {:ok, %{stream | state: :open}}
+  defp send_frame(%{send_hbf_type: send_hbf_type}, _frame)
+       when not is_nil(send_hbf_type),
+       do: {:error, :protocol_error}
 
-  defp send_frame(
-         %{state: :idle} = stream,
-         %Continuation{flags: %Continuation.Flags{end_headers: true}}
-       ),
-       do: {:ok, %{stream | state: :open}}
-
-  defp send_frame(%{state: :idle} = stream, %Continuation{}), do: {:ok, stream}
-
-  # RESERVED LOCAL
-
-  defp send_frame(%{state: :reserved_local} = stream, %Headers{}),
-    do: {:ok, %{stream | state: :half_closed_remote}}
-
-  # RESERVED REMOTE
-
-  defp send_frame(%{state: :reserved_remote} = stream, %WindowUpdate{}), do: {:ok, stream}
-
-  # OPEN
+  # HEADERS
 
   defp send_frame(
-         %{state: :open, window_size: window_size} = stream,
-         %Data{length: length, flags: %Data.Flags{end_stream: false}}
-       ),
-       do: {:ok, %{stream | window_size: window_size - length}}
+         %{state: state} = stream,
+         %Headers{flags: %Headers.Flags{end_headers: end_headers, end_stream: end_stream}}
+       )
+       when state in [:idle, :open, :half_closed_remote] do
+    state =
+      case {state, end_stream} do
+        {:half_closed_remote, true} -> :closed
+        {_, true} -> :half_closed_local
+        {:idle, false} -> :open
+        {_, false} -> state
+      end
+
+    {:ok,
+     %{
+       stream
+       | state: state,
+         send_hbf_type: if(end_headers, do: nil, else: :headers)
+     }}
+  end
+
+  # DATA
 
   defp send_frame(
-         %{state: :open, window_size: window_size} = stream,
-         %Data{length: length, flags: %Data.Flags{end_stream: true}}
-       ),
-       do: {:ok, %{stream | state: :half_closed_local, window_size: window_size - length}}
+         %{id: stream_id, state: state, window_size: window_size} = stream,
+         %Data{length: length, flags: %Data.Flags{end_stream: end_stream}}
+       )
+       when state in [:open, :half_closed_remote] do
 
-  defp send_frame(
-         %{state: :open} = stream,
-         %Headers{flags: %Headers.Flags{end_stream: true}}
-       ),
-       do: {:ok, %{stream | state: :half_closed_local}}
+    state =
+      case {state, end_stream} do
+        {:open, true} -> :half_closed_remote
+        {_, true} -> :closed
+        _ -> state
+      end
 
-  defp send_frame(%{state: :open} = stream, _frame), do: {:ok, stream}
+    new_window_size = window_size - length
+
+    Logger.debug(fn ->
+      "STREAM #{stream_id} window_size after send: #{window_size} - #{length} = #{new_window_size}"
+    end)
+
+    {:ok, %{stream | state: state, window_size: new_window_size}}
+  end
 
   # HALF CLOSED LOCAL
 
-  defp send_frame(%{state: :half_closed_local} = stream, %WindowUpdate{}), do: {:ok, stream}
-
-  # HALF CLOSED REMOTE
-
-  defp send_frame(
-         %{state: :half_closed_remote, window_size: window_size} = stream,
-         %Data{length: length, flags: %Data.Flags{end_stream: false}}
-       ),
-       do: {:ok, %{stream | window_size: window_size - length}}
-
-  defp send_frame(
-         %{state: :half_closed_remote, window_size: window_size} = stream,
-         %Data{length: length, flags: %Data.Flags{end_stream: true}}
-       ),
-       do: {:ok, %{stream | state: :closed, window_size: window_size - length}}
-
-  defp send_frame(
-         %{state: :half_closed_remote} = stream,
-         %Headers{flags: %Headers.Flags{end_stream: true}}
-       ),
-       do: {:ok, %{stream | state: :closed}}
-
-  defp send_frame(%{state: :half_closed_remote} = stream, _frame), do: {:ok, stream}
+  defp send_frame(%{state: :half_closed_local}, _frame), do: {:error, :stream_closed}
 
   # CLOSED
 

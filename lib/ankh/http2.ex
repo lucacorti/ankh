@@ -213,7 +213,6 @@ defmodule Ankh.HTTP2 do
       {:ok, %{recv_hbf_type: recv_hbf_type} = protocol, responses} ->
         with {:ok, type} <- Frame.Registry.frame_for_type(protocol, type),
              {:ok, frame} <- Frame.decode(struct(type), data),
-             :ok <- Logger.debug(fn -> "RECVD #{inspect(frame)} #{inspect(data)}" end),
              {:ok, protocol, responses} <- recv_frame(protocol, frame, responses) do
           {:cont, {:ok, %{protocol | buffer: rest}, responses}}
         else
@@ -320,8 +319,6 @@ defmodule Ankh.HTTP2 do
            {:ok, stream} <- HTTP2Stream.send(stream, frame),
            :ok <- transport.send(socket, data),
            {:ok, protocol} <- reduce_window_size_after_send(protocol, frame) do
-        Logger.debug(fn -> "SENT #{inspect(frame)} #{inspect(data)}" end)
-
         {:cont, {:ok, %{protocol | streams: Map.put(streams, stream_id, stream)}}}
       else
         error ->
@@ -353,7 +350,9 @@ defmodule Ankh.HTTP2 do
   defp reduce_window_size_after_send(%{window_size: window_size} = protocol, %Data{length: length}) do
     new_window_size = window_size - length
 
-    Logger.debug(fn -> "window_size: #{window_size} - #{length} = #{new_window_size}" end)
+    Logger.debug(fn ->
+      "window_size after send: #{window_size} - #{length} = #{new_window_size}"
+    end)
 
     {:ok, %{protocol | window_size: new_window_size}}
   end
@@ -393,7 +392,14 @@ defmodule Ankh.HTTP2 do
     })
   end
 
-  defp recv_frame(
+  defp recv_frame(protocol, %{stream_id: 0} = frame, responses) do
+    Logger.debug(fn -> "RECVD #{inspect(frame)}" end)
+    do_recv_frame(protocol, frame, responses)
+  end
+
+  defp recv_frame(protocol, frame, responses), do: do_recv_frame(protocol, frame, responses)
+
+  defp do_recv_frame(
          %{send_settings: send_settings} = protocol,
          %Settings{stream_id: 0, flags: %{ack: false}, payload: %{settings: settings}},
          responses
@@ -420,24 +426,24 @@ defmodule Ankh.HTTP2 do
     end
   end
 
-  defp recv_frame(protocol, %Settings{stream_id: 0, length: 0, flags: %{ack: true}}, responses) do
+  defp do_recv_frame(protocol, %Settings{stream_id: 0, length: 0, flags: %{ack: true}}, responses) do
     {:ok, protocol, responses}
   end
 
-  defp recv_frame(_protocol, %Settings{stream_id: 0, flags: %{ack: true}}, _responses) do
+  defp do_recv_frame(_protocol, %Settings{stream_id: 0, flags: %{ack: true}}, _responses) do
     {:error, :frame_size_error}
   end
 
-  defp recv_frame(protocol, %Ping{stream_id: 0, length: 8, flags: %{ack: true}}, responses) do
+  defp do_recv_frame(protocol, %Ping{stream_id: 0, length: 8, flags: %{ack: true}}, responses) do
     {:ok, protocol, responses}
   end
 
-  defp recv_frame(_protocol, %Ping{stream_id: 0, length: length}, _responses)
+  defp do_recv_frame(_protocol, %Ping{stream_id: 0, length: length}, _responses)
        when length != 8 do
     {:error, :frame_size_error}
   end
 
-  defp recv_frame(
+  defp do_recv_frame(
          protocol,
          %Ping{stream_id: 0, flags: %{ack: false} = flags} = frame,
          responses
@@ -447,16 +453,16 @@ defmodule Ankh.HTTP2 do
     end
   end
 
-  defp recv_frame(_protocol, %WindowUpdate{stream_id: 0, length: length}, _responses)
+  defp do_recv_frame(_protocol, %WindowUpdate{stream_id: 0, length: length}, _responses)
        when length != 4 do
     {:error, :frame_size_error}
   end
 
-  defp recv_frame(protocol, %WindowUpdate{stream_id: 0, payload: %{increment: 0}}, _responses) do
+  defp do_recv_frame(protocol, %WindowUpdate{stream_id: 0, payload: %{increment: 0}}, _responses) do
     send_error(protocol, :protocol_error)
   end
 
-  defp recv_frame(
+  defp do_recv_frame(
          %{window_size: window_size} = _protocol,
          %WindowUpdate{stream_id: 0, payload: %{increment: increment}},
          _responses
@@ -471,7 +477,7 @@ defmodule Ankh.HTTP2 do
     {:error, :flow_control_error}
   end
 
-  defp recv_frame(
+  defp do_recv_frame(
          %{window_size: window_size} = protocol,
          %WindowUpdate{stream_id: 0, payload: %{increment: increment}},
          responses
@@ -481,15 +487,15 @@ defmodule Ankh.HTTP2 do
     {:ok, %{protocol | window_size: new_window_size}, responses}
   end
 
-  defp recv_frame(_protocol, %GoAway{stream_id: 0, payload: %{error_code: reason}}, _responses) do
+  defp do_recv_frame(_protocol, %GoAway{stream_id: 0, payload: %{error_code: reason}}, _responses) do
     {:error, reason}
   end
 
-  defp recv_frame(%{stream_id: 0} = _frame, _protocol, _responses) do
+  defp do_recv_frame(%{stream_id: 0} = _frame, _protocol, _responses) do
     {:error, :protocol_error}
   end
 
-  defp recv_frame(protocol, %{stream_id: stream_id} = frame, responses) do
+  defp do_recv_frame(protocol, %{stream_id: stream_id} = frame, responses) do
     with {:ok, protocol, %{state: old_state} = stream} <- get_stream(protocol, stream_id),
          {:ok, %{state: new_state, recv_hbf_type: recv_hbf_type} = stream, response} <-
            HTTP2Stream.recv(stream, frame),
