@@ -114,14 +114,18 @@ defmodule Ankh.HTTP2.Stream do
     case recv_frame(%{state: new_state, recv_hbf_type: recv_hbf_type} = stream, frame) do
       {:ok, stream} ->
         Logger.debug(fn ->
-          "STREAM #{id} #{inspect(state)} -> #{inspect(new_state)} hbf: #{inspect(recv_hbf_type)} ON RECV #{inspect(frame)}"
+          "STREAM #{id} #{inspect(state)} -> #{inspect(new_state)} hbf: #{inspect(recv_hbf_type)} ON RECV #{
+            inspect(frame)
+          }"
         end)
 
         {:ok, stream, nil}
 
       {:ok, %{state: new_state, recv_hbf_type: recv_hbf_type} = stream, {type, data, end_stream}} ->
         Logger.debug(fn ->
-          "STREAM #{id} #{inspect(state)} -> #{inspect(new_state)} hbf: #{inspect(recv_hbf_type)} ON RECV #{inspect(frame)}"
+          "STREAM #{id} #{inspect(state)} -> #{inspect(new_state)} hbf: #{inspect(recv_hbf_type)} ON RECV #{
+            inspect(frame)
+          }"
         end)
 
         {:ok, stream, {type, reference, data, end_stream}}
@@ -390,7 +394,9 @@ defmodule Ankh.HTTP2.Stream do
     case send_frame(stream, frame) do
       {:ok, %{state: new_state, recv_hbf_type: recv_hbf_type} = stream} ->
         Logger.debug(fn ->
-          "STREAM #{id} #{inspect(state)} -> #{inspect(new_state)} hbf: #{inspect(recv_hbf_type)} ON SEND #{inspect(frame)}"
+          "STREAM #{id} #{inspect(state)} -> #{inspect(new_state)} hbf: #{inspect(recv_hbf_type)} ON SEND #{
+            inspect(frame)
+          }"
         end)
 
         {:ok, stream}
@@ -465,7 +471,6 @@ defmodule Ankh.HTTP2.Stream do
          %Data{length: length, flags: %Data.Flags{end_stream: end_stream}}
        )
        when state in [:open, :half_closed_remote] do
-
     state =
       case {state, end_stream} do
         {:open, true} -> :half_closed_remote

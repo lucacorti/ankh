@@ -26,12 +26,12 @@ defimpl Ankh.HTTP2.Frame.Splittable, for: Ankh.HTTP2.Frame.Data do
   end
 
   defp do_split(%{payload: %{data: data}} = frame, frame_size, frames)
-  when is_binary(data) and byte_size(data) <= frame_size do
+       when is_binary(data) and byte_size(data) <= frame_size do
     [clone_frame(frame, data) | frames]
   end
 
   defp do_split(%{payload: %{data: data}} = frame, frame_size, frames)
-  when is_binary(data) do
+       when is_binary(data) do
     chunk = binary_part(data, 0, frame_size)
     rest = binary_part(data, frame_size, byte_size(data) - frame_size)
     frames = [clone_frame(frame, chunk) | frames]

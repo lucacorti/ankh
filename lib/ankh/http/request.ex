@@ -20,7 +20,7 @@ defmodule Ankh.HTTP.Request do
           path: path(),
           headers: HTTP.headers(),
           headers: HTTP.trailers(),
-          body: HTTP.body() | nil,
+          body: HTTP.body(),
           options: options()
         }
 

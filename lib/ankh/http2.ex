@@ -635,7 +635,7 @@ defmodule Ankh.HTTP2 do
        }) do
     send_frame(protocol, %Headers{
       stream_id: stream_id,
-      flags: %Headers.Flags{end_stream: is_nil(body)},
+      flags: %Headers.Flags{end_stream: IO.iodata_length(body) == 0},
       payload: %Headers.Payload{hbf: headers}
     })
   end
