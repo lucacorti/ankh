@@ -3,18 +3,24 @@ defmodule AnkhTest do
 
   require Logger
 
+  alias Ankh.HTTP
   alias Ankh.HTTP.Request
 
   doctest Ankh
 
   test "Ankh HTTP request" do
     # url = "https://localhost:8000"
+    # url = "https://www.fantacast.it"
     url = "https://www.google.com"
 
     request = Request.new()
 
-    assert {:ok, protocol} = url |> URI.parse() |> Ankh.HTTP.connect()
-    assert {:ok, protocol, reference} = Ankh.HTTP.request(protocol, request)
+    assert {:ok, protocol} =
+             url
+             |> URI.parse()
+             |> HTTP.connect()
+
+    assert {:ok, protocol, reference} = HTTP.request(protocol, request)
 
     receive_response(protocol, reference)
   end
@@ -22,7 +28,7 @@ defmodule AnkhTest do
   defp receive_response(protocol, reference) do
     receive do
       msg ->
-        case Ankh.HTTP.stream(protocol, msg) do
+        case HTTP.stream(protocol, msg) do
           {:other, msg} ->
             Logger.warn("unknown message: #{inspect(msg)}")
 

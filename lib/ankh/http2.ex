@@ -303,7 +303,7 @@ defmodule Ankh.HTTP2 do
        ) do
     with {:ok, frame, data} <- Frame.encode(frame),
          :ok <- transport.send(socket, data) do
-      Logger.debug(fn -> "SENT #{inspect(frame)} #{inspect(data)}" end)
+      Logger.debug(fn -> "SENT #{inspect(frame)}" end)
       {:ok, protocol}
     end
   end
