@@ -20,23 +20,42 @@ defmodule Ankh.HTTP2.Frame.Data do
 end
 
 defimpl Ankh.HTTP2.Frame.Splittable, for: Ankh.HTTP2.Frame.Data do
-  def split(frame, frame_size),
-    do: do_split(frame, frame_size, [])
-
-  defp do_split(%{payload: %{data: data}} = frame, frame_size, frames)
-       when byte_size(data) <= frame_size do
-    Enum.reverse([frame | frames])
+  def split(%{flags: %{end_stream: end_stream} = flags} = frame, frame_size) do
+    [frame | frames] = do_split(frame, frame_size, [])
+    Enum.reverse([%{frame | flags: %{flags | end_stream: end_stream}} | frames])
   end
 
-  defp do_split(%{flags: flags, payload: %{data: data} = payload} = frame, frame_size, frames) do
+  defp do_split(%{payload: %{data: data}} = frame, frame_size, frames)
+  when is_binary(data) and byte_size(data) <= frame_size do
+    [clone_frame(frame, data) | frames]
+  end
+
+  defp do_split(%{payload: %{data: data}} = frame, frame_size, frames)
+  when is_binary(data) do
     chunk = binary_part(data, 0, frame_size)
     rest = binary_part(data, frame_size, byte_size(data) - frame_size)
+    frames = [clone_frame(frame, chunk) | frames]
 
-    frames = [
-      %{frame | flags: %{flags | end_stream: false}, payload: %{payload | data: chunk}} | frames
-    ]
+    frame
+    |> clone_frame(rest)
+    |> do_split(frame_size, frames)
+  end
 
-    do_split(%{frame | payload: %{payload | data: rest}}, frame_size, frames)
+  defp do_split(%{payload: %{data: []}}, _frame_size, frames), do: frames
+
+  defp do_split(%{payload: %{data: [chunk | rest]}} = frame, frame_size, frames) do
+    frames =
+      frame
+      |> clone_frame(chunk)
+      |> do_split(frame_size, frames)
+
+    frame
+    |> clone_frame(rest)
+    |> do_split(frame_size, frames)
+  end
+
+  defp clone_frame(%{flags: flags, payload: payload} = frame, data) do
+    %{frame | flags: %{flags | end_stream: false}, payload: %{payload | data: data}}
   end
 end
 
@@ -95,7 +114,7 @@ defimpl Ankh.HTTP2.Frame.Encodable, for: Ankh.HTTP2.Frame.Data.Payload do
   end
 
   def encode(%{data: data}, flags: %{padded: false}) do
-    {:ok, [data]}
+    {:ok, data}
   end
 
   def encode(_payload, _options), do: {:error, :encode_error}
