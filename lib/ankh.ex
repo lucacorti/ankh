@@ -2,8 +2,7 @@ defmodule Ankh do
   @moduledoc """
   Pure Elixir HTTP/2 implementation
 
-  This library provides HTTP/2 (https://tools.ietf.org/html/rfc7540)
-  connection management and frame (de)serialization facilities.
+  This library implements HTTP/2 (https://tools.ietf.org/html/rfc7540).
   The aim is to provide a solid foundation upon which clients and
   eventually servers can be implemented providing higher layer features.
 

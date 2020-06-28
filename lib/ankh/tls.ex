@@ -36,9 +36,7 @@ defmodule Ankh.TLS do
   end
 
   @impl Transport
-  def send(socket, data) do
-    :ssl.send(socket, data)
-  end
+  def send(socket, data), do: :ssl.send(socket, data)
 
   @impl Transport
   def recv(socket, size), do: :ssl.recv(socket, size)
