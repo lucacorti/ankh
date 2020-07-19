@@ -6,8 +6,8 @@ defmodule Ankh.HTTP.Query do
   are distributed under the [Apache 2.0 license](http://www.apache.org/licenses/LICENSE-2.0).
   """
 
-  @type t :: map()
-  @type query :: binary()
+  @type t :: Enum.t()
+  @type query_string :: binary()
 
   defmodule InvalidQueryError do
     defexception [:message]
@@ -18,7 +18,7 @@ defmodule Ankh.HTTP.Query do
   The binary is assumed to be encoded in "x-www-form-urlencoded" format.
   The format is decoded and then validated for proper UTF-8 encoding.
   """
-  @spec decode(query) :: t()
+  @spec decode(query_string()) :: t()
   def decode(string)
 
   def decode(""), do: %{}
@@ -126,7 +126,7 @@ defmodule Ankh.HTTP.Query do
   @doc """
   Encodes the given map or list of stuples.
   """
-  @spec encode(t()) :: query()
+  @spec encode(t()) :: query_string()
   def encode(map) do
     ""
     |> encode_pair(map, &to_string/1)

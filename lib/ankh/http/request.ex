@@ -19,7 +19,7 @@ defmodule Ankh.HTTP.Request do
           method: method(),
           path: path(),
           headers: HTTP.headers(),
-          headers: HTTP.trailers(),
+          trailers: HTTP.headers(),
           body: HTTP.body(),
           options: options()
         }
@@ -99,7 +99,7 @@ defmodule Ankh.HTTP.Request do
     %{request | path: new_path}
   end
 
-  @spec set_query(t(), Enum.t()) :: t()
+  @spec set_query(t(), Query.t()) :: t()
   def set_query(request, query) do
     %URI{path: path} = to_uri(request)
 
@@ -116,7 +116,7 @@ defmodule Ankh.HTTP.Request do
     %{request | path: new_path}
   end
 
-  @spec put_query(t(), Enum.t()) :: t()
+  @spec put_query(t(), Query.t()) :: t()
   def put_query(request, query) do
     %URI{query: old_query} = to_uri(request)
 
