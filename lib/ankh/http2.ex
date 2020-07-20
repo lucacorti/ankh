@@ -581,7 +581,7 @@ defmodule Ankh.HTTP2 do
 
   defp process_stream_response(
          protocol,
-         %{lenght: length, stream_id: stream_id},
+         %{length: length, stream_id: stream_id},
          responses,
          {:data, _ref, _hbf, _end_stream} = response
        ) do
