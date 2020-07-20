@@ -4,7 +4,7 @@ defmodule Ankh.Mixfile do
   def project do
     [
       app: :ankh,
-      version: "0.8.8",
+      version: "0.8.9",
       elixir: "~> 1.7",
       build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod,
