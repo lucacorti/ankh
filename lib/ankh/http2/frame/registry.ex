@@ -25,7 +25,7 @@ defmodule Ankh.HTTP2.Frame.Registry do
 
   Codes 0-9 are reserved for standard frame types.
   """
-  @spec frame_for_type(Protocol.t() | nil, integer) :: {:ok, Frame.t()} | nil
+  @spec frame_for_type(Protocol.t(), Frame.type()) :: {:ok, Frame.t()} | {:error, :not_found}
   def frame_for_type(_, 0x0), do: {:ok, Data}
   def frame_for_type(_, 0x1), do: {:ok, Headers}
   def frame_for_type(_, 0x2), do: {:ok, Priority}
@@ -52,9 +52,9 @@ defmodule Ankh.HTTP2.Frame.Registry do
 
   Codes 0-9 are reserved for standard frame types.
   """
-  @spec register(Protocol.t(), integer, Frame.t()) :: :ok
-  def register(connection, type, frame)
+  @spec register(Protocol.t(), Frame.type(), Frame.t()) :: :ok
+  def register(protocol, type, frame)
       when is_integer(type) and type > 9 and type < 256 do
-    Registry.put_meta(__MODULE__, {connection, type}, frame)
+    Registry.put_meta(__MODULE__, {protocol, type}, frame)
   end
 end
