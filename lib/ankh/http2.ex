@@ -416,7 +416,6 @@ defmodule Ankh.HTTP2 do
     with {:ok, protocol} <- send_frame(protocol, settings_ack),
          {:ok, protocol} <-
            adjust_header_table_size(protocol, old_header_table_size, new_header_table_size),
-         {:ok, protocol} <- adjust_window_size(protocol, old_window_size, new_window_size),
          {:ok, protocol} <-
            adjust_streams_window_size(protocol, old_window_size, new_window_size) do
       {:ok, %{protocol | send_settings: new_send_settings}, responses}
@@ -665,22 +664,6 @@ defmodule Ankh.HTTP2 do
       :ok -> {:ok, protocol}
       _ -> {:error, :compression_error}
     end
-  end
-
-  defp adjust_window_size(
-         %{window_size: prev_window_size} = protocol,
-         old_window_size,
-         new_window_size
-       ) do
-    window_size = prev_window_size + (new_window_size - old_window_size)
-
-    Logger.debug(fn ->
-      "window_size: #{prev_window_size} + (#{new_window_size} - #{old_window_size}) = #{
-        window_size
-      }"
-    end)
-
-    {:ok, %{protocol | window_size: window_size}}
   end
 
   defp adjust_streams_window_size(
