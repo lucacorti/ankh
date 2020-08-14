@@ -73,6 +73,24 @@ defmodule Ankh.HTTP.Request do
     end)
   end
 
+  @spec fetch_header_values(t(), HTTP.header_name()) :: [HTTP.header_value()]
+  def fetch_header_values(%{headers: headers}, name), do: fetch_values(headers, name)
+
+  @spec fetch_trailer_values(t(), HTTP.header_name()) :: [HTTP.header_value()]
+  def fetch_trailer_values(%{trailers: trailers}, name), do: fetch_values(trailers, name)
+
+  defp fetch_values(headers, name) do
+    headers
+    |> Enum.reduce([], fn
+      {^name, value}, acc ->
+        [value | acc]
+
+      _, acc ->
+        acc
+    end)
+    |> Enum.reverse()
+  end
+
   @spec put_options(t(), options()) :: t()
   def put_options(%{options: options} = request, new_options),
     do: %{request | options: Keyword.merge(options, new_options)}
