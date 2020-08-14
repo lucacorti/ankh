@@ -64,10 +64,11 @@ defmodule Ankh.HTTP2 do
             last_local_stream_id: HTTP2Stream.id(),
             last_remote_stream_id: HTTP2Stream.id(),
             recv_hbf_type: HTTP2Stream.hbf_type(),
-            recv_hpack: HPack.Table.t(),
+            recv_hpack: Table.t(),
             recv_settings: Keyword.t(),
             references: %{HTTP2Stream.id() => reference()},
-            send_hpack: HPack.Table.t(),
+            send_hpack: Table.t(),
+            send_queue: :queue.queue(Frame.t()),
             send_settings: Keyword.t(),
             socket: Transport.t(),
             streams: %{HTTP2Stream.id() => HTTP2Stream.t()},
@@ -85,6 +86,7 @@ defmodule Ankh.HTTP2 do
             recv_settings: @default_settings,
             references: %{},
             send_hpack: nil,
+            send_queue: :queue.new(),
             send_settings: @default_settings,
             socket: nil,
             streams: %{},
@@ -111,13 +113,13 @@ defmodule Ankh.HTTP2 do
 
   @impl Protocol
   def accept(%{transport: transport} = protocol, uri, socket, options) do
-    case transport.recv(socket, 24) do
-      {:ok, @connection_preface} ->
-        with {:ok, protocol} <- send_settings(%{protocol | socket: socket}),
-             {:ok, socket} <- transport.accept(socket, options) do
-          {:ok, %{protocol | socket: socket, uri: uri}}
-        end
+    {timeout, options} = Keyword.pop(options, :connect_timeout, 5_000)
 
+    with {:ok, @connection_preface} <- transport.recv(socket, 24, timeout),
+         {:ok, protocol} <- send_settings(%{protocol | socket: socket}),
+         {:ok, socket} <- transport.accept(socket, options) do
+      {:ok, %{protocol | socket: socket, uri: uri}}
+    else
       _ ->
         {:error, :protocol_error}
     end
@@ -268,38 +270,31 @@ defmodule Ankh.HTTP2 do
          stream_id
        ) do
     window_size = Keyword.get(send_settings, :initial_window_size)
-    stream = HTTP2Stream.new(stream_id, window_size)
+    %HTTP2Stream{reference: reference} = stream = HTTP2Stream.new(stream_id, window_size)
 
     {
       :ok,
       %{
         protocol
-        | references: Map.put(references, stream.reference, stream_id),
+        | references: Map.put(references, reference, stream_id),
           streams: Map.put(streams, stream_id, stream)
       },
       stream
     }
   end
 
-  defp send_frame(
-         %{send_hpack: send_hpack} = protocol,
-         %Headers{payload: %{hbf: headers} = payload} = frame
-       )
-       when is_list(headers) do
-    case HPack.encode(headers, send_hpack) do
-      {:ok, hbf} ->
-        do_send_frame(protocol, %{frame | payload: %{payload | hbf: hbf}})
-
-      _ ->
-        {:error, :compression_error}
+  defp send_frame(protocol, frame) do
+    with {:ok, protocol} <- process_send_queue(protocol),
+         size <- frame_size_for(protocol, frame),
+         {:ok, protocol} <- do_send_frame(protocol, frame, size) do
+      {:ok, protocol}
     end
   end
 
-  defp send_frame(protocol, frame), do: do_send_frame(protocol, frame)
-
   defp do_send_frame(
          %{socket: socket, transport: transport} = protocol,
-         %{stream_id: 0} = frame
+         %{stream_id: 0} = frame,
+         _size
        ) do
     with {:ok, frame, data} <- Frame.encode(frame),
          :ok <- transport.send(socket, data) do
@@ -308,23 +303,104 @@ defmodule Ankh.HTTP2 do
     end
   end
 
-  defp do_send_frame(%{socket: socket, streams: streams, transport: transport} = protocol, frame) do
-    frame_size = frame_size_for(protocol, frame)
+  defp do_send_frame(
+         %{send_hpack: send_hpack} = protocol,
+         %Headers{payload: %{hbf: headers} = payload} = frame,
+         size
+       )
+       when is_list(headers) do
+    headers
+    |> HPack.encode(send_hpack)
+    |> case do
+      {:ok, hbf} ->
+        do_send_frame(protocol, %{frame | payload: %{payload | hbf: hbf}}, size)
 
+      _ ->
+        {:error, :compression_error}
+    end
+  end
+
+  defp do_send_frame(%{send_queue: send_queue} = protocol, %Data{} = frame, size)
+       when size <= 0 do
+    {:ok, %{protocol | send_queue: :queue.in_r(frame, send_queue)}}
+  end
+
+  defp do_send_frame(protocol, %{stream_id: stream_id} = frame, size) do
     frame
-    |> Splittable.split(frame_size)
-    |> Enum.reduce_while({:ok, protocol}, fn %{stream_id: stream_id} = frame, {:ok, protocol} ->
-      with {:ok, frame, data} <- Frame.encode(frame),
-           {:ok, protocol, stream} <- get_stream(protocol, stream_id),
-           {:ok, stream} <- HTTP2Stream.send(stream, frame),
-           :ok <- transport.send(socket, data),
-           {:ok, protocol} <- reduce_window_size_after_send(protocol, frame) do
-        {:cont, {:ok, %{protocol | streams: Map.put(streams, stream_id, stream)}}}
+    |> Splittable.split(size)
+    |> Enum.reduce_while({:ok, protocol, []}, fn
+      %Data{length: length} = frame, {:ok, protocol, frames} ->
+        with {:ok, %{window_size: window_size} = protocol, %{window_size: stream_window_size}}
+             when window_size - length >= 0 and stream_window_size - length >= 0 <-
+               get_stream(protocol, stream_id),
+             {:ok, protocol} <- transmit_frame(protocol, frame) do
+          {:cont, {:ok, protocol, frames}}
+        else
+          {:ok, %{window_size: window_size}, %{window_size: stream_window_size}}
+          when window_size - length <= 0 or stream_window_size - length <= 0 ->
+            {:cont, {:ok, protocol, [frame | frames]}}
+
+          {:error, _reason} = error ->
+            {:halt, error}
+        end
+
+      frame, {:ok, protocol, frames} ->
+        case transmit_frame(protocol, frame) do
+          {:ok, protocol} ->
+            {:cont, {:ok, protocol, frames}}
+
+          {:error, _reason} = error ->
+            {:halt, error}
+        end
+    end)
+    |> case do
+      {:ok, %{send_queue: send_queue} = protocol, frames} ->
+        send_queue =
+          frames
+          |> Enum.reverse()
+          |> Enum.reduce(send_queue, fn frame, send_queue ->
+            :queue.in_r(frame, send_queue)
+          end)
+
+        {:ok, %{protocol | send_queue: send_queue}}
+
+      {:error, _reason} = error ->
+        error
+    end
+  end
+
+  defp transmit_frame(
+         %{socket: socket, streams: streams, transport: transport} = protocol,
+         %{stream_id: stream_id} = frame
+       ) do
+    with {:ok, frame, data} <- Frame.encode(frame),
+         {:ok, protocol, stream} <- get_stream(protocol, stream_id),
+         {:ok, stream} <- HTTP2Stream.send(stream, frame),
+         :ok <- transport.send(socket, data),
+         {:ok, protocol} <- reduce_window_size_after_send(protocol, frame) do
+      {:ok, %{protocol | streams: Map.put(streams, stream_id, stream)}}
+    else
+      {:error, _reason} = error ->
+        error
+    end
+  end
+
+  defp process_send_queue(%{send_queue: send_queue} = protocol) do
+    {protocol, send_queue}
+    |> Stream.unfold(fn {protocol, queue} ->
+      with {{:value, frame}, queue} <- :queue.out(queue),
+           size <- frame_size_for(protocol, frame),
+           {:ok, protocol} <- do_send_frame(%{protocol | send_queue: queue}, frame, size) do
+        {protocol, {protocol, queue}}
       else
-        error ->
-          {:halt, error}
+        {:empty, _queue} ->
+          nil
+
+        {:error, _reason} ->
+          nil
       end
     end)
+    |> Enum.reduce({:ok, protocol}, fn protocol, _acc -> {:ok, protocol} end)
   end
 
   defp frame_size_for(
@@ -337,7 +413,6 @@ defmodule Ankh.HTTP2 do
       |> min(@max_frame_size)
       |> min(window_size)
       |> min(stream_window_size)
-      |> max(1)
     end
   end
 
@@ -405,20 +480,19 @@ defmodule Ankh.HTTP2 do
          responses
        ) do
     new_send_settings = Keyword.merge(send_settings, settings)
-
     old_header_table_size = Keyword.get(send_settings, :header_table_size)
     new_header_table_size = Keyword.get(new_send_settings, :header_table_size)
     old_window_size = Keyword.get(send_settings, :initial_window_size)
     new_window_size = Keyword.get(new_send_settings, :initial_window_size)
 
-    settings_ack = %Settings{flags: %Settings.Flags{ack: true}, payload: nil}
-
-    with {:ok, protocol} <- send_frame(protocol, settings_ack),
+    with {:ok, protocol} <-
+           send_frame(protocol, %Settings{flags: %Settings.Flags{ack: true}, payload: nil}),
          {:ok, protocol} <-
            adjust_header_table_size(protocol, old_header_table_size, new_header_table_size),
          {:ok, protocol} <-
-           adjust_streams_window_size(protocol, old_window_size, new_window_size) do
-      {:ok, %{protocol | send_settings: new_send_settings}, responses}
+           adjust_streams_window_size(protocol, old_window_size, new_window_size),
+         {:ok, protocol} <- process_send_queue(%{protocol | send_settings: new_send_settings}) do
+      {:ok, protocol, responses}
     else
       _ ->
         {:error, :compression_error}
@@ -470,7 +544,9 @@ defmodule Ankh.HTTP2 do
     new_window_size = window_size + increment
 
     Logger.error(fn ->
-      "window_update: #{new_window_size} larger than max_window_size #{@max_window_size}"
+      "WINDOW_UPDATE window_size: #{new_window_size} larger than max_window_size #{
+        @max_window_size
+      }"
     end)
 
     {:error, :flow_control_error}
@@ -482,8 +558,14 @@ defmodule Ankh.HTTP2 do
          responses
        ) do
     new_window_size = window_size + increment
-    Logger.debug(fn -> "window_size: #{window_size} + #{increment} = #{new_window_size}" end)
-    {:ok, %{protocol | window_size: new_window_size}, responses}
+
+    Logger.debug(fn ->
+      "WINDOW_UPDATE window_size: #{window_size} + #{increment} = #{new_window_size}"
+    end)
+
+    with {:ok, protocol} <- process_send_queue(%{protocol | window_size: new_window_size}) do
+      {:ok, protocol, responses}
+    end
   end
 
   defp do_recv_frame(_protocol, %GoAway{stream_id: 0, payload: %{error_code: reason}}, _responses) do
@@ -495,22 +577,27 @@ defmodule Ankh.HTTP2 do
   end
 
   defp do_recv_frame(protocol, %{stream_id: stream_id} = frame, responses) do
-    with {:ok, protocol, %{state: old_state} = stream} <- get_stream(protocol, stream_id),
+    with {:ok, %{streams: streams} = protocol, %{state: old_state} = stream} <-
+           get_stream(protocol, stream_id),
          {:ok, %{state: new_state, recv_hbf_type: recv_hbf_type} = stream, response} <-
            HTTP2Stream.recv(stream, frame),
-         {:ok, protocol} <- check_stream_limit(protocol, old_state, new_state),
-         {:ok, protocol} <- calculate_last_stream_ids(protocol, frame),
-         {:ok, %{streams: streams} = protocol, responses} <-
+         {:ok, protocol} <-
+           check_stream_limit(
+             %{
+               protocol
+               | recv_hbf_type: recv_hbf_type,
+                 streams: Map.put(streams, stream_id, stream)
+             },
+             old_state,
+             new_state
+           ),
+         {:ok, protocol} <-
+           calculate_last_stream_ids(protocol, frame),
+         {:ok, protocol} <-
+           process_send_queue(protocol),
+         {:ok, protocol, responses} <-
            process_stream_response(protocol, frame, responses, response) do
-      {
-        :ok,
-        %{
-          protocol
-          | recv_hbf_type: recv_hbf_type,
-            streams: Map.put(streams, stream_id, stream)
-        },
-        responses
-      }
+      {:ok, protocol, responses}
     else
       {:error, reason}
       when reason in [:protocol_error, :compression_error, :stream_closed] ->
@@ -660,7 +747,9 @@ defmodule Ankh.HTTP2 do
   end
 
   defp adjust_header_table_size(%{send_hpack: send_hpack} = protocol, old_size, new_size) do
-    case Table.resize(new_size, send_hpack, old_size + 1) do
+    new_size
+    |> Table.resize(send_hpack, old_size + 1)
+    |> case do
       :ok -> {:ok, protocol}
       _ -> {:error, :compression_error}
     end

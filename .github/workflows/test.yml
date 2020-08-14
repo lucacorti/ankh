@@ -6,7 +6,7 @@ jobs:
     name: OTP ${{matrix.otp}} / Elixir ${{matrix.elixir}}
     strategy:
       matrix:
-        otp: ['21', '22']
+        otp: ['21', '22', '23']
         elixir: ['1.9', '1.10']
     steps:
       - uses: actions/checkout@v2
