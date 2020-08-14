@@ -41,7 +41,7 @@ defmodule Ankh.HTTP do
   After establishing the connection, `request` can be user to send request to the server and
   `stream` can be used to receive receive responses.
   """
-  @spec connect(URI.t(), keyword) :: {:ok, Protocol.t()} | {:error, any()}
+  @spec connect(URI.t(), Transport.options()) :: {:ok, Protocol.t()} | {:error, any()}
   def connect(uri, options \\ []) do
     with {:ok, protocol} <- HTTP2.new(options),
          {:ok, protocol} <- HTTP2.connect(protocol, uri, options),

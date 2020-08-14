@@ -114,7 +114,12 @@ defmodule Ankh.HTTP2.Frame.Data do
     end
 
     defp clone_frame(%{flags: flags, payload: payload} = frame, data) do
-      %{frame | flags: %{flags | end_stream: false}, payload: %{payload | data: data}}
+      %{
+        frame
+        | length: byte_size(data),
+          flags: %{flags | end_stream: false},
+          payload: %{payload | data: data}
+      }
     end
   end
 end

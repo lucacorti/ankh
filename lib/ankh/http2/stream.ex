@@ -98,9 +98,9 @@ defmodule Ankh.HTTP2.Stream do
     window_size = prev_window_size + (new_window_size - old_window_size)
 
     Logger.debug(fn ->
-      "STREAM #{id} window_size: #{prev_window_size} + (#{new_window_size} - #{old_window_size}) = #{
-        window_size
-      }"
+      "STREAM #{id} SETTINGS window_size: #{prev_window_size} + (#{new_window_size} - #{
+        old_window_size
+      }) = #{window_size}"
     end)
 
     %{stream | window_size: window_size}
@@ -214,7 +214,7 @@ defmodule Ankh.HTTP2.Stream do
     new_window_size = window_size + increment
 
     Logger.debug(fn ->
-      "STREAM #{id} window_size: #{window_size} + #{increment} = #{new_window_size}"
+      "STREAM #{id} WINDOW_UPDATE window_size: #{window_size} + #{increment} = #{new_window_size}"
     end)
 
     {:ok, %{stream | window_size: new_window_size}}

@@ -6,6 +6,9 @@ defmodule Ankh.Transport do
   @typedoc "Transport socket"
   @type t :: any()
 
+  @typedoc "Size"
+  @type size :: non_neg_integer()
+
   @typedoc """
   Transport options
 
@@ -37,7 +40,7 @@ defmodule Ankh.Transport do
   @doc """
   Receives data
   """
-  @callback recv(t(), integer) :: {:ok, iodata()} | {:error, any()}
+  @callback recv(t(), size(), timeout()) :: {:ok, iodata()} | {:error, any()}
 
   @doc """
   Handles transport messages
