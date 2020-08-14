@@ -283,18 +283,9 @@ defmodule Ankh.HTTP2 do
     }
   end
 
-  defp send_frame(protocol, frame) do
-    with {:ok, protocol} <- process_send_queue(protocol),
-         size <- frame_size_for(protocol, frame),
-         {:ok, protocol} <- do_send_frame(protocol, frame, size) do
-      {:ok, protocol}
-    end
-  end
-
-  defp do_send_frame(
+  defp send_frame(
          %{socket: socket, transport: transport} = protocol,
-         %{stream_id: 0} = frame,
-         _size
+         %{stream_id: 0} = frame
        ) do
     with {:ok, frame, data} <- Frame.encode(frame),
          :ok <- transport.send(socket, data) do
@@ -303,7 +294,47 @@ defmodule Ankh.HTTP2 do
     end
   end
 
-  defp do_send_frame(
+  defp send_frame(%{send_queue: send_queue} = protocol, frame),
+    do: process_send_queue(%{protocol | send_queue: :queue.in(frame, send_queue)})
+
+  defp process_send_queue(%{send_queue: send_queue} = protocol) do
+    Stream.resource(
+      fn -> {protocol, send_queue} end,
+      fn {protocol, queue} ->
+        with {:value, frame} <- :queue.peek(queue),
+             max_frame_size when max_frame_size > 0 <- frame_size_for(protocol, frame),
+             {{:value, frame}, queue} <- :queue.out(queue),
+             {:ok, protocol, []} <-
+               process_queued_frame(%{protocol | send_queue: queue}, frame, max_frame_size) do
+          {[protocol], {protocol, queue}}
+        else
+          {:ok, protocol, frames} ->
+            protocol =
+              Enum.reduce(frames, protocol, fn frame, %{send_queue: queue} = protocol ->
+                %{protocol | send_queue: :queue.in_r(frame, queue)}
+              end)
+
+            {[protocol], {protocol, :queue.new()}}
+
+          max_frame_size when is_integer(max_frame_size) ->
+            {:halt, protocol}
+
+          :empty ->
+            {:halt, protocol}
+
+          {:empty, _queue} ->
+            {:halt, protocol}
+
+          {:error, _reason} ->
+            {:halt, protocol}
+        end
+      end,
+      fn _protocol -> :ok end
+    )
+    |> Enum.reduce({:ok, protocol}, fn protocol, _acc -> {:ok, protocol} end)
+  end
+
+  defp process_queued_frame(
          %{send_hpack: send_hpack} = protocol,
          %Headers{payload: %{hbf: headers} = payload} = frame,
          size
@@ -313,19 +344,19 @@ defmodule Ankh.HTTP2 do
     |> HPack.encode(send_hpack)
     |> case do
       {:ok, hbf} ->
-        do_send_frame(protocol, %{frame | payload: %{payload | hbf: hbf}}, size)
+        process_queued_frame(protocol, %{frame | payload: %{payload | hbf: hbf}}, size)
 
       _ ->
         {:error, :compression_error}
     end
   end
 
-  defp do_send_frame(%{send_queue: send_queue} = protocol, %Data{} = frame, size)
+  defp process_queued_frame(%{send_queue: send_queue} = protocol, %Data{} = frame, size)
        when size <= 0 do
     {:ok, %{protocol | send_queue: :queue.in_r(frame, send_queue)}}
   end
 
-  defp do_send_frame(protocol, %{stream_id: stream_id} = frame, size) do
+  defp process_queued_frame(protocol, %{stream_id: stream_id} = frame, size) do
     frame
     |> Splittable.split(size)
     |> Enum.reduce_while({:ok, protocol, []}, fn
@@ -353,20 +384,6 @@ defmodule Ankh.HTTP2 do
             {:halt, error}
         end
     end)
-    |> case do
-      {:ok, %{send_queue: send_queue} = protocol, frames} ->
-        send_queue =
-          frames
-          |> Enum.reverse()
-          |> Enum.reduce(send_queue, fn frame, send_queue ->
-            :queue.in_r(frame, send_queue)
-          end)
-
-        {:ok, %{protocol | send_queue: send_queue}}
-
-      {:error, _reason} = error ->
-        error
-    end
   end
 
   defp transmit_frame(
@@ -383,24 +400,6 @@ defmodule Ankh.HTTP2 do
       {:error, _reason} = error ->
         error
     end
-  end
-
-  defp process_send_queue(%{send_queue: send_queue} = protocol) do
-    {protocol, send_queue}
-    |> Stream.unfold(fn {protocol, queue} ->
-      with {{:value, frame}, queue} <- :queue.out(queue),
-           size <- frame_size_for(protocol, frame),
-           {:ok, protocol} <- do_send_frame(%{protocol | send_queue: queue}, frame, size) do
-        {protocol, {protocol, queue}}
-      else
-        {:empty, _queue} ->
-          nil
-
-        {:error, _reason} ->
-          nil
-      end
-    end)
-    |> Enum.reduce({:ok, protocol}, fn protocol, _acc -> {:ok, protocol} end)
   end
 
   defp frame_size_for(
@@ -593,10 +592,9 @@ defmodule Ankh.HTTP2 do
            ),
          {:ok, protocol} <-
            calculate_last_stream_ids(protocol, frame),
-         {:ok, protocol} <-
-           process_send_queue(protocol),
          {:ok, protocol, responses} <-
-           process_stream_response(protocol, frame, responses, response) do
+           process_stream_response(protocol, frame, responses, response),
+         {:ok, protocol} <- process_window_update(protocol, frame) do
       {:ok, protocol, responses}
     else
       {:error, reason}
@@ -656,6 +654,9 @@ defmodule Ankh.HTTP2 do
     lrid = max(lrid, stream_id)
     {:ok, %{protocol | last_remote_stream_id: lrid, last_stream_id: max(lrid, lsid)}}
   end
+
+  defp process_window_update(protocol, %WindowUpdate{}), do: process_send_queue(protocol)
+  defp process_window_update(protocol, _frame), do: {:ok, protocol}
 
   defp process_stream_response(
          protocol,
