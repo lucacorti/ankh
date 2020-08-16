@@ -15,11 +15,11 @@ defmodule Ankh.TLS do
                            cacertfile: CAStore.file_path()
 
   @impl Transport
-  def connect(%URI{host: host, port: port}, options \\ []) do
+  def connect(%URI{host: host, port: port}, timeout, options \\ []) do
     hostname = String.to_charlist(host)
     options = Keyword.merge(options, @default_connect_options)
 
-    with {:ok, socket} <- :ssl.connect(hostname, port, options),
+    with {:ok, socket} <- :ssl.connect(hostname, port, options, timeout),
          :ok <- :ssl.setopts(socket, active: :once) do
       {:ok, socket}
     end

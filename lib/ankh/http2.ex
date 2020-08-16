@@ -132,9 +132,12 @@ defmodule Ankh.HTTP2 do
 
   @impl Protocol
   def connect(%{transport: transport} = protocol, uri, options) do
-    options = Keyword.merge(options, @tls_options)
+    {timeout, options} =
+      options
+      |> Keyword.merge(@tls_options)
+      |> Keyword.pop(:timeout, 5_000)
 
-    with {:ok, socket} <- transport.connect(uri, options),
+    with {:ok, socket} <- transport.connect(uri, timeout, options),
          :ok <- transport.send(socket, @connection_preface),
          {:ok, protocol} <-
            send_settings(%{protocol | last_local_stream_id: -1, uri: uri, socket: socket}) do
