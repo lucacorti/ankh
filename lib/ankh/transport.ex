@@ -30,7 +30,7 @@ defmodule Ankh.Transport do
   @doc """
   Connects to an host
   """
-  @callback connect(URI.t(), Keyword.t(), timeout()) :: {:ok, t()} | {:error, any()}
+  @callback connect(URI.t(), timeout(), Keyword.t()) :: {:ok, t()} | {:error, any()}
 
   @doc """
   Sends data
