@@ -3,7 +3,7 @@ defmodule Ankh.HTTP.Request do
   Ankh HTTP Request
   """
   alias Ankh.HTTP
-  alias Ankh.HTTP.Query
+  alias Plug.Conn.Query
 
   @typedoc "HTTP request options"
   @type options :: Keyword.t()
@@ -13,6 +13,9 @@ defmodule Ankh.HTTP.Request do
 
   @typedoc "Request path"
   @type path :: String.t()
+
+  @typedoc "Request query"
+  @type query() :: Enum.t()
 
   @typedoc "HTTP Request"
   @type t() :: %__MODULE__{
@@ -117,7 +120,7 @@ defmodule Ankh.HTTP.Request do
     %{request | path: new_path}
   end
 
-  @spec set_query(t(), Query.t()) :: t()
+  @spec set_query(t(), query()) :: t()
   def set_query(request, query) do
     %URI{path: path} = to_uri(request)
 
@@ -134,7 +137,7 @@ defmodule Ankh.HTTP.Request do
     %{request | path: new_path}
   end
 
-  @spec put_query(t(), Query.t()) :: t()
+  @spec put_query(t(), query()) :: t()
   def put_query(request, query) do
     %URI{query: old_query} = to_uri(request)
 
