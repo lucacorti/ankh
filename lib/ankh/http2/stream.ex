@@ -45,9 +45,7 @@ defmodule Ankh.HTTP2.Stream do
           {data_type, reference, iodata(), end_stream()}
           | {:error, reference, Error.t(), end_stream()}
 
-  @doc "Guard to test if a stream id is locally originated"
-  defguard is_local_stream(last_local_stream_id, stream_id)
-           when rem(last_local_stream_id, 2) == rem(stream_id, 2)
+  @type window_size :: integer()
 
   @typedoc "Stream"
   @type t :: %__MODULE__{
@@ -71,10 +69,14 @@ defmodule Ankh.HTTP2.Stream do
             state: :idle,
             window_size: @initial_window_size
 
+  @doc "Guard to test if a stream id is locally originated"
+  defguard is_local_stream(last_local_stream_id, stream_id)
+           when rem(last_local_stream_id, 2) == rem(stream_id, 2)
+
   @doc """
   Starts a new stream fot the provided connection
   """
-  @spec new(id(), integer) :: t
+  @spec new(id(), window_size()) :: t
   def new(
         id,
         window_size
@@ -89,7 +91,7 @@ defmodule Ankh.HTTP2.Stream do
   @doc """
   Adjusts the stream window size
   """
-  @spec adjust_window_size(t(), integer, integer) :: t()
+  @spec adjust_window_size(t(), window_size(), window_size()) :: t()
   def adjust_window_size(
         %{id: id, window_size: prev_window_size} = stream,
         old_window_size,

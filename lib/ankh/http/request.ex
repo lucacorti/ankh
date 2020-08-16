@@ -154,4 +154,21 @@ defmodule Ankh.HTTP.Request do
 
     set_query(request, query)
   end
+
+  @spec validate_body(t()) :: {:ok, t()} | :error
+  def validate_body(%{body: body} = request) do
+    with content_length when not is_nil(content_length) <-
+           request
+           |> fetch_header_values("content-length")
+           |> List.first(),
+         data_length when data_length != content_length <-
+           body
+           |> IO.iodata_length()
+           |> Integer.to_string() do
+      {:ok, request}
+    else
+      _ ->
+        :error
+    end
+  end
 end
