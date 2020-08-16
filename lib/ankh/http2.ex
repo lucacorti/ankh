@@ -298,8 +298,8 @@ defmodule Ankh.HTTP2 do
     do: process_send_queue(%{protocol | send_queue: :queue.in(frame, send_queue)})
 
   defp process_send_queue(%{send_queue: send_queue} = protocol) do
-    Stream.resource(
-      fn -> {protocol, send_queue} end,
+    fn -> {protocol, send_queue} end
+    |> Stream.resource(
       fn {protocol, queue} ->
         with {:value, frame} <- :queue.peek(queue),
              max_frame_size when max_frame_size > 0 <- frame_size_for(protocol, frame),
@@ -364,11 +364,10 @@ defmodule Ankh.HTTP2 do
         with {:ok, %{window_size: window_size} = protocol, %{window_size: stream_window_size}}
              when window_size - length >= 0 and stream_window_size - length >= 0 <-
                get_stream(protocol, stream_id),
-             {:ok, protocol} <- transmit_frame(protocol, frame) do
+             {:ok, protocol} <- send_stream_frame(protocol, frame) do
           {:cont, {:ok, protocol, frames}}
         else
-          {:ok, %{window_size: window_size}, %{window_size: stream_window_size}}
-          when window_size - length <= 0 or stream_window_size - length <= 0 ->
+          {:ok, protocol, _stream} ->
             {:cont, {:ok, protocol, [frame | frames]}}
 
           {:error, _reason} = error ->
@@ -376,7 +375,7 @@ defmodule Ankh.HTTP2 do
         end
 
       frame, {:ok, protocol, frames} ->
-        case transmit_frame(protocol, frame) do
+        case send_stream_frame(protocol, frame) do
           {:ok, protocol} ->
             {:cont, {:ok, protocol, frames}}
 
@@ -386,7 +385,7 @@ defmodule Ankh.HTTP2 do
     end)
   end
 
-  defp transmit_frame(
+  defp send_stream_frame(
          %{socket: socket, streams: streams, transport: transport} = protocol,
          %{stream_id: stream_id} = frame
        ) do
