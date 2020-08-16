@@ -81,4 +81,21 @@ defmodule Ankh.HTTP.Response do
   end
 
   def fetch_body(%__MODULE__{body_fetched: true} = response), do: response
+
+  @spec validate_body(t()) :: {:ok, t()} | :error
+  def validate_body(%{body: body} = request) do
+    with content_length when not is_nil(content_length) <-
+           request
+           |> fetch_header_values("content-length")
+           |> List.first(),
+         data_length when data_length != content_length <-
+           body
+           |> IO.iodata_length()
+           |> Integer.to_string() do
+      {:ok, request}
+    else
+      _ ->
+        :error
+    end
+  end
 end
