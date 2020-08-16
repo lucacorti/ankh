@@ -12,7 +12,7 @@ defmodule Ankh.Mixfile do
       package: package(),
       deps: deps(),
       dialyzer: [
-        plt_add_deps: :project,
+        plt_add_deps: :apps_direct,
         ignore_warnings: ".dialyzer.ignore-warnings"
       ]
     ]
@@ -27,7 +27,7 @@ defmodule Ankh.Mixfile do
   end
 
   def application do
-    [applications: [:logger, :ssl], mod: {Ankh, []}]
+    [extra_applications: [:crypto, :logger, :ssl], mod: {Ankh, []}]
   end
 
   defp deps do
