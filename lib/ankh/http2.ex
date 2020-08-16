@@ -316,7 +316,7 @@ defmodule Ankh.HTTP2 do
 
             {[protocol], {protocol, :queue.new()}}
 
-          max_frame_size when is_integer(max_frame_size) ->
+          max_frame_size when is_integer(max_frame_size) and max_frame_size <= 0 ->
             {:halt, protocol}
 
           :empty ->
@@ -598,7 +598,7 @@ defmodule Ankh.HTTP2 do
       {:ok, protocol, responses}
     else
       {:error, reason}
-      when reason in [:protocol_error, :compression_error, :stream_closed] ->
+      when reason in [:protocol_error, :compression_error, :stream_closed, :refused_stream] ->
         {:error, reason}
 
       {:error, reason} ->
@@ -613,10 +613,10 @@ defmodule Ankh.HTTP2 do
          new_state
        )
        when new_state in @active_stream_states do
-    max_concurrent_streams = Keyword.get(send_settings, :max_concurrent_streams)
-
-    case concurrent_streams do
-      count when count < max_concurrent_streams ->
+    send_settings
+    |> Keyword.get(:max_concurrent_streams)
+    |> case do
+      max_concurrent_streams when max_concurrent_streams > concurrent_streams ->
         {:ok, %{protocol | concurrent_streams: concurrent_streams + 1}}
 
       _ ->
@@ -627,9 +627,9 @@ defmodule Ankh.HTTP2 do
   defp check_stream_limit(
          %{concurrent_streams: concurrent_streams} = protocol,
          old_state,
-         new_state
+         _new_state
        )
-       when old_state in @active_stream_states and new_state not in @active_stream_states,
+       when old_state in @active_stream_states,
        do: {:ok, %{protocol | concurrent_streams: concurrent_streams - 1}}
 
   defp check_stream_limit(protocol, _old_state, _new_state), do: {:ok, protocol}
