@@ -3,8 +3,8 @@ defmodule AnkhTest do
 
   require Logger
 
-  alias Ankh.HTTP
-  alias Ankh.HTTP.Request
+  alias Ankh.{HTTP, TLS}
+  alias HTTP.Request
 
   doctest Ankh
 
@@ -18,7 +18,7 @@ defmodule AnkhTest do
     assert {:ok, protocol} =
              url
              |> URI.parse()
-             |> HTTP.connect()
+             |> HTTP.connect(%TLS{})
 
     assert {:ok, protocol, reference} = HTTP.request(protocol, request)
 

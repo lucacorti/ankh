@@ -3,6 +3,10 @@ defmodule Ankh.HTTP do
   Ankh HTTP public API
   """
 
+  alias Ankh.{HTTP, HTTP2, Protocol, Transport}
+  alias HTTP.{Request, Response}
+  alias HTTP2.Error
+
   @typedoc "HTTP body"
   @type body :: iodata()
 
@@ -18,8 +22,13 @@ defmodule Ankh.HTTP do
   @typedoc "HTTP Headers"
   @type headers :: [header()]
 
-  alias Ankh.{HTTP, HTTP2, Protocol, Transport}
-  alias HTTP.{Request, Response}
+  @type msg_type :: :headers | :data | :push_promise
+
+  @type complete :: boolean()
+
+  @type msg ::
+          {msg_type, reference, iodata(), complete()}
+          | {:error, reference, Error.t(), complete()}
 
   @doc """
   Accepts an HTTP connection
@@ -29,9 +38,9 @@ defmodule Ankh.HTTP do
   """
   @spec accept(URI.t(), Transport.t(), Transport.options()) ::
           {:ok, Protocol.t()} | {:error, any()}
-  def accept(uri, socket, options \\ []) do
-    with {:ok, protocol} <- HTTP2.new(options),
-         {:ok, protocol} <- HTTP2.accept(protocol, uri, socket, options),
+  def accept(uri, transport, options \\ []) do
+    with {:ok, protocol} <- Protocol.new(%HTTP2{}, options),
+         {:ok, protocol} <- Protocol.accept(protocol, uri, transport, options),
          do: {:ok, protocol}
   end
 
@@ -41,10 +50,11 @@ defmodule Ankh.HTTP do
   After establishing the connection, `request` can be user to send request to the server and
   `stream` can be used to receive receive responses.
   """
-  @spec connect(URI.t(), Transport.options()) :: {:ok, Protocol.t()} | {:error, any()}
-  def connect(uri, options \\ []) do
-    with {:ok, protocol} <- HTTP2.new(options),
-         {:ok, protocol} <- HTTP2.connect(protocol, uri, options),
+  @spec connect(URI.t(), Transport.t(), Transport.options()) ::
+          {:ok, Protocol.t()} | {:error, any()}
+  def connect(uri, transport, options \\ []) do
+    with {:ok, protocol} <- Protocol.new(%HTTP2{}, options),
+         {:ok, protocol} <- Protocol.connect(protocol, uri, transport, options),
          do: {:ok, protocol}
   end
 
@@ -56,7 +66,7 @@ defmodule Ankh.HTTP do
   @spec request(Protocol.t(), Request.t()) ::
           {:ok, Protocol.t(), Protocol.request_ref()} | {:error, any()}
   def request(protocol, request) do
-    HTTP2.request(protocol, request)
+    Protocol.request(protocol, request)
   end
 
   @doc """
@@ -67,7 +77,7 @@ defmodule Ankh.HTTP do
   @spec respond(Protocol.t(), Protocol.request_ref(), Response.t()) ::
           {:ok, Protocol.t()} | {:error, any()}
   def respond(protocol, reference, response) do
-    HTTP2.respond(protocol, reference, response)
+    Protocol.respond(protocol, reference, response)
   end
 
   @doc """
@@ -75,7 +85,7 @@ defmodule Ankh.HTTP do
   """
   @spec stream(Protocol.t(), any()) :: {:ok, Protocol.t(), any()} | {:error, any()}
   def stream(protocol, msg) do
-    HTTP2.stream(protocol, msg)
+    Protocol.stream(protocol, msg)
   end
 
   @doc """
@@ -83,7 +93,7 @@ defmodule Ankh.HTTP do
   """
   @spec close(Protocol.t()) :: :ok | {:error, any()}
   def close(protocol) do
-    HTTP2.close(protocol)
+    Protocol.close(protocol)
   end
 
   @doc """
@@ -91,6 +101,67 @@ defmodule Ankh.HTTP do
   """
   @spec error(Protocol.t()) :: :ok | {:error, any()}
   def error(protocol) do
-    HTTP2.error(protocol)
+    Protocol.error(protocol)
+  end
+
+  @spec put_header(Request.t() | Response.t(), HTTP.header_name(), HTTP.header_value()) ::
+          Request.t() | Response.t()
+  def put_header(%{headers: headers} = response, name, value),
+    do: %{response | headers: [{String.downcase(name), value} | headers]}
+
+  @spec put_headers(Request.t() | Response.t(), HTTP.headers()) :: Request.t() | Response.t()
+  def put_headers(response, headers),
+    do:
+      Enum.reduce(headers, response, fn {header, value}, acc -> put_header(acc, header, value) end)
+
+  @spec put_trailer(Request.t() | Response.t(), HTTP.header_name(), HTTP.header_value()) ::
+          Request.t() | Response.t()
+  def put_trailer(%{trailers: trailers} = response, name, value),
+    do: %{response | trailers: [{String.downcase(name), value} | trailers]}
+
+  @spec put_trailers(Request.t() | Response.t(), HTTP.headers()) :: Request.t() | Response.t()
+  def put_trailers(response, trailers) do
+    Enum.reduce(trailers, response, fn {header, value}, acc ->
+      put_trailer(acc, header, value)
+    end)
+  end
+
+  @spec validate_body(Request.t() | Response.t()) :: {:ok, Request.t() | Response.t()} | :error
+  def validate_body(%{body: body} = request) do
+    with content_length when not is_nil(content_length) <-
+           request
+           |> fetch_header_values("content-length")
+           |> List.first(),
+         data_length when data_length != content_length <-
+           body
+           |> IO.iodata_length()
+           |> Integer.to_string() do
+      :error
+    else
+      _ ->
+        {:ok, request}
+    end
+  end
+
+  @spec fetch_header_values(Request.t() | Response.t(), HTTP.header_name()) :: [
+          HTTP.header_value()
+        ]
+  def fetch_header_values(%{headers: headers}, name), do: fetch_values(headers, name)
+
+  @spec fetch_trailer_values(Request.t() | Response.t(), HTTP.header_name()) :: [
+          HTTP.header_value()
+        ]
+  def fetch_trailer_values(%{trailers: trailers}, name), do: fetch_values(trailers, name)
+
+  defp fetch_values(headers, name) do
+    headers
+    |> Enum.reduce([], fn
+      {^name, value}, acc ->
+        [value | acc]
+
+      _, acc ->
+        acc
+    end)
+    |> Enum.reverse()
   end
 end

@@ -1,12 +1,12 @@
-defmodule Ankh.Protocol do
+defprotocol Ankh.Protocol do
   @moduledoc """
   Protocol behavior
   """
-  alias Ankh.Transport
+  alias Ankh.{HTTP, Transport}
   alias Ankh.HTTP.{Request, Response}
 
   @typedoc "Ankh protocol"
-  @type t :: any()
+  @type t :: struct()
 
   @typedoc "Protocol options"
   @type options :: Keyword.t()
@@ -17,41 +17,49 @@ defmodule Ankh.Protocol do
   @doc """
   Accepts a client connection
   """
-  @callback accept(t(), URI.t(), Transport.t(), Transport.options()) ::
-              {:ok, t()} | {:error, any()}
+  @spec accept(t(), URI.t(), Transport.t(), Transport.options()) ::
+          {:ok, t()} | {:error, any()}
+  def accept(protocol, uri, transport, options)
 
   @doc """
   Closes the connection
   """
-  @callback close(t()) :: :ok | {:error, any()}
+  @spec close(t()) :: :ok | {:error, any()}
+  def close(protocol)
 
   @doc """
   Connects to an host
   """
-  @callback connect(t(), URI.t(), Transport.options()) :: {:ok, t()} | {:error, any()}
+  @spec connect(t(), URI.t(), Transport.t(), Transport.options()) :: {:ok, t()} | {:error, any()}
+  def connect(protocol, uri, transport, options)
 
   @doc """
   Reports a connection error
   """
-  @callback error(t()) :: {:ok, t()}
+  @spec error(t()) :: :ok | {:error, any()}
+  def error(protocol)
 
   @doc """
   Creates a new connection
   """
-  @callback new(options()) :: t()
-
-  @doc """
-  Sends a request
-  """
-  @callback request(t(), Request.t()) :: {:ok, t(), request_ref()} | {:error, any()}
+  @spec new(t(), options()) :: {:ok, t()} | {:error, any()}
+  def new(protocol, options)
 
   @doc """
   Sends a response
   """
-  @callback respond(t(), request_ref(), Response.t()) :: {:ok, t()} | {:error, any()}
+  @spec respond(t(), request_ref(), Response.t()) :: {:ok, t()} | {:error, any()}
+  def respond(protocol, request_reference, response)
+
+  @doc """
+  Sends a request
+  """
+  @spec request(t(), Request.t()) :: {:ok, t(), request_ref()} | {:error, any()}
+  def request(protocol, request)
 
   @doc """
   Handles transport messages
   """
-  @callback stream(t(), any()) :: {:ok, binary, t()} | {:error, any()}
+  @spec stream(t(), any()) :: {:ok, t(), [HTTP.msg()]} | {:error, any()}
+  def stream(protocol, messages)
 end

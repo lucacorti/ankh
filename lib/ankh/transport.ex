@@ -1,49 +1,52 @@
-defmodule Ankh.Transport do
+defprotocol Ankh.Transport do
   @moduledoc """
   Transport behavior
   """
 
   @typedoc "Transport socket"
-  @type t :: any()
+  @type t :: struct()
 
   @typedoc "Size"
   @type size :: non_neg_integer()
 
   @typedoc """
   Transport options
-
-  Valid options are:
-    - `transport_opts`: Transport options for the tcp/ssl erlang modules
   """
   @type options :: Keyword.t()
 
   @doc """
   Accepts a client connection
   """
-  @callback accept(t, Keyword.t()) :: {:ok, t} | {:error, any()}
+  @spec accept(t, Keyword.t()) :: {:ok, t()} | {:error, any()}
+  def accept(transport, options)
 
   @doc """
   Closes the connection
   """
-  @callback close(t()) :: :ok | {:error, any()}
+  @spec close(t()) :: {:ok, t()} | {:error, any()}
+  def close(transport)
 
   @doc """
   Connects to an host
   """
-  @callback connect(URI.t(), timeout(), Keyword.t()) :: {:ok, t()} | {:error, any()}
+  @spec connect(t(), URI.t(), timeout(), options()) :: {:ok, t()} | {:error, any()}
+  def connect(transport, uri, timeout, options)
 
   @doc """
   Sends data
   """
-  @callback send(t(), iodata()) :: :ok | {:error, any()}
+  @spec send(t(), iodata()) :: :ok | {:error, any()}
+  def send(transport, data)
 
   @doc """
   Receives data
   """
-  @callback recv(t(), size(), timeout()) :: {:ok, iodata()} | {:error, any()}
+  @spec recv(t(), size(), timeout()) :: {:ok, iodata()} | {:error, any()}
+  def recv(transport, size, timeout)
 
   @doc """
   Handles transport messages
   """
-  @callback handle_msg(any()) :: {:ok, iodata()} | {:error, any()}
+  @spec handle_msg(t(), any()) :: {:ok, iodata()} | {:error, any()}
+  def handle_msg(transport, message)
 end

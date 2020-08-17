@@ -7,7 +7,8 @@ defmodule Ankh.HTTP2.Stream do
 
   require Logger
 
-  alias Ankh.HTTP2.{Error, Frame}
+  alias Ankh.HTTP
+  alias Ankh.HTTP2.Frame
 
   alias Frame.{
     Continuation,
@@ -38,12 +39,6 @@ defmodule Ankh.HTTP2.Stream do
   @type hbf_type :: :headers | :push_promise | nil
 
   @type end_stream :: boolean()
-
-  @type data_type :: :headers | :data | :push_promise
-
-  @type data ::
-          {data_type, reference, iodata(), end_stream()}
-          | {:error, reference, Error.t(), end_stream()}
 
   @type window_size :: integer()
 
@@ -111,7 +106,7 @@ defmodule Ankh.HTTP2.Stream do
   @doc """
   Process a received frame for the stream
   """
-  @spec recv(t(), Frame.t()) :: {:ok, t(), data | nil} | {:error, any()}
+  @spec recv(t(), Frame.t()) :: {:ok, t(), HTTP.msg() | nil} | {:error, any()}
   def recv(%{id: id, reference: reference, state: state} = stream, frame) do
     case recv_frame(%{state: new_state, recv_hbf_type: recv_hbf_type} = stream, frame) do
       {:ok, stream} ->

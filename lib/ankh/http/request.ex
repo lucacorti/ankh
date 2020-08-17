@@ -56,44 +56,6 @@ defmodule Ankh.HTTP.Request do
     |> set_query(query)
   end
 
-  @spec put_header(t(), HTTP.header_name(), HTTP.header_value()) :: t()
-  def put_header(%{headers: headers} = request, header, value),
-    do: %{request | headers: [{String.downcase(header), value} | headers]}
-
-  @spec put_headers(t(), HTTP.headers()) :: t()
-  def put_headers(request, headers),
-    do:
-      Enum.reduce(headers, request, fn {header, value}, acc -> put_header(acc, header, value) end)
-
-  @spec put_trailer(t(), HTTP.header_name(), HTTP.header_value()) :: t()
-  def put_trailer(%{trailers: trailers} = request, header, value),
-    do: %{request | trailers: [{String.downcase(header), value} | trailers]}
-
-  @spec put_trailers(t(), HTTP.headers()) :: t()
-  def put_trailers(request, trailers) do
-    Enum.reduce(trailers, request, fn {header, value}, acc ->
-      put_trailer(acc, header, value)
-    end)
-  end
-
-  @spec fetch_header_values(t(), HTTP.header_name()) :: [HTTP.header_value()]
-  def fetch_header_values(%{headers: headers}, name), do: fetch_values(headers, name)
-
-  @spec fetch_trailer_values(t(), HTTP.header_name()) :: [HTTP.header_value()]
-  def fetch_trailer_values(%{trailers: trailers}, name), do: fetch_values(trailers, name)
-
-  defp fetch_values(headers, name) do
-    headers
-    |> Enum.reduce([], fn
-      {^name, value}, acc ->
-        [value | acc]
-
-      _, acc ->
-        acc
-    end)
-    |> Enum.reverse()
-  end
-
   @spec put_options(t(), options()) :: t()
   def put_options(%{options: options} = request, new_options),
     do: %{request | options: Keyword.merge(options, new_options)}
@@ -155,20 +117,24 @@ defmodule Ankh.HTTP.Request do
     set_query(request, query)
   end
 
+  @spec fetch_header_values(t(), HTTP.header_name()) :: [HTTP.header_value()]
+  defdelegate fetch_header_values(request, header), to: HTTP
+
+  @spec fetch_trailer_values(t(), HTTP.header_name()) :: [HTTP.header_value()]
+  defdelegate fetch_trailer_values(request, trailer), to: HTTP
+
+  @spec put_header(t(), HTTP.header_name(), HTTP.header_value()) :: t()
+  defdelegate put_header(request, name, value), to: HTTP
+
+  @spec put_headers(t(), HTTP.headers()) :: t()
+  defdelegate put_headers(request, headers), to: HTTP
+
+  @spec put_trailer(t(), HTTP.header_name(), HTTP.header_value()) :: t()
+  defdelegate put_trailer(request, name, value), to: HTTP
+
+  @spec put_trailers(t(), HTTP.headers()) :: t()
+  defdelegate put_trailers(request, trailers), to: HTTP
+
   @spec validate_body(t()) :: {:ok, t()} | :error
-  def validate_body(%{body: body} = request) do
-    with content_length when not is_nil(content_length) <-
-           request
-           |> fetch_header_values("content-length")
-           |> List.first(),
-         data_length when data_length != content_length <-
-           body
-           |> IO.iodata_length()
-           |> Integer.to_string() do
-      {:ok, request}
-    else
-      _ ->
-        :error
-    end
-  end
+  defdelegate validate_body(request), to: HTTP
 end
