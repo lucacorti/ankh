@@ -2,10 +2,11 @@ defmodule Ankh.HTTP2 do
   @moduledoc """
   HTTP/2 implementation
   """
-  alias Ankh.HTTP2.Frame
-  alias Ankh.HTTP2.Stream, as: HTTP2Stream
-  alias Ankh.{Protocol, Transport}
+
+  alias Ankh.{HTTP2, Protocol, Transport}
   alias HPack.Table
+  alias HTTP2.Frame
+  alias HTTP2.Stream, as: HTTP2Stream
 
   @opaque t :: %__MODULE__{
             buffer: iodata(),
@@ -179,9 +180,7 @@ defmodule Ankh.HTTP2 do
     end
 
     def respond(protocol, reference, %{status: status} = response) do
-      response =
-        response
-        |> Response.put_header(":status", Integer.to_string(status))
+      response = Response.put_header(response, ":status", Integer.to_string(status))
 
       with {:ok, protocol, stream} <- get_stream(protocol, reference),
            {:ok, protocol} <- send_headers(protocol, stream, response),
