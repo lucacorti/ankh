@@ -103,4 +103,65 @@ defmodule Ankh.HTTP do
   def error(protocol) do
     Protocol.error(protocol)
   end
+
+  @spec put_header(Request.t() | Response.t(), HTTP.header_name(), HTTP.header_value()) ::
+          Request.t() | Response.t()
+  def put_header(%{headers: headers} = response, name, value),
+    do: %{response | headers: [{String.downcase(name), value} | headers]}
+
+  @spec put_headers(Request.t() | Response.t(), HTTP.headers()) :: Request.t() | Response.t()
+  def put_headers(response, headers),
+    do:
+      Enum.reduce(headers, response, fn {header, value}, acc -> put_header(acc, header, value) end)
+
+  @spec put_trailer(Request.t() | Response.t(), HTTP.header_name(), HTTP.header_value()) ::
+          Request.t() | Response.t()
+  def put_trailer(%{trailers: trailers} = response, name, value),
+    do: %{response | trailers: [{String.downcase(name), value} | trailers]}
+
+  @spec put_trailers(Request.t() | Response.t(), HTTP.headers()) :: Request.t() | Response.t()
+  def put_trailers(response, trailers) do
+    Enum.reduce(trailers, response, fn {header, value}, acc ->
+      put_trailer(acc, header, value)
+    end)
+  end
+
+  @spec validate_body(Request.t() | Response.t()) :: {:ok, Request.t() | Response.t()} | :error
+  def validate_body(%{body: body} = request) do
+    with content_length when not is_nil(content_length) <-
+           request
+           |> fetch_header_values("content-length")
+           |> List.first(),
+         data_length when data_length != content_length <-
+           body
+           |> IO.iodata_length()
+           |> Integer.to_string() do
+      :error
+    else
+      _ ->
+        {:ok, request}
+    end
+  end
+
+  @spec fetch_header_values(Request.t() | Response.t(), HTTP.header_name()) :: [
+          HTTP.header_value()
+        ]
+  def fetch_header_values(%{headers: headers}, name), do: fetch_values(headers, name)
+
+  @spec fetch_trailer_values(Request.t() | Response.t(), HTTP.header_name()) :: [
+          HTTP.header_value()
+        ]
+  def fetch_trailer_values(%{trailers: trailers}, name), do: fetch_values(trailers, name)
+
+  defp fetch_values(headers, name) do
+    headers
+    |> Enum.reduce([], fn
+      {^name, value}, acc ->
+        [value | acc]
+
+      _, acc ->
+        acc
+    end)
+    |> Enum.reverse()
+  end
 end
