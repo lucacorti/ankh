@@ -70,7 +70,8 @@ defmodule Ankh.HTTP2 do
 
     @tls_options versions: [:"tlsv1.2"],
                  ciphers:
-                   :ssl.cipher_suites(:default, :"tlsv1.2")
+                   :default
+                   |> :ssl.cipher_suites(:"tlsv1.2")
                    |> :ssl.filter_cipher_suites(
                      key_exchange: &(&1 == :ecdhe_rsa or &1 == :ecdhe_ecdsa),
                      mac: &(&1 == :aead)
