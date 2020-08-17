@@ -92,10 +92,10 @@ defmodule Ankh.HTTP.Response do
            body
            |> IO.iodata_length()
            |> Integer.to_string() do
-      {:ok, request}
+      :error
     else
       _ ->
-        :error
+        {:ok, request}
     end
   end
 end

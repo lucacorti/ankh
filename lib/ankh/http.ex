@@ -3,6 +3,10 @@ defmodule Ankh.HTTP do
   Ankh HTTP public API
   """
 
+  alias Ankh.{HTTP, HTTP2, Protocol, Transport}
+  alias HTTP.{Request, Response}
+  alias HTTP2.Error
+
   @typedoc "HTTP body"
   @type body :: iodata()
 
@@ -18,8 +22,13 @@ defmodule Ankh.HTTP do
   @typedoc "HTTP Headers"
   @type headers :: [header()]
 
-  alias Ankh.{HTTP, HTTP2, Protocol, Transport}
-  alias HTTP.{Request, Response}
+  @type msg_type :: :headers | :data | :push_promise
+
+  @type complete :: boolean()
+
+  @type msg ::
+          {msg_type, reference, iodata(), complete()}
+          | {:error, reference, Error.t(), complete()}
 
   @doc """
   Accepts an HTTP connection
@@ -29,9 +38,9 @@ defmodule Ankh.HTTP do
   """
   @spec accept(URI.t(), Transport.t(), Transport.options()) ::
           {:ok, Protocol.t()} | {:error, any()}
-  def accept(uri, socket, options \\ []) do
-    with {:ok, protocol} <- HTTP2.new(options),
-         {:ok, protocol} <- HTTP2.accept(protocol, uri, socket, options),
+  def accept(uri, transport, options \\ []) do
+    with {:ok, protocol} <- Protocol.new(%HTTP2{}, options),
+         {:ok, protocol} <- Protocol.accept(protocol, uri, transport, options),
          do: {:ok, protocol}
   end
 
@@ -41,10 +50,11 @@ defmodule Ankh.HTTP do
   After establishing the connection, `request` can be user to send request to the server and
   `stream` can be used to receive receive responses.
   """
-  @spec connect(URI.t(), Transport.options()) :: {:ok, Protocol.t()} | {:error, any()}
-  def connect(uri, options \\ []) do
-    with {:ok, protocol} <- HTTP2.new(options),
-         {:ok, protocol} <- HTTP2.connect(protocol, uri, options),
+  @spec connect(URI.t(), Transport.t(), Transport.options()) ::
+          {:ok, Protocol.t()} | {:error, any()}
+  def connect(uri, transport, options \\ []) do
+    with {:ok, protocol} <- Protocol.new(%HTTP2{}, options),
+         {:ok, protocol} <- Protocol.connect(protocol, uri, transport, options),
          do: {:ok, protocol}
   end
 
@@ -56,7 +66,7 @@ defmodule Ankh.HTTP do
   @spec request(Protocol.t(), Request.t()) ::
           {:ok, Protocol.t(), Protocol.request_ref()} | {:error, any()}
   def request(protocol, request) do
-    HTTP2.request(protocol, request)
+    Protocol.request(protocol, request)
   end
 
   @doc """
@@ -67,7 +77,7 @@ defmodule Ankh.HTTP do
   @spec respond(Protocol.t(), Protocol.request_ref(), Response.t()) ::
           {:ok, Protocol.t()} | {:error, any()}
   def respond(protocol, reference, response) do
-    HTTP2.respond(protocol, reference, response)
+    Protocol.respond(protocol, reference, response)
   end
 
   @doc """
@@ -75,7 +85,7 @@ defmodule Ankh.HTTP do
   """
   @spec stream(Protocol.t(), any()) :: {:ok, Protocol.t(), any()} | {:error, any()}
   def stream(protocol, msg) do
-    HTTP2.stream(protocol, msg)
+    Protocol.stream(protocol, msg)
   end
 
   @doc """
@@ -83,7 +93,7 @@ defmodule Ankh.HTTP do
   """
   @spec close(Protocol.t()) :: :ok | {:error, any()}
   def close(protocol) do
-    HTTP2.close(protocol)
+    Protocol.close(protocol)
   end
 
   @doc """
@@ -91,6 +101,6 @@ defmodule Ankh.HTTP do
   """
   @spec error(Protocol.t()) :: :ok | {:error, any()}
   def error(protocol) do
-    HTTP2.error(protocol)
+    Protocol.error(protocol)
   end
 end
