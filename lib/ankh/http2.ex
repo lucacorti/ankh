@@ -101,9 +101,9 @@ defmodule Ankh.HTTP2 do
       settings = Keyword.get(options, :settings, [])
       recv_settings = Keyword.merge(@default_settings, settings)
 
-      with {:ok, send_hpack} <- Table.start_link(@initial_header_table_size),
+      with send_hpack <- Table.new(@initial_header_table_size),
            header_table_size <- Keyword.get(recv_settings, :header_table_size),
-           {:ok, recv_hpack} <- Table.start_link(header_table_size) do
+           recv_hpack <- Table.new(header_table_size) do
         {:ok,
          %{
            protocol
@@ -340,8 +340,12 @@ defmodule Ankh.HTTP2 do
       headers
       |> HPack.encode(send_hpack)
       |> case do
-        {:ok, hbf} ->
-          process_queued_frame(protocol, %{frame | payload: %{payload | hbf: hbf}}, size)
+        {:ok, send_hpack, hbf} ->
+          process_queued_frame(
+            %{protocol | send_hpack: send_hpack},
+            %{frame | payload: %{payload | hbf: hbf}},
+            size
+          )
 
         _ ->
           {:error, :compression_error}
@@ -434,10 +438,10 @@ defmodule Ankh.HTTP2 do
     defp send_settings(%{send_hpack: send_hpack, recv_settings: recv_settings} = protocol) do
       header_table_size = Keyword.get(recv_settings, :header_table_size)
 
-      with :ok <- Table.resize(header_table_size, send_hpack),
+      with {:ok, send_hpack} <- Table.resize(header_table_size, send_hpack),
            {:ok, protocol} <-
              send_frame(protocol, %Settings{payload: %Settings.Payload{settings: recv_settings}}) do
-        {:ok, protocol}
+        {:ok, %{protocol | send_hpack: send_hpack}}
       else
         _ ->
           {:error, :compression_error}
@@ -710,10 +714,14 @@ defmodule Ankh.HTTP2 do
 
       hbf
       |> Enum.join()
-      |> HPack.decode(recv_hpack, max_header_table_size + 1)
+      |> HPack.decode(recv_hpack, max_header_table_size)
       |> case do
-        {:ok, headers} ->
-          {:ok, protocol, [{type, ref, headers, end_stream} | responses]}
+        {:ok, recv_hpack, headers} ->
+          {
+            :ok,
+            %{protocol | recv_hpack: recv_hpack},
+            [{type, ref, headers, end_stream} | responses]
+          }
 
         _ ->
           {:error, :compression_error}
@@ -759,9 +767,9 @@ defmodule Ankh.HTTP2 do
 
     defp adjust_header_table_size(%{send_hpack: send_hpack} = protocol, old_size, new_size) do
       new_size
-      |> Table.resize(send_hpack, old_size + 1)
+      |> Table.resize(send_hpack, old_size)
       |> case do
-        :ok -> {:ok, protocol}
+        {:ok, send_hpack} -> {:ok, %{protocol | send_hpack: send_hpack}}
         _ -> {:error, :compression_error}
       end
     end
