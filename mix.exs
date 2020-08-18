@@ -32,8 +32,8 @@ defmodule Ankh.Mixfile do
 
   defp deps do
     [
-      {:hpack, "~> 2.0.0"},
       {:castore, "~> 0.1.0"},
+      {:hpack, "~> 3.0.0"},
       {:plug, "~> 1.0"},
       {:credo, "~> 1.0", only: [:dev], runtime: false},
       {:ex_doc, "~> 0.22.0", only: [:dev], runtime: false},
