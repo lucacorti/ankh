@@ -49,4 +49,10 @@ defprotocol Ankh.Transport do
   """
   @spec handle_msg(t(), any()) :: {:ok, iodata()} | {:error, any()}
   def handle_msg(transport, message)
+
+  @doc """
+  Returns the transport negotiated protocol if any, nil otherwise
+  """
+  @spec negotiated_protocol(t()) :: {:ok, String.t()} | {:error, :protocol_not_negotiated}
+  def negotiated_protocol(transport)
 end

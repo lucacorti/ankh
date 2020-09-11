@@ -3,22 +3,22 @@ defmodule AnkhTest do
 
   require Logger
 
-  alias Ankh.{HTTP, TLS}
+  alias Ankh.HTTP
   alias HTTP.Request
 
   doctest Ankh
 
   test "Ankh HTTP request" do
     # url = "https://localhost:8000"
-    # url = "https://www.fantacast.it"
-    url = "https://www.google.com"
+    url = "https://www.fantacast.it"
+    # url = "https://www.google.com"
 
     request = Request.new()
 
     assert {:ok, protocol} =
              url
              |> URI.parse()
-             |> HTTP.connect(%TLS{})
+             |> HTTP.connect()
 
     assert {:ok, protocol, reference} = HTTP.request(protocol, request)
 

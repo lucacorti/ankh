@@ -69,16 +69,6 @@ defmodule Ankh.HTTP2 do
 
     @active_stream_states [:open, :half_closed_local, :half_closed_remote]
 
-    @tls_options versions: [:"tlsv1.2"],
-                 ciphers:
-                   :default
-                   |> :ssl.cipher_suites(:"tlsv1.2")
-                   |> :ssl.filter_cipher_suites(
-                     key_exchange: &(&1 == :ecdhe_rsa or &1 == :ecdhe_ecdsa),
-                     mac: &(&1 == :aead)
-                   ),
-                 alpn_advertised_protocols: ["h2"]
-
     @connection_preface "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
 
     @initial_header_table_size 4_096
@@ -120,9 +110,9 @@ defmodule Ankh.HTTP2 do
       {timeout, options} = Keyword.pop(options, :connect_timeout, 5_000)
 
       with {:ok, @connection_preface} <- Transport.recv(transport, 24, timeout),
-           {:ok, protocol} <- send_settings(%{protocol | transport: transport}),
-           {:ok, transport} <- Transport.accept(transport, options) do
-        {:ok, %{protocol | transport: transport, uri: uri}}
+           {:ok, transport} <- Transport.accept(transport, options),
+           {:ok, protocol} <- send_settings(%{protocol | transport: transport}) do
+        {:ok, %{protocol | uri: uri}}
       else
         _ ->
           {:error, :protocol_error}
@@ -134,14 +124,8 @@ defmodule Ankh.HTTP2 do
            do: {:ok, %{protocol | transport: transport}}
     end
 
-    def connect(protocol, uri, transport, options) do
-      {timeout, options} =
-        options
-        |> Keyword.merge(@tls_options)
-        |> Keyword.pop(:timeout, 5_000)
-
-      with {:ok, transport} <- Transport.connect(transport, uri, timeout, options),
-           :ok <- Transport.send(transport, @connection_preface),
+    def connect(protocol, uri, transport) do
+      with :ok <- Transport.send(transport, @connection_preface),
            {:ok, protocol} <-
              send_settings(%{protocol | last_local_stream_id: -1, transport: transport, uri: uri}) do
         {:ok, protocol}

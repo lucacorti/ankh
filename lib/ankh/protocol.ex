@@ -30,8 +30,8 @@ defprotocol Ankh.Protocol do
   @doc """
   Connects to an host
   """
-  @spec connect(t(), URI.t(), Transport.t(), Transport.options()) :: {:ok, t()} | {:error, any()}
-  def connect(protocol, uri, transport, options)
+  @spec connect(t(), URI.t(), Transport.t()) :: {:ok, t()} | {:error, any()}
+  def connect(protocol, uri, transport)
 
   @doc """
   Reports a connection error

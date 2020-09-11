@@ -3,7 +3,7 @@ defmodule Ankh.HTTP do
   Ankh HTTP public API
   """
 
-  alias Ankh.{HTTP, HTTP2, Protocol, Transport}
+  alias Ankh.{HTTP, HTTP2, Protocol, TLS, Transport}
   alias HTTP.{Request, Response}
   alias HTTP2.Error
 
@@ -30,6 +30,16 @@ defmodule Ankh.HTTP do
           {msg_type, reference, iodata(), complete()}
           | {:error, reference, Error.t(), complete()}
 
+  @tls_options versions: [:"tlsv1.2"],
+               ciphers:
+                 :default
+                 |> :ssl.cipher_suites(:"tlsv1.2")
+                 |> :ssl.filter_cipher_suites(
+                   key_exchange: &(&1 == :ecdhe_rsa or &1 == :ecdhe_ecdsa),
+                   mac: &(&1 == :aead)
+                 ),
+               alpn_advertised_protocols: ["h2"]
+
   @doc """
   Accepts an HTTP connection
 
@@ -50,13 +60,32 @@ defmodule Ankh.HTTP do
   After establishing the connection, `request` can be user to send request to the server and
   `stream` can be used to receive receive responses.
   """
-  @spec connect(URI.t(), Transport.t(), Transport.options()) ::
+  @spec connect(URI.t(), Transport.options()) ::
           {:ok, Protocol.t()} | {:error, any()}
-  def connect(uri, transport, options \\ []) do
-    with {:ok, protocol} <- Protocol.new(%HTTP2{}, options),
-         {:ok, protocol} <- Protocol.connect(protocol, uri, transport, options),
+  def connect(uri, options \\ [])
+
+  def connect(%URI{scheme: "https"} = uri, options) do
+    {timeout, options} =
+      options
+      |> Keyword.merge(@tls_options)
+      |> Keyword.pop(:timeout, 5_000)
+
+    with {:ok, transport} <- Transport.connect(%TLS{}, uri, timeout, options),
+         do: connect(uri, transport, options)
+  end
+
+  def connect(_uri, _options), do: {:error, :unsupported_uri_scheme}
+
+  defp connect(uri, transport, options) do
+    with {:ok, negotiated_protocol} <- Transport.negotiated_protocol(transport),
+         {:ok, protocol} <- protocol_for_id(negotiated_protocol),
+         {:ok, protocol} <- Protocol.new(protocol, options),
+         {:ok, protocol} <- Protocol.connect(protocol, uri, transport),
          do: {:ok, protocol}
   end
+
+  defp protocol_for_id("h2"), do: {:ok, %HTTP2{}}
+  defp protocol_for_id(_id), do: {:error, :unsupported_protocol_identifier}
 
   @doc """
   Sends a request to a server
@@ -65,9 +94,7 @@ defmodule Ankh.HTTP do
   """
   @spec request(Protocol.t(), Request.t()) ::
           {:ok, Protocol.t(), Protocol.request_ref()} | {:error, any()}
-  def request(protocol, request) do
-    Protocol.request(protocol, request)
-  end
+  def request(protocol, request), do: Protocol.request(protocol, request)
 
   @doc """
   Sends a response to a client request
@@ -76,49 +103,45 @@ defmodule Ankh.HTTP do
   """
   @spec respond(Protocol.t(), Protocol.request_ref(), Response.t()) ::
           {:ok, Protocol.t()} | {:error, any()}
-  def respond(protocol, reference, response) do
-    Protocol.respond(protocol, reference, response)
-  end
+  def respond(protocol, reference, response), do: Protocol.respond(protocol, reference, response)
 
   @doc """
-  Receives data form the the other and and returns responses
+  Receives data form the the peer and returns responses
   """
   @spec stream(Protocol.t(), any()) :: {:ok, Protocol.t(), any()} | {:error, any()}
-  def stream(protocol, msg) do
-    Protocol.stream(protocol, msg)
-  end
+  def stream(protocol, msg), do: Protocol.stream(protocol, msg)
 
   @doc """
   Closes the underlying connection
   """
   @spec close(Protocol.t()) :: :ok | {:error, any()}
-  def close(protocol) do
-    Protocol.close(protocol)
-  end
+  def close(protocol), do: Protocol.close(protocol)
 
   @doc """
   Reports a connection error
   """
   @spec error(Protocol.t()) :: :ok | {:error, any()}
-  def error(protocol) do
-    Protocol.error(protocol)
-  end
+  def error(protocol), do: Protocol.error(protocol)
 
+  @doc false
   @spec put_header(Request.t() | Response.t(), HTTP.header_name(), HTTP.header_value()) ::
           Request.t() | Response.t()
   def put_header(%{headers: headers} = response, name, value),
     do: %{response | headers: [{String.downcase(name), value} | headers]}
 
+  @doc false
   @spec put_headers(Request.t() | Response.t(), HTTP.headers()) :: Request.t() | Response.t()
   def put_headers(response, headers),
     do:
       Enum.reduce(headers, response, fn {header, value}, acc -> put_header(acc, header, value) end)
 
+  @doc false
   @spec put_trailer(Request.t() | Response.t(), HTTP.header_name(), HTTP.header_value()) ::
           Request.t() | Response.t()
   def put_trailer(%{trailers: trailers} = response, name, value),
     do: %{response | trailers: [{String.downcase(name), value} | trailers]}
 
+  @doc false
   @spec put_trailers(Request.t() | Response.t(), HTTP.headers()) :: Request.t() | Response.t()
   def put_trailers(response, trailers) do
     Enum.reduce(trailers, response, fn {header, value}, acc ->
@@ -126,6 +149,7 @@ defmodule Ankh.HTTP do
     end)
   end
 
+  @doc false
   @spec validate_body(Request.t() | Response.t()) :: {:ok, Request.t() | Response.t()} | :error
   def validate_body(%{body: body} = request) do
     with content_length when not is_nil(content_length) <-
@@ -143,11 +167,13 @@ defmodule Ankh.HTTP do
     end
   end
 
+  @doc false
   @spec fetch_header_values(Request.t() | Response.t(), HTTP.header_name()) :: [
           HTTP.header_value()
         ]
   def fetch_header_values(%{headers: headers}, name), do: fetch_values(headers, name)
 
+  @doc false
   @spec fetch_trailer_values(Request.t() | Response.t(), HTTP.header_name()) :: [
           HTTP.header_value()
         ]
