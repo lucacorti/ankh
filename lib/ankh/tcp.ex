@@ -40,7 +40,7 @@ defmodule Ankh.TCP do
       with :ok <- :gen_tcp.close(socket), do: {:ok, %{tcp | socket: nil}}
     end
 
-    def handle_msg(_tcp, {:gen_tcp, socket, data}) do
+    def handle_msg(_tcp, {:tcp, socket, data}) do
       with :ok <- :inet.setopts(socket, active: :once), do: {:ok, data}
     end
 

@@ -9,6 +9,9 @@ defprotocol Ankh.Transport do
   @typedoc "Size"
   @type size :: non_neg_integer()
 
+  @typedoc "Socket"
+  @type socket :: any()
+
   @typedoc """
   Transport options
   """

@@ -106,7 +106,7 @@ defmodule Ankh.HTTP2.Stream do
   @doc """
   Process a received frame for the stream
   """
-  @spec recv(t(), Frame.t()) :: {:ok, t(), HTTP.msg() | nil} | {:error, any()}
+  @spec recv(t(), Frame.t()) :: {:ok, t(), HTTP.response() | nil} | {:error, any()}
   def recv(%{id: id, reference: reference, state: state} = stream, frame) do
     case recv_frame(%{state: new_state, recv_hbf_type: recv_hbf_type} = stream, frame) do
       {:ok, stream} ->
