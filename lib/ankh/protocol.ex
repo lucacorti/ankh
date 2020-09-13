@@ -22,12 +22,6 @@ defprotocol Ankh.Protocol do
   def accept(protocol, uri, transport, options)
 
   @doc """
-  Closes the connection
-  """
-  @spec close(t()) :: :ok | {:error, any()}
-  def close(protocol)
-
-  @doc """
   Connects to an host
   """
   @spec connect(t(), URI.t(), Transport.t()) :: {:ok, t()} | {:error, any()}
@@ -60,6 +54,6 @@ defprotocol Ankh.Protocol do
   @doc """
   Handles transport messages
   """
-  @spec stream(t(), any()) :: {:ok, t(), [HTTP.msg()]} | {:error, any()}
+  @spec stream(t(), any()) :: {:ok, t(), [HTTP.response()]} | {:error, any()}
   def stream(protocol, messages)
 end

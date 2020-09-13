@@ -1,7 +1,5 @@
 defmodule Ankh.HTTP2 do
-  @moduledoc """
-  HTTP/2 implementation
-  """
+  @moduledoc false
 
   alias Ankh.{HTTP2, Protocol, Transport}
   alias HPack.Table
@@ -117,11 +115,6 @@ defmodule Ankh.HTTP2 do
         _ ->
           {:error, :protocol_error}
       end
-    end
-
-    def close(%{transport: transport} = protocol) do
-      with {:ok, transport} <- Transport.close(transport),
-           do: {:ok, %{protocol | transport: transport}}
     end
 
     def connect(protocol, uri, transport) do
@@ -432,7 +425,7 @@ defmodule Ankh.HTTP2 do
       end
     end
 
-    defp send_error(%{last_stream_id: last_stream_id} = protocol, reason) do
+    defp send_error(%{last_stream_id: last_stream_id, transport: transport} = protocol, reason) do
       with {:ok, _protocol} <-
              send_frame(protocol, %GoAway{
                payload: %GoAway.Payload{
@@ -440,7 +433,7 @@ defmodule Ankh.HTTP2 do
                  error_code: reason
                }
              }),
-           {:ok, _protocol} <- close(protocol) do
+           {:ok, _transport} <- Transport.close(transport) do
         {:error, reason}
       end
     end
@@ -671,9 +664,8 @@ defmodule Ankh.HTTP2 do
            protocol,
            _frame,
            responses,
-           {type, _ref, [<<>>], _end_stream} = response
-         )
-         when type in [:headers, :push_promise],
+           {_type, _ref, [<<>>], _end_stream} = response
+         ),
          do: {:ok, protocol, [response | responses]}
 
     defp process_stream_response(

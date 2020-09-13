@@ -3,7 +3,7 @@ defmodule Ankh.HTTP do
   Ankh HTTP public API
   """
 
-  alias Ankh.{HTTP, HTTP2, Protocol, TLS, Transport}
+  alias Ankh.{HTTP, HTTP1, HTTP2, Protocol, TCP, TLS, Transport}
   alias HTTP.{Request, Response}
   alias HTTP2.Error
 
@@ -22,13 +22,14 @@ defmodule Ankh.HTTP do
   @typedoc "HTTP Headers"
   @type headers :: [header()]
 
-  @type msg_type :: :headers | :data | :push_promise
-
   @type complete :: boolean()
 
-  @type msg ::
-          {msg_type, reference, iodata(), complete()}
+  @type response ::
+          {:data, reference(), iodata(), complete()}
+          | {:headers | :push_promise, reference(), headers(), complete()}
           | {:error, reference, Error.t(), complete()}
+
+  @tcp_options []
 
   @tls_options versions: [:"tlsv1.2"],
                ciphers:
@@ -46,13 +47,27 @@ defmodule Ankh.HTTP do
   After accepting the connection, `stream` will receive requests from the client and `respond`
   can be used to send replies.
   """
-  @spec accept(URI.t(), Transport.t(), Transport.options()) ::
+  @spec accept(URI.t(), Transport.socket(), Transport.options()) ::
           {:ok, Protocol.t()} | {:error, any()}
-  def accept(uri, transport, options \\ []) do
-    with {:ok, protocol} <- Protocol.new(%HTTP2{}, options),
+  def accept(uri, socket, options \\ [])
+
+  def accept(%URI{scheme: "https"} = uri, socket, options) do
+    transport = %TLS{socket: socket}
+
+    with {:ok, negotiated_protocol} <- Transport.negotiated_protocol(transport),
+         {:ok, protocol} <- protocol_for_id(negotiated_protocol),
+         {:ok, protocol} <- Protocol.new(protocol, options),
          {:ok, protocol} <- Protocol.accept(protocol, uri, transport, options),
          do: {:ok, protocol}
   end
+
+  def accept(%URI{scheme: "http"} = uri, socket, options) do
+    with {:ok, protocol} <- Protocol.new(%HTTP1{}, options),
+         {:ok, protocol} <- Protocol.accept(protocol, uri, %TCP{socket: socket}, options),
+         do: {:ok, protocol}
+  end
+
+  def accept(_uri, _socket, _options), do: {:error, :unsupported_uri_scheme}
 
   @doc """
   Establishes an HTTP connection to a server
@@ -71,20 +86,29 @@ defmodule Ankh.HTTP do
       |> Keyword.pop(:timeout, 5_000)
 
     with {:ok, transport} <- Transport.connect(%TLS{}, uri, timeout, options),
-         do: connect(uri, transport, options)
-  end
-
-  def connect(_uri, _options), do: {:error, :unsupported_uri_scheme}
-
-  defp connect(uri, transport, options) do
-    with {:ok, negotiated_protocol} <- Transport.negotiated_protocol(transport),
+         {:ok, negotiated_protocol} <- Transport.negotiated_protocol(transport),
          {:ok, protocol} <- protocol_for_id(negotiated_protocol),
          {:ok, protocol} <- Protocol.new(protocol, options),
          {:ok, protocol} <- Protocol.connect(protocol, uri, transport),
          do: {:ok, protocol}
   end
 
+  def connect(%URI{scheme: "http"} = uri, options) do
+    {timeout, options} =
+      options
+      |> Keyword.merge(@tcp_options)
+      |> Keyword.pop(:timeout, 5_000)
+
+    with {:ok, transport} <- Transport.connect(%TCP{}, uri, timeout, options),
+         {:ok, protocol} <- Protocol.new(%HTTP1{}, options),
+         {:ok, protocol} <- Protocol.connect(protocol, uri, transport),
+         do: {:ok, protocol}
+  end
+
+  def connect(_uri, _options), do: {:error, :unsupported_uri_scheme}
+
   defp protocol_for_id("h2"), do: {:ok, %HTTP2{}}
+  defp protocol_for_id("http/1.1"), do: {:ok, %HTTP1{}}
   defp protocol_for_id(_id), do: {:error, :unsupported_protocol_identifier}
 
   @doc """
@@ -115,7 +139,10 @@ defmodule Ankh.HTTP do
   Closes the underlying connection
   """
   @spec close(Protocol.t()) :: :ok | {:error, any()}
-  def close(protocol), do: Protocol.close(protocol)
+  def close(%{transport: transport} = protocol) do
+    with {:ok, transport} <- Transport.close(transport),
+         do: {:ok, %{protocol | transport: transport}}
+  end
 
   @doc """
   Reports a connection error
