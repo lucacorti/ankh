@@ -44,7 +44,7 @@ defmodule Ankh.HTTP2 do
             window_size: 0
 
   defimpl Protocol do
-    alias Ankh.Transport
+    alias Ankh.{HTTP, Transport}
     alias Ankh.HTTP.{Request, Response}
     alias Ankh.HTTP2.Frame
     alias Ankh.HTTP2.Stream, as: HTTP2Stream
@@ -718,11 +718,28 @@ defmodule Ankh.HTTP2 do
 
     defp send_data(protocol, _stream, %{body: []}), do: {:ok, protocol}
 
-    defp send_data(protocol, %{id: stream_id}, %{body: body, trailers: trailers}) do
+    defp send_data(protocol, %{id: stream_id}, %{body: [_data | _rest] = data, trailers: trailers}) do
+      Enum.reduce_while(data, {:ok, protocol}, fn data, {:ok, protocol} ->
+        case send_frame(protocol, %Data{
+               stream_id: stream_id,
+               flags: %Data.Flags{end_stream: Enum.empty?(trailers)},
+               payload: %Data.Payload{data: data}
+             }) do
+          {:ok, protocol} ->
+            {:cont, {:ok, protocol}}
+
+          {:error, _reason} = error ->
+            {:halt, error}
+        end
+      end)
+    end
+
+    defp send_data(protocol, %{id: stream_id}, %{body: data, trailers: trailers})
+         when is_binary(data) do
       send_frame(protocol, %Data{
         stream_id: stream_id,
         flags: %Data.Flags{end_stream: Enum.empty?(trailers)},
-        payload: %Data.Payload{data: body}
+        payload: %Data.Payload{data: data}
       })
     end
 
@@ -802,7 +819,7 @@ defmodule Ankh.HTTP2 do
       do: {:error, :protocol_error}
 
     defp do_validate_headers(protocol, [{name, _value} | rest], stats, _end_pseudo) do
-      if header_name_valid?(name) do
+      if HTTP.header_name_valid?(name) do
         do_validate_headers(protocol, rest, stats, true)
       else
         {:error, :protocol_error}
@@ -815,14 +832,11 @@ defmodule Ankh.HTTP2 do
       do: {:error, :protocol_error}
 
     defp do_validate_trailers(protocol, [{name, _value} | rest]) do
-      if header_name_valid?(name) do
+      if HTTP.header_name_valid?(name) do
         do_validate_trailers(protocol, rest)
       else
         {:error, :protocol_error}
       end
     end
-
-    defp header_name_valid?(name),
-      do: name =~ ~r(^[[:lower:][:digit:]\!\#\$\%\&\'\*\+\-\.\^\_\`\|\~]+$)
   end
 end
