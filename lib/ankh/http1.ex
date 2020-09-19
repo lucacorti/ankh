@@ -4,29 +4,29 @@ defmodule Ankh.HTTP1 do
   alias Ankh.{HTTP, Protocol, Transport}
   alias HTTP.Response
 
-  @typep state :: :status | :headers | :body | :trailers
-
   @opaque t :: %__MODULE__{
+            mode: :client | :server,
             reference: reference(),
-            state: state(),
+            state: :status | :headers | :body | :trailers,
             transport: Transport.t(),
             uri: URI.t()
           }
-  defstruct reference: nil, transport: nil, uri: nil, state: :status
+
+  defstruct mode: nil, reference: nil, transport: nil, uri: nil, state: :status
 
   defimpl Protocol do
     alias Ankh.HTTP.{Request, Response}
 
     @crlf "\r\n"
 
-    def new(protocol, _options), do: {:ok, protocol}
-
     def accept(protocol, uri, transport, options) do
       with {:ok, transport} <- Transport.accept(transport, options),
-           do: {:ok, %{protocol | transport: transport, uri: uri}}
+           do: {:ok, %{protocol | mode: :server, transport: transport, uri: uri}}
     end
 
-    def connect(protocol, uri, transport), do: {:ok, %{protocol | transport: transport, uri: uri}}
+    def connect(protocol, uri, transport, _options),
+      do: {:ok, %{protocol | mode: :client, transport: transport, uri: uri}}
+
     def error(_protocol), do: :ok
 
     def request(%{transport: transport, uri: %URI{host: host}} = protocol, request) do
@@ -36,10 +36,12 @@ defmodule Ankh.HTTP1 do
       reference = make_ref()
 
       with :ok <-
-             Transport.send(transport, [Atom.to_string(method), " ", path, " ", "HTTP/1.1", @crlf]),
+             Transport.send(transport, [Atom.to_string(method), " ", path, " HTTP/1.1", @crlf]),
            :ok <- send_headers(transport, headers),
+           :ok <- Transport.send(transport, @crlf),
            :ok <- send_body(transport, body),
-           :ok <- send_trailers(transport, trailers),
+           :ok <- Transport.send(transport, @crlf),
+           :ok <- send_headers(transport, trailers),
            :ok <- Transport.send(transport, @crlf),
            do: {:ok, %{protocol | reference: reference}, reference}
     end
@@ -56,7 +58,7 @@ defmodule Ankh.HTTP1 do
            :ok <- Transport.send(transport, @crlf),
            :ok <- send_body(transport, body),
            :ok <- Transport.send(transport, @crlf),
-           :ok <- send_trailers(transport, trailers),
+           :ok <- send_headers(transport, trailers),
            :ok <- Transport.send(transport, @crlf),
            do: {:ok, %{protocol | reference: make_ref()}}
     end
@@ -64,7 +66,7 @@ defmodule Ankh.HTTP1 do
     def stream(%{transport: transport} = protocol, msg) do
       with {:ok, data} <- Transport.handle_msg(transport, msg),
            {:ok, protocol, responses} <- process_data(protocol, data) do
-        {:ok, protocol, Enum.reverse(responses)}
+        {:ok, protocol, responses}
       end
     end
 
@@ -76,12 +78,6 @@ defmodule Ankh.HTTP1 do
 
     defp send_body(transport, body), do: Transport.send(transport, body)
 
-    defp send_trailers(transport, trailers) do
-      Enum.reduce(trailers, :ok, fn {name, value}, _acc ->
-        Transport.send(transport, [name, ": ", value, @crlf])
-      end)
-    end
-
     defp process_data(protocol, data) do
       data
       |> String.split(@crlf)
@@ -90,17 +86,21 @@ defmodule Ankh.HTTP1 do
 
     defp process_lines([], protocol, responses), do: {:ok, protocol, Enum.reverse(responses)}
 
-    defp process_lines(["HTTP/1.1 " <> status | rest], %{state: :status} = protocol, responses) do
+    defp process_lines(
+           ["HTTP/1.1 " <> status | rest],
+           %{mode: :client, state: :status} = protocol,
+           responses
+         ) do
       case String.split(status, " ", parts: 2) do
         [status, _string] ->
           process_headers(rest, %{protocol | state: :headers}, [{":status", status}], responses)
 
         _ ->
-          {:error, :invalid_status}
+          {:error, :invalid_response}
       end
     end
 
-    defp process_lines([request | rest], %{state: :status} = protocol, responses) do
+    defp process_lines([request | rest], %{mode: :server, state: :status} = protocol, responses) do
       case String.split(request, " ", parts: 3) do
         [method, path, "HTTP/1.1"] ->
           process_headers(
@@ -114,6 +114,8 @@ defmodule Ankh.HTTP1 do
           {:error, :invalid_request}
       end
     end
+
+    defp process_lines(_lines, _protocol, _responses), do: {:error, :invalid_request}
 
     defp process_headers(
            [] = lines,

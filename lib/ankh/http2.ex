@@ -9,6 +9,7 @@ defmodule Ankh.HTTP2 do
   @opaque t :: %__MODULE__{
             buffer: iodata(),
             concurrent_streams: non_neg_integer(),
+            headers_type: :headers | :trailers,
             last_stream_id: HTTP2Stream.id(),
             last_local_stream_id: HTTP2Stream.id(),
             last_remote_stream_id: HTTP2Stream.id(),
@@ -26,6 +27,7 @@ defmodule Ankh.HTTP2 do
           }
   defstruct buffer: <<>>,
             concurrent_streams: 0,
+            headers_type: :headers,
             last_stream_id: 0,
             last_local_stream_id: 0,
             last_remote_stream_id: 0,
@@ -85,7 +87,30 @@ defmodule Ankh.HTTP2 do
       max_header_list_size: 128
     ]
 
-    def new(protocol, options) do
+    def accept(protocol, uri, transport, options) do
+      {timeout, options} = Keyword.pop(options, :connect_timeout, 5_000)
+
+      with {:ok, protocol} <- new(protocol, options),
+           {:ok, @connection_preface} <- Transport.recv(transport, 24, timeout),
+           {:ok, transport} <- Transport.accept(transport, options),
+           {:ok, protocol} <- send_settings(%{protocol | transport: transport, uri: uri}) do
+        {:ok, protocol}
+      else
+        _ ->
+          {:error, :protocol_error}
+      end
+    end
+
+    def connect(protocol, uri, transport, options) do
+      with {:ok, protocol} <- new(protocol, options),
+           :ok <- Transport.send(transport, @connection_preface),
+           {:ok, protocol} <-
+             send_settings(%{protocol | last_local_stream_id: -1, transport: transport, uri: uri}) do
+        {:ok, protocol}
+      end
+    end
+
+    defp new(protocol, options) do
       settings = Keyword.get(options, :settings, [])
       recv_settings = Keyword.merge(@default_settings, settings)
       header_table_size = Keyword.get(recv_settings, :header_table_size)
@@ -101,27 +126,6 @@ defmodule Ankh.HTTP2 do
              recv_settings: recv_settings,
              window_size: @initial_window_size
          }}
-      end
-    end
-
-    def accept(protocol, uri, transport, options) do
-      {timeout, options} = Keyword.pop(options, :connect_timeout, 5_000)
-
-      with {:ok, @connection_preface} <- Transport.recv(transport, 24, timeout),
-           {:ok, transport} <- Transport.accept(transport, options),
-           {:ok, protocol} <- send_settings(%{protocol | transport: transport}) do
-        {:ok, %{protocol | uri: uri}}
-      else
-        _ ->
-          {:error, :protocol_error}
-      end
-    end
-
-    def connect(protocol, uri, transport) do
-      with :ok <- Transport.send(transport, @connection_preface),
-           {:ok, protocol} <-
-             send_settings(%{protocol | last_local_stream_id: -1, transport: transport, uri: uri}) do
-        {:ok, protocol}
       end
     end
 
@@ -682,11 +686,13 @@ defmodule Ankh.HTTP2 do
       |> HPack.decode(recv_hpack, max_header_table_size)
       |> case do
         {:ok, recv_hpack, headers} ->
-          {
-            :ok,
-            %{protocol | recv_hpack: recv_hpack},
-            [{type, ref, headers, end_stream} | responses]
-          }
+          with {:ok, protocol} <- validate_headers(protocol, headers) do
+            {
+              :ok,
+              %{protocol | recv_hpack: recv_hpack},
+              [{type, ref, headers, end_stream} | responses]
+            }
+          end
 
         _ ->
           {:error, :compression_error}
@@ -752,5 +758,71 @@ defmodule Ankh.HTTP2 do
 
       {:ok, %{protocol | streams: streams}}
     end
+
+    defp validate_headers(%{headers_type: :headers} = protocol, headers),
+      do: do_validate_headers(protocol, headers, %{}, false)
+
+    defp validate_headers(protocol, headers), do: do_validate_trailers(protocol, headers)
+
+    defp do_validate_headers(
+           %{headers_type: :headers} = protocol,
+           [],
+           %{method: true, scheme: true, authority: true, path: true},
+           _end_pseudo
+         ),
+         do: {:ok, %{protocol | headers_type: :trailers}}
+
+    defp do_validate_headers(_protocol, [], _stats, _end_pseudo), do: {:error, :protocol_error}
+
+    defp do_validate_headers(protocol, [{":" <> pseudo_header, value} | rest], stats, false)
+         when pseudo_header in ["authority", "method", "path", "scheme"] do
+      pseudo = String.to_existing_atom(pseudo_header)
+
+      if value == "" or Map.get(stats, pseudo, false) do
+        {:error, :protocol_error}
+      else
+        stats = Map.put(stats, pseudo, true)
+        do_validate_headers(protocol, rest, stats, false)
+      end
+    end
+
+    defp do_validate_headers(
+           _protocol,
+           [{":" <> _pseaudo_header, _value} | _rest],
+           _stats,
+           _end_pseudo
+         ),
+         do: {:error, :protocol_error}
+
+    defp do_validate_headers(_protocol, [{"te", value} | _rest], _stats, _end_pseudo)
+         when value != "trailers",
+         do: {:error, :protocol_error}
+
+    defp do_validate_headers(_protocol, [{"connection", _value} | _rest], _stats, _end_pseudo),
+      do: {:error, :protocol_error}
+
+    defp do_validate_headers(protocol, [{name, _value} | rest], stats, _end_pseudo) do
+      if header_name_valid?(name) do
+        do_validate_headers(protocol, rest, stats, true)
+      else
+        {:error, :protocol_error}
+      end
+    end
+
+    defp do_validate_trailers(protocol, []), do: {:ok, protocol}
+
+    defp do_validate_trailers(_protocol, [{":" <> _trailer, _value} | _rest]),
+      do: {:error, :protocol_error}
+
+    defp do_validate_trailers(protocol, [{name, _value} | rest]) do
+      if header_name_valid?(name) do
+        do_validate_trailers(protocol, rest)
+      else
+        {:error, :protocol_error}
+      end
+    end
+
+    defp header_name_valid?(name),
+      do: name =~ ~r(^[[:lower:][:digit:]\!\#\$\%\&\'\*\+\-\.\^\_\`\|\~]+$)
   end
 end
