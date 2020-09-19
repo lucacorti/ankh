@@ -145,7 +145,7 @@ defmodule Ankh.HTTP1 do
          when state in [:headers, :trailers] do
       case String.split(header, ":", parts: 2) do
         [name, value] ->
-          process_headers(rest, protocol, [{name, value} | headers], responses)
+          process_headers(rest, protocol, [{name, String.trim(value)} | headers], responses)
 
         _body ->
           {:error, :invalid_headers}
