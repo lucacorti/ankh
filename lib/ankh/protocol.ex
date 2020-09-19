@@ -24,20 +24,14 @@ defprotocol Ankh.Protocol do
   @doc """
   Connects to an host
   """
-  @spec connect(t(), URI.t(), Transport.t()) :: {:ok, t()} | {:error, any()}
-  def connect(protocol, uri, transport)
+  @spec connect(t(), URI.t(), Transport.t(), Transport.options()) :: {:ok, t()} | {:error, any()}
+  def connect(protocol, uri, transport, options)
 
   @doc """
   Reports a connection error
   """
   @spec error(t()) :: :ok | {:error, any()}
   def error(protocol)
-
-  @doc """
-  Creates a new connection
-  """
-  @spec new(t(), options()) :: {:ok, t()} | {:error, any()}
-  def new(protocol, options)
 
   @doc """
   Sends a response
