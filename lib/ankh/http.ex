@@ -212,4 +212,8 @@ defmodule Ankh.HTTP do
     end)
     |> Enum.reverse()
   end
+
+  @spec header_name_valid?(header_name()) :: boolean()
+  def header_name_valid?(name),
+    do: name =~ ~r(^[[:lower:][:digit:]\!\#\$\%\&\'\*\+\-\.\^\_\`\|\~]+$)
 end
