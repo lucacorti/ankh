@@ -6,9 +6,7 @@ defmodule Ankh.Supervisor do
   end
 
   def init([]) do
-    [
-      {Registry, keys: :unique, name: Ankh.HTTP2.Frame.Registry}
-    ]
+    []
     |> Supervisor.init(strategy: :one_for_one)
   end
 end
