@@ -2,6 +2,7 @@ defmodule Ankh.HTTP1 do
   @moduledoc false
 
   alias Ankh.{HTTP, Protocol, Transport}
+  alias Plug.Conn.Status
   alias HTTP.Response
 
   @opaque t :: %__MODULE__{
@@ -52,8 +53,10 @@ defmodule Ankh.HTTP1 do
           body: body,
           trailers: trailers
         }) do
-      with :ok <-
-             Transport.send(transport, ["HTTP/1.1 ", Integer.to_string(status), " OK", @crlf]),
+      reason = Status.reason_phrase(status)
+      status = Integer.to_string(status)
+
+      with :ok <- Transport.send(transport, ["HTTP/1.1 ", status, " ", reason, @crlf]),
            :ok <- send_headers(transport, headers),
            :ok <- Transport.send(transport, @crlf),
            :ok <- send_body(transport, body),
