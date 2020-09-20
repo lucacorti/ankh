@@ -1,9 +1,8 @@
 defmodule Ankh.HTTP1 do
   @moduledoc false
 
-  alias Ankh.{HTTP, Protocol, Transport}
+  alias Ankh.{Protocol, Transport}
   alias Plug.Conn.Status
-  alias HTTP.Response
 
   @opaque t :: %__MODULE__{
             mode: :client | :server,
