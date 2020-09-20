@@ -1,13 +1,12 @@
 defmodule Ankh do
   @moduledoc """
-  Pure Elixir HTTP/2 implementation
+  Elixir HTTP implementation
 
-  This library implements HTTP/2 (https://tools.ietf.org/html/rfc7540).
-  The aim is to provide a solid foundation upon which clients and
-  eventually servers can be implemented providing higher layer features.
+  Ankh is a low level client and server HTTP implementation for Elixir. It includes primitives
+  allowing to build higher level clients and servers and implement different HTTP versions.
 
-  Ankh only supports HTTP/2 over TLS. Support for HTTP/2 over plaintext
-  TCP was intentionally left out.
+  Experimental HTTP/1 and HTTP/2 implementations are included, along with protocols enabling
+  relatively easy implementation of additional HTTP and transport variations.
   """
 
   use Application

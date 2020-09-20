@@ -196,7 +196,7 @@ defmodule Ankh.HTTP2 do
         {rest, {_length, type, _id, data}},
         {:ok, %{recv_hbf_type: recv_hbf_type} = protocol, responses} ->
           with {:ok, type} <- Frame.Registry.frame_for_type(protocol, type),
-               {:ok, frame} <- Frame.decode(struct(type), data),
+               {:ok, frame} <- Frame.decode(type, data),
                {:ok, protocol, responses} <- recv_frame(protocol, frame, responses) do
             {:cont, {:ok, %{protocol | buffer: rest}, responses}}
           else
