@@ -102,8 +102,8 @@ defmodule Ankh.HTTP do
 
   def connect(_uri, _options), do: {:error, :unsupported_uri_scheme}
 
-  defp protocol_for_id("h2"), do: {:ok, %HTTP2{}}
   defp protocol_for_id("http/1.1"), do: {:ok, %HTTP1{}}
+  defp protocol_for_id("h2"), do: {:ok, %HTTP2{}}
   defp protocol_for_id(_id), do: {:error, :unsupported_protocol_identifier}
 
   @doc """
