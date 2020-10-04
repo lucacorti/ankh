@@ -29,18 +29,6 @@ defmodule Ankh.HTTP do
           | {:headers | :push_promise, reference(), headers(), complete()}
           | {:error, reference, Error.t(), complete()}
 
-  @tcp_options []
-
-  @tls_options versions: [:"tlsv1.2"],
-               ciphers:
-                 :default
-                 |> :ssl.cipher_suites(:"tlsv1.2")
-                 |> :ssl.filter_cipher_suites(
-                   key_exchange: &(&1 == :ecdhe_rsa or &1 == :ecdhe_ecdsa),
-                   mac: &(&1 == :aead)
-                 ),
-               alpn_advertised_protocols: ["h2"]
-
   @doc """
   Accepts an HTTP connection
 
@@ -77,9 +65,15 @@ defmodule Ankh.HTTP do
   def connect(uri, options \\ [])
 
   def connect(%URI{scheme: "https"} = uri, options) do
+
+    {:ok, tls_options} = Plug.SSL.configure([cipher_suite: :strong, key: nil, cert: nil])
+    tls_options = tls_options
+      |> Keyword.take([:versions, :ciphers, :eccs])
+      |> Keyword.merge(alpn_advertised_protocols: ["h2", "http/1.1"])
+
     {timeout, options} =
       options
-      |> Keyword.merge(@tls_options)
+      |> Keyword.merge(tls_options)
       |> Keyword.pop(:timeout, 5_000)
 
     with {:ok, transport} <- Transport.connect(%TLS{}, uri, timeout, options),
@@ -92,7 +86,6 @@ defmodule Ankh.HTTP do
   def connect(%URI{scheme: "http"} = uri, options) do
     {timeout, options} =
       options
-      |> Keyword.merge(@tcp_options)
       |> Keyword.pop(:timeout, 5_000)
 
     with {:ok, transport} <- Transport.connect(%TCP{}, uri, timeout, options),
