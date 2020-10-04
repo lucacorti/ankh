@@ -65,9 +65,10 @@ defmodule Ankh.HTTP do
   def connect(uri, options \\ [])
 
   def connect(%URI{scheme: "https"} = uri, options) do
+    {:ok, tls_options} = Plug.SSL.configure(cipher_suite: :strong, key: nil, cert: nil)
 
-    {:ok, tls_options} = Plug.SSL.configure([cipher_suite: :strong, key: nil, cert: nil])
-    tls_options = tls_options
+    tls_options =
+      tls_options
       |> Keyword.take([:versions, :ciphers, :eccs])
       |> Keyword.merge(alpn_advertised_protocols: ["h2", "http/1.1"])
 
