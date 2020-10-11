@@ -38,11 +38,8 @@ defmodule Ankh.HTTP1 do
       with :ok <-
              Transport.send(transport, [Atom.to_string(method), " ", path, " HTTP/1.1", @crlf]),
            :ok <- send_headers(transport, headers),
-           :ok <- Transport.send(transport, @crlf),
            :ok <- send_body(transport, body),
-           :ok <- Transport.send(transport, @crlf),
            :ok <- send_headers(transport, trailers),
-           :ok <- Transport.send(transport, @crlf),
            do: {:ok, %{protocol | reference: reference}, reference}
     end
 
@@ -57,11 +54,8 @@ defmodule Ankh.HTTP1 do
 
       with :ok <- Transport.send(transport, ["HTTP/1.1 ", status, " ", reason, @crlf]),
            :ok <- send_headers(transport, headers),
-           :ok <- Transport.send(transport, @crlf),
            :ok <- send_body(transport, body),
-           :ok <- Transport.send(transport, @crlf),
            :ok <- send_headers(transport, trailers),
-           :ok <- Transport.send(transport, @crlf),
            do: {:ok, %{protocol | reference: make_ref()}}
     end
 
@@ -73,12 +67,17 @@ defmodule Ankh.HTTP1 do
     end
 
     defp send_headers(transport, headers) do
-      Enum.reduce(headers, :ok, fn {name, value}, _acc ->
-        Transport.send(transport, [name, ": ", value, @crlf])
-      end)
+      headers =
+        headers
+        |> Enum.reduce([@crlf], fn {name, value}, acc ->
+          [[name, ": ", value, @crlf] | acc]
+        end)
+        |> Enum.reverse()
+
+      Transport.send(transport, headers)
     end
 
-    defp send_body(transport, body), do: Transport.send(transport, body)
+    defp send_body(transport, body), do: Transport.send(transport, [body, @crlf])
 
     defp process_data(protocol, data) do
       data
