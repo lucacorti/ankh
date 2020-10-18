@@ -705,6 +705,16 @@ defmodule Ankh.HTTP2 do
     defp process_stream_response(protocol, _frame, responses, response),
       do: {:ok, protocol, [response | responses]}
 
+    defp validate_headers(%{headers_type: :headers} = protocol, headers) do
+      with :ok <- HTTP.validate_headers(headers, true, ["connection"]),
+           do: {:ok, %{protocol | headers_type: :trailers}}
+    end
+
+    defp validate_headers(protocol, trailers) do
+      with :ok <- HTTP.validate_trailers(trailers, true),
+           do: {:ok, protocol}
+    end
+
     defp send_headers(protocol, %{id: stream_id}, %{
            headers: headers,
            body: body
@@ -774,69 +784,6 @@ defmodule Ankh.HTTP2 do
         end)
 
       {:ok, %{protocol | streams: streams}}
-    end
-
-    defp validate_headers(%{headers_type: :headers} = protocol, headers),
-      do: do_validate_headers(protocol, headers, %{}, false)
-
-    defp validate_headers(protocol, headers), do: do_validate_trailers(protocol, headers)
-
-    defp do_validate_headers(
-           %{headers_type: :headers} = protocol,
-           [],
-           %{method: true, scheme: true, authority: true, path: true},
-           _end_pseudo
-         ),
-         do: {:ok, %{protocol | headers_type: :trailers}}
-
-    defp do_validate_headers(_protocol, [], _stats, _end_pseudo), do: {:error, :protocol_error}
-
-    defp do_validate_headers(protocol, [{":" <> pseudo_header, value} | rest], stats, false)
-         when pseudo_header in ["authority", "method", "path", "scheme"] do
-      pseudo = String.to_existing_atom(pseudo_header)
-
-      if value == "" or Map.get(stats, pseudo, false) do
-        {:error, :protocol_error}
-      else
-        stats = Map.put(stats, pseudo, true)
-        do_validate_headers(protocol, rest, stats, false)
-      end
-    end
-
-    defp do_validate_headers(
-           _protocol,
-           [{":" <> _pseaudo_header, _value} | _rest],
-           _stats,
-           _end_pseudo
-         ),
-         do: {:error, :protocol_error}
-
-    defp do_validate_headers(_protocol, [{"te", value} | _rest], _stats, _end_pseudo)
-         when value != "trailers",
-         do: {:error, :protocol_error}
-
-    defp do_validate_headers(_protocol, [{"connection", _value} | _rest], _stats, _end_pseudo),
-      do: {:error, :protocol_error}
-
-    defp do_validate_headers(protocol, [{name, _value} | rest], stats, _end_pseudo) do
-      if HTTP.header_name_valid?(name) do
-        do_validate_headers(protocol, rest, stats, true)
-      else
-        {:error, :protocol_error}
-      end
-    end
-
-    defp do_validate_trailers(protocol, []), do: {:ok, protocol}
-
-    defp do_validate_trailers(_protocol, [{":" <> _trailer, _value} | _rest]),
-      do: {:error, :protocol_error}
-
-    defp do_validate_trailers(protocol, [{name, _value} | rest]) do
-      if HTTP.header_name_valid?(name) do
-        do_validate_trailers(protocol, rest)
-      else
-        {:error, :protocol_error}
-      end
     end
   end
 end

@@ -15,7 +15,8 @@ defmodule Ankh.HTTP1 do
   defstruct mode: nil, reference: nil, transport: nil, uri: nil, state: :status
 
   defimpl Protocol do
-    alias Ankh.HTTP.{Request, Response}
+    alias Ankh.HTTP
+    alias HTTP.{Request, Response}
 
     @crlf "\r\n"
 
@@ -101,13 +102,21 @@ defmodule Ankh.HTTP1 do
       end
     end
 
-    defp process_lines([request | rest], %{mode: :server, state: :status} = protocol, responses) do
+    defp process_lines(
+           [request | rest],
+           %{mode: :server, state: :status, uri: %URI{scheme: scheme}} = protocol,
+           responses
+         ) do
       case String.split(request, " ", parts: 3) do
         [method, path, "HTTP/1.1"] ->
           process_headers(
             rest,
             %{protocol | state: :headers},
-            [{":method", method}, {":path", path}],
+            [
+              {":method", method},
+              {":path", path},
+              {":scheme", scheme}
+            ],
             responses
           )
 
@@ -121,21 +130,29 @@ defmodule Ankh.HTTP1 do
     defp process_headers(
            [] = lines,
            %{reference: reference, state: :trailers} = protocol,
-           headers,
+           trailers,
            responses
-         ),
-         do: process_lines(lines, protocol, [{:headers, reference, headers, true} | responses])
+         ) do
+      trailers = Enum.reverse(trailers)
+
+      with :ok <- HTTP.validate_trailers(trailers, false),
+           do: process_lines(lines, protocol, [{:headers, reference, trailers, true} | responses])
+    end
 
     defp process_headers(
            ["" | rest],
            %{reference: reference, state: :headers} = protocol,
            headers,
            responses
-         ),
-         do:
-           process_body(rest, %{protocol | state: :body}, [], [
-             {:headers, reference, Enum.reverse(headers), false} | responses
-           ])
+         ) do
+      headers = Enum.reverse(headers)
+
+      with :ok <- HTTP.validate_headers(headers, false),
+           do:
+             process_body(rest, %{protocol | state: :body}, [], [
+               {:headers, reference, headers, false} | responses
+             ])
+    end
 
     defp process_headers(
            [header | rest],
@@ -146,9 +163,18 @@ defmodule Ankh.HTTP1 do
          when state in [:headers, :trailers] do
       case String.split(header, ":", parts: 2) do
         [name, value] ->
+          {name, value} =
+            case String.downcase(name) do
+              "host" ->
+                {":authority", value}
+
+              _ ->
+                {name, value}
+            end
+
           process_headers(rest, protocol, [{name, String.trim(value)} | headers], responses)
 
-        _body ->
+        _line ->
           {:error, :invalid_headers}
       end
     end
