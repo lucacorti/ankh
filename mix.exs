@@ -40,7 +40,7 @@ defmodule Ankh.Mixfile do
       {:plug, "~> 1.0"},
       {:credo, "~> 1.0", only: [:dev], runtime: false},
       {:ex_doc, "~> 0.23.0", only: [:dev], runtime: false},
-      {:dialyxir, "~> 1.0.0", only: [:dev], runtime: false}
+      {:dialyxir, "~> 1.1.0", only: [:dev], runtime: false}
     ]
   end
 end
