@@ -50,11 +50,13 @@ defmodule Ankh.HTTP2 do
     alias Ankh.HTTP2.Stream, as: HTTP2Stream
 
     alias Frame.{
+      Continuation,
       Data,
       GoAway,
       Headers,
       Ping,
       Priority,
+      PushPromise,
       RstStream,
       Settings,
       Splittable,
@@ -195,7 +197,7 @@ defmodule Ankh.HTTP2 do
 
         {rest, {_length, type, _id, data}},
         {:ok, %{recv_hbf_type: recv_hbf_type} = protocol, responses} ->
-          with {:ok, type} <- Frame.Registry.frame_for_type(protocol, type),
+          with {:ok, type} <- frame_for_type(protocol, type),
                {:ok, frame} <- Frame.decode(type, data),
                {:ok, protocol, responses} <- recv_frame(protocol, frame, responses) do
             {:cont, {:ok, %{protocol | buffer: rest}, responses}}
@@ -212,6 +214,18 @@ defmodule Ankh.HTTP2 do
           end
       end)
     end
+
+    defp frame_for_type(_protocol, 0x0), do: {:ok, %Data{}}
+    defp frame_for_type(_protocol, 0x1), do: {:ok, %Headers{}}
+    defp frame_for_type(_protocol, 0x2), do: {:ok, %Priority{}}
+    defp frame_for_type(_protocol, 0x3), do: {:ok, %RstStream{}}
+    defp frame_for_type(_protocol, 0x4), do: {:ok, %Settings{}}
+    defp frame_for_type(_protocol, 0x5), do: {:ok, %PushPromise{}}
+    defp frame_for_type(_protocol, 0x6), do: {:ok, %Ping{}}
+    defp frame_for_type(_protocol, 0x7), do: {:ok, %GoAway{}}
+    defp frame_for_type(_protocol, 0x8), do: {:ok, %WindowUpdate{}}
+    defp frame_for_type(_protocol, 0x9), do: {:ok, %Continuation{}}
+    defp frame_for_type(_protocol, _type), do: {:error, :not_found}
 
     defp get_stream(%{references: references} = protocol, reference)
          when is_reference(reference),

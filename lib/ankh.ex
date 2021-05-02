@@ -8,9 +8,4 @@ defmodule Ankh do
   Experimental HTTP/1 and HTTP/2 implementations are included, along with protocols enabling
   relatively easy implementation of additional HTTP and transport variations.
   """
-
-  use Application
-
-  @doc false
-  def start(_type, _args), do: Ankh.Supervisor.start_link()
 end

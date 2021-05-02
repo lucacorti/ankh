@@ -28,7 +28,6 @@ defmodule Ankh.Mixfile do
 
   def application do
     [
-      mod: {Ankh, []},
       extra_applications: [:crypto, :inets, :logger, :ssl]
     ]
   end
