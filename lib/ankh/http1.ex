@@ -1,5 +1,5 @@
 defmodule Ankh.HTTP1 do
-  @moduledoc false
+  @moduledoc "HTTP/1 protocol implementation"
 
   alias Ankh.{Protocol, Transport}
   alias Plug.Conn.Status

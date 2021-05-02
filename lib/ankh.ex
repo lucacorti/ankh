@@ -7,5 +7,7 @@ defmodule Ankh do
 
   Experimental HTTP/1 and HTTP/2 implementations are included, along with protocols enabling
   relatively easy implementation of additional HTTP and transport variations.
+
+  See `Ankh.HTTP` for the main protocol independent APIs.
   """
 end

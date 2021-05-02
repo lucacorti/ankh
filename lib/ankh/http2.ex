@@ -1,5 +1,5 @@
 defmodule Ankh.HTTP2 do
-  @moduledoc false
+  @moduledoc "HTTP/2 protocol implementation"
 
   alias Ankh.{HTTP2, Protocol, Transport}
   alias HPack.Table

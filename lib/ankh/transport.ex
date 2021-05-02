@@ -1,6 +1,6 @@
 defprotocol Ankh.Transport do
   @moduledoc """
-  Transport behavior
+  Transport interface
   """
 
   @typedoc "Transport socket"

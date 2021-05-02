@@ -11,6 +11,7 @@ defmodule Ankh.Mixfile do
       description: "Pure Elixir HTTP/2 implementation",
       package: package(),
       deps: deps(),
+      docs: docs(),
       dialyzer: [
         plt_add_deps: :apps_direct,
         ignore_warnings: ".dialyzer.ignore-warnings"
@@ -40,6 +41,18 @@ defmodule Ankh.Mixfile do
       {:credo, "~> 1.0", only: [:dev], runtime: false},
       {:ex_doc, "~> 0.24.0", only: [:dev], runtime: false},
       {:dialyxir, "~> 1.1.0", only: [:dev], runtime: false}
+    ]
+  end
+
+  defp docs do
+    [
+      groups_for_modules: [
+        Ankh: [~r/^Ankh$/, ~r/^Ankh.Protocol$/, ~r/^Ankh.Transport$/],
+        HTTP: [~r/^Ankh.HTTP$/, ~r/^Ankh.HTTP\..*/],
+        HTTP1: [~r/^Ankh.HTTP1.*/],
+        HTTP2: [~r/^Ankh.HTTP2.*/],
+        Transports: [~r/Ankh.(TCP|TLS)$/]
+      ]
     ]
   end
 end

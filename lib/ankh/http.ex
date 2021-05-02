@@ -1,6 +1,8 @@
 defmodule Ankh.HTTP do
   @moduledoc """
-  Ankh HTTP public API
+  HTTP public interface
+
+  This module implements `Ankh` public APIs and provides protocol negotiation.
   """
 
   alias Ankh.{HTTP, HTTP1, HTTP2, Protocol, TCP, TLS, Transport}
@@ -208,7 +210,8 @@ defmodule Ankh.HTTP do
   end
 
   @spec validate_headers(headers(), boolean(), [header_name()]) :: :ok | {:error, :protocol_error}
-  def validate_headers(headers, strict, forbidden \\ []), do: do_validate_headers(headers, strict, forbidden, %{}, false)
+  def validate_headers(headers, strict, forbidden \\ []),
+    do: do_validate_headers(headers, strict, forbidden, %{}, false)
 
   defp do_validate_headers(
          [],
@@ -219,9 +222,16 @@ defmodule Ankh.HTTP do
        ),
        do: :ok
 
-  defp do_validate_headers([], _strict, _forbidden, _stats, _end_pseudo), do: {:error, :protocol_error}
+  defp do_validate_headers([], _strict, _forbidden, _stats, _end_pseudo),
+    do: {:error, :protocol_error}
 
-  defp do_validate_headers([{":" <> pseudo_header, value} | rest], strict, forbidden, stats, false)
+  defp do_validate_headers(
+         [{":" <> pseudo_header, value} | rest],
+         strict,
+         forbidden,
+         stats,
+         false
+       )
        when pseudo_header in ["authority", "method", "path", "scheme"] do
     pseudo = String.to_existing_atom(pseudo_header)
 

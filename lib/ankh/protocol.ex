@@ -1,7 +1,11 @@
 defprotocol Ankh.Protocol do
   @moduledoc """
-  Protocol behavior
+  HTTP Protocol interface
+
+  HTTP protocol implementations like `Ankh.HTTP1` and `Ankh.HTTP2` implement this protocol
+  and can be used via `Ankh.HTTP`.
   """
+
   alias Ankh.{HTTP, Transport}
   alias Ankh.HTTP.{Request, Response}
 
