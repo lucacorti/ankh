@@ -8,12 +8,12 @@ defmodule Ankh.HTTP2.Frame.Settings do
     defstruct ack: false
 
     defimpl Ankh.HTTP2.Frame.Encodable do
-      def decode(flags, <<_::7, 1::1>>, _), do: {:ok, %{flags | ack: true}}
-      def decode(flags, <<_::7, 0::1>>, _), do: {:ok, %{flags | ack: false}}
+      def decode(%Flags{} = flags, <<_::7, 1::1>>, _), do: {:ok, %{flags | ack: true}}
+      def decode(%Flags{} = flags, <<_::7, 0::1>>, _), do: {:ok, %{flags | ack: false}}
       def decode(_flags, _data, _options), do: {:error, :decode_error}
 
-      def encode(%{ack: true}, _), do: {:ok, <<0::7, 1::1>>}
-      def encode(%{ack: false}, _), do: {:ok, <<0::7, 0::1>>}
+      def encode(%Flags{ack: true}, _), do: {:ok, <<0::7, 1::1>>}
+      def encode(%Flags{ack: false}, _), do: {:ok, <<0::7, 0::1>>}
       def encode(_flags, _options), do: {:error, :encode_error}
     end
   end
@@ -21,19 +21,16 @@ defmodule Ankh.HTTP2.Frame.Settings do
   defmodule Payload do
     @moduledoc false
 
-    @typedoc "Settings key"
-    @type key ::
-            :header_table_size
-            | :enable_push
-            | :max_concurrent_streams
-            | :initial_window_size
-            | :max_frame_size
-            | :max_header_list_size
+    @type settings :: [
+            header_table_size: non_neg_integer(),
+            enable_push: boolean(),
+            max_concurrent_streams: non_neg_integer(),
+            initial_window_size: non_neg_integer(),
+            max_frame_size: non_neg_integer(),
+            max_header_list_size: non_neg_integer()
+          ]
 
-    @typedoc "Settings value"
-    @type value :: integer | boolean
-
-    @type t :: %__MODULE__{settings: list({key, value})}
+    @type t :: %__MODULE__{settings: settings()}
 
     defstruct settings: []
 
@@ -49,7 +46,7 @@ defmodule Ankh.HTTP2.Frame.Settings do
       @frame_size_limit 16_777_215
       @frame_size_initial 16_384
 
-      def decode(payload, data, _) when rem(byte_size(data), 6) == 0 do
+      def decode(%Payload{} = payload, data, _) when rem(byte_size(data), 6) == 0 do
         case decode_settings(data, []) do
           settings when is_list(settings) ->
             {:ok, %{payload | settings: Enum.reverse(settings)}}
@@ -98,7 +95,7 @@ defmodule Ankh.HTTP2.Frame.Settings do
 
       defp decode_settings(<<>>, settings), do: settings
 
-      def encode(%{settings: settings}, _options) do
+      def encode(%Payload{settings: settings}, _options) do
         case encode_settings(settings, []) do
           settings when is_list(settings) ->
             {:ok, Enum.reverse(settings)}

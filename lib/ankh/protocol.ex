@@ -13,7 +13,7 @@ defprotocol Ankh.Protocol do
   @type t :: struct()
 
   @typedoc "Protocol options"
-  @type options :: Keyword.t()
+  @type options :: keyword()
 
   @typedoc "Request reference"
   @type request_ref :: reference()
@@ -21,14 +21,15 @@ defprotocol Ankh.Protocol do
   @doc """
   Accepts a client connection
   """
-  @spec accept(t(), URI.t(), Transport.t(), Transport.options()) ::
+  @spec accept(t(), URI.t(), Transport.t(), Transport.socket(), Transport.options()) ::
           {:ok, t()} | {:error, any()}
-  def accept(protocol, uri, transport, options)
+  def accept(protocol, uri, transport, socket, options)
 
   @doc """
   Connects to an host
   """
-  @spec connect(t(), URI.t(), Transport.t(), Transport.options()) :: {:ok, t()} | {:error, any()}
+  @spec connect(t(), URI.t(), Transport.t(), Transport.options()) ::
+          {:ok, t()} | {:error, any()}
   def connect(protocol, uri, transport, options)
 
   @doc """

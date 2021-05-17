@@ -13,7 +13,7 @@ defprotocol Ankh.HTTP2.Frame.Splittable do
   @doc """
   Returns N frames for `frame` with the specified `frame_size`.
   """
-  @spec split(frame :: t(), frame_size :: integer) :: [Frame.t()]
+  @spec split(t(), non_neg_integer()) :: [Frame.t()]
   def split(frame, frame_size)
 end
 

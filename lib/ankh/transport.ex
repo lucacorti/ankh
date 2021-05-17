@@ -15,12 +15,18 @@ defprotocol Ankh.Transport do
   @typedoc """
   Transport options
   """
-  @type options :: Keyword.t()
+  @type options :: keyword()
+
+  @doc """
+  Creates a new transport with the passed socket
+  """
+  @spec new(t(), socket()) :: {:ok, t()} | {:error, any()}
+  def new(transport, socket)
 
   @doc """
   Accepts a client connection
   """
-  @spec accept(t, Keyword.t()) :: {:ok, t()} | {:error, any()}
+  @spec accept(t(), options()) :: {:ok, t()} | {:error, any()}
   def accept(transport, options)
 
   @doc """

@@ -9,36 +9,40 @@ defmodule Ankh.TLS do
   defstruct socket: nil
 
   defimpl Transport do
+    alias Ankh.TLS
+
     @default_connect_options binary: true,
                              active: false,
                              secure_renegotiate: true,
                              cacertfile: CAStore.file_path()
 
-    def connect(tls, %URI{host: host, port: port}, timeout, options \\ []) do
+    def new(%TLS{} = transport, socket), do: {:ok, %{transport | socket: socket}}
+
+    def connect(%TLS{} = transport, %URI{host: host, port: port}, timeout, options \\ []) do
       hostname = String.to_charlist(host)
       options = Keyword.merge(options, @default_connect_options)
 
       with {:ok, socket} <- :ssl.connect(hostname, port, options, timeout),
            :ok <- :ssl.setopts(socket, active: :once) do
-        {:ok, %{tls | socket: socket}}
+        {:ok, %{transport | socket: socket}}
       end
     end
 
-    def accept(%{socket: socket} = tls, options \\ []) do
+    def accept(%TLS{socket: socket} = transport, options \\ []) do
       options = Keyword.merge(options, active: :once)
 
       with :ok <- :ssl.controlling_process(socket, self()),
            :ok <- :ssl.setopts(socket, options) do
-        {:ok, %{tls | socket: socket}}
+        {:ok, %{transport | socket: socket}}
       end
     end
 
-    def send(%{socket: socket}, data), do: :ssl.send(socket, data)
+    def send(%TLS{socket: socket}, data), do: :ssl.send(socket, data)
 
-    def recv(%{socket: socket}, size, timeout), do: :ssl.recv(socket, size, timeout)
+    def recv(%TLS{socket: socket}, size, timeout), do: :ssl.recv(socket, size, timeout)
 
-    def close(%{socket: socket} = tls) do
-      with :ok <- :ssl.close(socket), do: {:ok, %{tls | socket: nil}}
+    def close(%TLS{socket: socket} = transport) do
+      with :ok <- :ssl.close(socket), do: {:ok, %{transport | socket: nil}}
     end
 
     def handle_msg(_tls, {:ssl, socket, data}) do
@@ -49,6 +53,6 @@ defmodule Ankh.TLS do
     def handle_msg(_tls, {:ssl_closed, _socket}), do: {:error, :closed}
     def handle_msg(_tls, msg), do: {:other, msg}
 
-    def negotiated_protocol(%{socket: socket}), do: :ssl.negotiated_protocol(socket)
+    def negotiated_protocol(%TLS{socket: socket}), do: :ssl.negotiated_protocol(socket)
   end
 end

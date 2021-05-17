@@ -42,16 +42,14 @@ defmodule Ankh.HTTP do
   def accept(uri, socket, options \\ [])
 
   def accept(%URI{scheme: "https"} = uri, socket, options) do
-    transport = %TLS{socket: socket}
-
-    with {:ok, negotiated_protocol} <- Transport.negotiated_protocol(transport),
+    with {:ok, negotiated_protocol} <- Transport.negotiated_protocol(%TLS{socket: socket}),
          {:ok, protocol} <- protocol_for_id(negotiated_protocol),
-         {:ok, protocol} <- Protocol.accept(protocol, uri, transport, options),
+         {:ok, protocol} <- Protocol.accept(protocol, uri, %TLS{}, socket, options),
          do: {:ok, protocol}
   end
 
   def accept(%URI{scheme: "http"} = uri, socket, options) do
-    Protocol.accept(%HTTP1{}, uri, %TCP{socket: socket}, options)
+    Protocol.accept(%HTTP1{}, uri, %TCP{}, socket, options)
   end
 
   def accept(_uri, _socket, _options), do: {:error, :unsupported_uri_scheme}
@@ -118,7 +116,8 @@ defmodule Ankh.HTTP do
   """
   @spec respond(Protocol.t(), Protocol.request_ref(), Response.t()) ::
           {:ok, Protocol.t()} | {:error, any()}
-  def respond(protocol, reference, response), do: Protocol.respond(protocol, reference, response)
+  def respond(protocol, reference, response),
+    do: Protocol.respond(protocol, reference, response)
 
   @doc """
   Receives data form the the peer and returns responses
@@ -151,7 +150,9 @@ defmodule Ankh.HTTP do
   @spec put_headers(Request.t() | Response.t(), HTTP.headers()) :: Request.t() | Response.t()
   def put_headers(response, headers),
     do:
-      Enum.reduce(headers, response, fn {header, value}, acc -> put_header(acc, header, value) end)
+      Enum.reduce(headers, response, fn {header, value}, acc ->
+        put_header(acc, header, value)
+      end)
 
   @doc false
   @spec put_trailer(Request.t() | Response.t(), HTTP.header_name(), HTTP.header_value()) ::
@@ -209,7 +210,8 @@ defmodule Ankh.HTTP do
     |> Enum.reverse()
   end
 
-  @spec validate_headers(headers(), boolean(), [header_name()]) :: :ok | {:error, :protocol_error}
+  @spec validate_headers(headers(), boolean(), [header_name()]) ::
+          :ok | {:error, :protocol_error}
   def validate_headers(headers, strict, forbidden \\ []),
     do: do_validate_headers(headers, strict, forbidden, %{}, false)
 

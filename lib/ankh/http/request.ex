@@ -6,7 +6,7 @@ defmodule Ankh.HTTP.Request do
   alias Plug.Conn.Query
 
   @typedoc "HTTP request options"
-  @type options :: Keyword.t()
+  @type options :: keyword()
 
   @typedoc "Request method"
   @type method :: :CONNECT | :DELETE | :GET | :HEAD | :OPTIONS | :PATCH | :POST | :PUT | :TRACE
@@ -34,7 +34,7 @@ defmodule Ankh.HTTP.Request do
             body: [],
             options: []
 
-  @spec new(keyword) :: t()
+  @spec new(Enum.t()) :: t()
   def new(attrs \\ []), do: struct(__MODULE__, attrs)
 
   @spec to_uri(t()) :: URI.t()
@@ -49,11 +49,9 @@ defmodule Ankh.HTTP.Request do
   def put_uri(request, %URI{path: nil, query: query}), do: set_query(request, query)
 
   def put_uri(request, %URI{path: path, query: query}) do
-    query = Query.decode(query)
-
     request
     |> set_path(path)
-    |> set_query(query)
+    |> set_query(Query.decode(query))
   end
 
   @spec put_options(t(), options()) :: t()
@@ -71,12 +69,10 @@ defmodule Ankh.HTTP.Request do
 
   @spec put_path(t(), path()) :: t()
   def put_path(request, path) do
-    %URI{query: query} = to_uri(request)
-
     new_path =
-      case query do
-        nil -> path
-        query -> path <> "?" <> query
+      case to_uri(request) do
+        %URI{query: nil} -> path
+        %URI{query: query} -> path <> "?" <> query
       end
 
     %{request | path: new_path}
@@ -101,14 +97,12 @@ defmodule Ankh.HTTP.Request do
 
   @spec put_query(t(), query()) :: t()
   def put_query(request, query) do
-    %URI{query: old_query} = to_uri(request)
-
     query =
-      case old_query do
-        nil ->
+      case to_uri(request) do
+        %URI{query: nil} ->
           query
 
-        old_query ->
+        %URI{query: old_query} ->
           old_query
           |> Query.decode()
           |> Map.merge(query)

@@ -1,6 +1,6 @@
 defprotocol Ankh.HTTP2.Frame.Encodable do
   @moduledoc """
-  Protocol for encoding/decoding data types to/from wire format
+  Protocol for encoding and decoding frames to and from wire format
   """
 
   @fallback_to_any true
@@ -9,7 +9,7 @@ defprotocol Ankh.HTTP2.Frame.Encodable do
   @type t :: any()
 
   @typedoc "Encode/Decode options"
-  @type options :: Keyword.t()
+  @type options :: keyword()
 
   @doc """
   Decodes a binary into an `Ankh.HTTP2.Frame.Encodable` conforming data type
@@ -19,7 +19,7 @@ defprotocol Ankh.HTTP2.Frame.Encodable do
     - binary: data to decode into the struct
     - options: options to pass as context to the decoding function
   """
-  @spec decode(t, binary, options) :: {:ok, t} | {:error, any()}
+  @spec decode(t(), binary(), options()) :: {:ok, t()} | {:error, any()}
   def decode(struct, binary, options \\ [])
 
   @doc """
@@ -29,7 +29,7 @@ defprotocol Ankh.HTTP2.Frame.Encodable do
     - data: data type conforming to the `Ankh.HTTP2.Frame.Encodable` protocol
     - options: options to pass as context to the encoding function
   """
-  @spec encode(t, options) :: {:ok, iodata()} | {:error, any()}
+  @spec encode(t(), options()) :: {:ok, iodata()} | {:error, any()}
   def encode(data, options \\ [])
 end
 

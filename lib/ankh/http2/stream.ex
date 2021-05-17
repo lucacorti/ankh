@@ -52,7 +52,7 @@ defmodule Ankh.HTTP2.Stream do
           reference: reference(),
           send_hbf_type: hbf_type(),
           state: state(),
-          window_size: integer()
+          window_size: window_size()
         }
   defstruct id: 0,
             recv_headers: false,
@@ -107,22 +107,23 @@ defmodule Ankh.HTTP2.Stream do
   Process a received frame for the stream
   """
   @spec recv(t(), Frame.t()) :: {:ok, t(), HTTP.response() | nil} | {:error, any()}
-  def recv(%{id: id, reference: reference, state: state} = stream, frame) do
+  def recv(%__MODULE__{id: id, reference: reference, state: state} = stream, frame) do
     case recv_frame(%{state: new_state, recv_hbf_type: recv_hbf_type} = stream, frame) do
       {:ok, stream} ->
         Logger.debug(fn ->
-          "STREAM #{id} #{inspect(state)} -> #{inspect(new_state)} hbf: #{inspect(recv_hbf_type)} ON RECV #{
-            inspect(frame)
-          }"
+          "STREAM #{id} #{inspect(state)} -> #{inspect(new_state)} hbf: #{
+            inspect(recv_hbf_type)
+          } ON RECV #{inspect(frame)}"
         end)
 
         {:ok, stream, nil}
 
-      {:ok, %{state: new_state, recv_hbf_type: recv_hbf_type} = stream, {type, data, end_stream}} ->
+      {:ok, %__MODULE__{state: new_state, recv_hbf_type: recv_hbf_type} = stream,
+       {type, data, end_stream}} ->
         Logger.debug(fn ->
-          "STREAM #{id} #{inspect(state)} -> #{inspect(new_state)} hbf: #{inspect(recv_hbf_type)} ON RECV #{
-            inspect(frame)
-          }"
+          "STREAM #{id} #{inspect(state)} -> #{inspect(new_state)} hbf: #{
+            inspect(recv_hbf_type)
+          } ON RECV #{inspect(frame)}"
         end)
 
         {:ok, stream, {type, reference, data, end_stream}}
@@ -138,22 +139,29 @@ defmodule Ankh.HTTP2.Stream do
 
   # Stream ID validity checks
 
-  defp recv_frame(%{id: id} = _stream, %{stream_id: stream_id}) when stream_id != id do
+  defp recv_frame(%__MODULE__{id: id} = _stream, %{stream_id: stream_id})
+       when stream_id != id do
     raise "FATAL: tried to recv frame with stream id #{stream_id} on stream with id #{id}"
   end
 
-  defp recv_frame(%{id: id} = _stream, %{stream_id: 0}) do
+  defp recv_frame(%__MODULE__{id: id} = _stream, %{stream_id: 0}) do
     raise "FATAL: tried to recv frame with stream id 0 on stream with id #{id}"
   end
 
-  defp recv_frame(%{id: stream_id}, %{payload: %{stream_dependency: depended_id}})
-       when stream_id == depended_id,
+  defp recv_frame(%__MODULE__{id: stream_id}, %Headers{
+         payload: %Headers.Payload{stream_dependency: stream_id}
+       }),
+       do: {:error, :protocol_error}
+
+  defp recv_frame(%__MODULE__{id: stream_id}, %Priority{
+         payload: %Priority.Payload{stream_dependency: stream_id}
+       }),
        do: {:error, :protocol_error}
 
   # CONTINUATION
 
   defp recv_frame(
-         %{
+         %__MODULE__{
            recv_hbf: recv_hbf,
            recv_hbf_type: recv_hbf_type,
            recv_end_stream: recv_end_stream
@@ -172,7 +180,7 @@ defmodule Ankh.HTTP2.Stream do
   end
 
   defp recv_frame(
-         %{
+         %__MODULE__{
            recv_hbf: recv_hbf,
            recv_hbf_type: recv_hbf_type
          } = stream,
@@ -190,20 +198,20 @@ defmodule Ankh.HTTP2.Stream do
 
   # WINDOW_UPDATE
 
-  defp recv_frame(%{state: :idle} = _stream, %WindowUpdate{}),
+  defp recv_frame(%__MODULE__{state: :idle} = _stream, %WindowUpdate{}),
     do: {:error, :protocol_error}
 
   defp recv_frame(_stream, %WindowUpdate{payload: %WindowUpdate.Payload{increment: 0}}),
     do: {:error, :protocol_error}
 
-  defp recv_frame(%{window_size: window_size}, %WindowUpdate{
+  defp recv_frame(%__MODULE__{window_size: window_size}, %WindowUpdate{
          payload: %WindowUpdate.Payload{increment: increment}
        })
        when window_size + increment > @max_window_size,
        do: {:error, :flow_control_error}
 
   defp recv_frame(
-         %{id: id, window_size: window_size} = stream,
+         %__MODULE__{id: id, window_size: window_size} = stream,
          %WindowUpdate{
            payload: %WindowUpdate.Payload{increment: increment}
          }
@@ -211,7 +219,9 @@ defmodule Ankh.HTTP2.Stream do
     new_window_size = window_size + increment
 
     Logger.debug(fn ->
-      "STREAM #{id} WINDOW_UPDATE window_size: #{window_size} + #{increment} = #{new_window_size}"
+      "STREAM #{id} WINDOW_UPDATE window_size: #{window_size} + #{increment} = #{
+        new_window_size
+      }"
     end)
 
     {:ok, %{stream | window_size: new_window_size}}
@@ -219,15 +229,17 @@ defmodule Ankh.HTTP2.Stream do
 
   # PRIORITY
 
-  defp recv_frame(stream, %Priority{}), do: {:ok, stream}
+  defp recv_frame(%__MODULE__{} = stream, %Priority{}), do: {:ok, stream}
 
   # RST_STREAM
 
-  defp recv_frame(%{state: :idle} = _stream, %RstStream{}),
+  defp recv_frame(%__MODULE__{state: :idle} = _stream, %RstStream{}),
     do: {:error, :protocol_error}
 
-  defp recv_frame(stream, %RstStream{payload: %RstStream.Payload{error_code: :no_error}}),
-    do: {:ok, %{stream | state: :closed}}
+  defp recv_frame(%__MODULE__{} = stream, %RstStream{
+         payload: %RstStream.Payload{error_code: :no_error}
+       }),
+       do: {:ok, %{stream | state: :closed}}
 
   defp recv_frame(stream, %RstStream{payload: %RstStream.Payload{error_code: reason}}),
     do: {:ok, %{stream | state: :closed}, {:error, reason, true}}
@@ -235,7 +247,7 @@ defmodule Ankh.HTTP2.Stream do
   # HEADERS
 
   defp recv_frame(
-         %{
+         %__MODULE__{
            state: state,
            recv_hbf: recv_hbf,
            recv_hbf_type: nil
@@ -261,7 +273,7 @@ defmodule Ankh.HTTP2.Stream do
   end
 
   defp recv_frame(
-         %{
+         %__MODULE__{
            state: state,
            recv_hbf: recv_hbf,
            recv_hbf_type: nil,
@@ -287,7 +299,7 @@ defmodule Ankh.HTTP2.Stream do
   end
 
   defp recv_frame(
-         %{
+         %__MODULE__{
            state: state,
            recv_hbf: recv_hbf,
            recv_hbf_type: nil
@@ -319,7 +331,7 @@ defmodule Ankh.HTTP2.Stream do
   end
 
   defp recv_frame(
-         %{
+         %__MODULE__{
            state: state,
            recv_headers: false,
            recv_hbf: recv_hbf,
@@ -346,7 +358,7 @@ defmodule Ankh.HTTP2.Stream do
   # DATA
 
   defp recv_frame(
-         %{state: state} = stream,
+         %__MODULE__{state: state} = stream,
          %Data{
            flags: %Data.Flags{end_stream: true},
            payload: payload
@@ -361,7 +373,7 @@ defmodule Ankh.HTTP2.Stream do
   end
 
   defp recv_frame(
-         %{state: state} = stream,
+         %__MODULE__{state: state} = stream,
          %Data{
            flags: %Data.Flags{end_stream: false},
            payload: payload
@@ -373,11 +385,13 @@ defmodule Ankh.HTTP2.Stream do
 
   # HALF CLOSED REMOTE
 
-  defp recv_frame(%{state: :half_closed_remote}, _frame), do: {:error, :stream_closed}
+  defp recv_frame(%__MODULE__{state: :half_closed_remote}, _frame),
+    do: {:error, :stream_closed}
 
   # CLOSED
 
-  defp recv_frame(%{state: :closed}, _frame), do: {:error, :stream_closed}
+  defp recv_frame(%__MODULE__{state: :closed}, _frame),
+    do: {:error, :stream_closed}
 
   # Otherwise this is a PROTOCOL_ERROR
 
@@ -387,13 +401,13 @@ defmodule Ankh.HTTP2.Stream do
   Process and send a frame on the stream
   """
   @spec send(t(), Frame.t()) :: {:ok, t()} | {:error, any()}
-  def send(%{id: id, state: state} = stream, %{stream_id: id} = frame) do
+  def send(%__MODULE__{id: id, state: state} = stream, %{stream_id: id} = frame) do
     case send_frame(stream, frame) do
       {:ok, %{state: new_state, recv_hbf_type: recv_hbf_type} = stream} ->
         Logger.debug(fn ->
-          "STREAM #{id} #{inspect(state)} -> #{inspect(new_state)} hbf: #{inspect(recv_hbf_type)} ON SEND #{
-            inspect(frame)
-          }"
+          "STREAM #{id} #{inspect(state)} -> #{inspect(new_state)} hbf: #{
+            inspect(recv_hbf_type)
+          } ON SEND #{inspect(frame)}"
         end)
 
         {:ok, stream}
@@ -407,41 +421,41 @@ defmodule Ankh.HTTP2.Stream do
     end
   end
 
-  defp send_frame(%{id: id} = _stream, %{stream_id: stream_id}) when stream_id != id,
+  defp send_frame(%__MODULE__{id: id} = _stream, %{stream_id: stream_id}) when stream_id != id,
     do: raise("FATAL: tried to send frame with stream id #{stream_id} on stream with id #{id}")
 
-  defp send_frame(%{id: id} = _stream, %{stream_id: 0}),
+  defp send_frame(%__MODULE__{id: id} = _stream, %{stream_id: 0}),
     do: raise("FATAL: tried to send frame with stream id 0 on stream with id #{id}")
 
   # RST_STREAM
 
-  defp send_frame(stream, %RstStream{}), do: {:ok, %{stream | state: :closed}}
+  defp send_frame(%__MODULE__{} = stream, %RstStream{}), do: {:ok, %{stream | state: :closed}}
 
   # PRIORITY
 
-  defp send_frame(stream, %Priority{}), do: {:ok, stream}
+  defp send_frame(%__MODULE__{} = stream, %Priority{}), do: {:ok, stream}
 
   # WINDOW_UPDATE
 
-  defp send_frame(stream, %WindowUpdate{}), do: {:ok, stream}
+  defp send_frame(%__MODULE__{} = stream, %WindowUpdate{}), do: {:ok, stream}
 
   # CONTINUATION
 
   defp send_frame(
-         %{send_hbf_type: send_hbf_type} = stream,
+         %__MODULE__{send_hbf_type: send_hbf_type} = stream,
          %Continuation{flags: %Continuation.Flags{end_headers: end_headers}}
        )
        when not is_nil(send_hbf_type),
        do: {:ok, %{stream | send_hbf_type: if(end_headers, do: nil, else: send_hbf_type)}}
 
-  defp send_frame(%{send_hbf_type: send_hbf_type}, _frame)
+  defp send_frame(%__MODULE__{send_hbf_type: send_hbf_type}, _frame)
        when not is_nil(send_hbf_type),
        do: {:error, :protocol_error}
 
   # HEADERS
 
   defp send_frame(
-         %{state: state} = stream,
+         %__MODULE__{state: state} = stream,
          %Headers{flags: %Headers.Flags{end_headers: end_headers, end_stream: end_stream}}
        )
        when state in [:idle, :open, :half_closed_remote] do
@@ -464,7 +478,7 @@ defmodule Ankh.HTTP2.Stream do
   # DATA
 
   defp send_frame(
-         %{id: stream_id, state: state, window_size: window_size} = stream,
+         %__MODULE__{id: stream_id, state: state, window_size: window_size} = stream,
          %Data{length: length, flags: %Data.Flags{end_stream: end_stream}}
        )
        when state in [:open, :half_closed_remote] do
@@ -478,7 +492,9 @@ defmodule Ankh.HTTP2.Stream do
     new_window_size = window_size - length
 
     Logger.debug(fn ->
-      "STREAM #{stream_id} window_size after send: #{window_size} - #{length} = #{new_window_size}"
+      "STREAM #{stream_id} window_size after send: #{window_size} - #{length} = #{
+        new_window_size
+      }"
     end)
 
     {:ok, %{stream | state: state, window_size: new_window_size}}
@@ -486,13 +502,13 @@ defmodule Ankh.HTTP2.Stream do
 
   # HALF CLOSED LOCAL
 
-  defp send_frame(%{state: :half_closed_local}, _frame), do: {:error, :stream_closed}
+  defp send_frame(%__MODULE__{state: :half_closed_local}, _frame), do: {:error, :stream_closed}
 
   # CLOSED
 
-  defp send_frame(%{state: :closed}, _frame), do: {:error, :stream_closed}
+  defp send_frame(%__MODULE__{state: :closed}, _frame), do: {:error, :stream_closed}
 
   # Otherwise this is a PROTOCOL_ERROR
 
-  defp send_frame(%{}, _), do: {:error, :protocol_error}
+  defp send_frame(%__MODULE__{}, _), do: {:error, :protocol_error}
 end

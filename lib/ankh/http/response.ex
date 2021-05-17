@@ -6,7 +6,7 @@ defmodule Ankh.HTTP.Response do
   alias Ankh.HTTP
 
   @typedoc "Response status"
-  @type status :: non_neg_integer()
+  @type status :: pos_integer()
 
   @type t() :: %__MODULE__{
           status: status(),
@@ -23,7 +23,7 @@ defmodule Ankh.HTTP.Response do
             body_fetched: false,
             complete: false
 
-  @spec new(keyword) :: t()
+  @spec new(Enum.t()) :: t()
   def new(attrs \\ []), do: struct(__MODULE__, attrs)
 
   @spec set_status(t(), status()) :: t()
@@ -34,12 +34,12 @@ defmodule Ankh.HTTP.Response do
 
   @spec fetch_body(t()) :: t()
   def fetch_body(%__MODULE__{body_fetched: false, body: body} = response) do
-    body =
+    fetched_body =
       body
       |> Enum.reverse()
       |> IO.iodata_to_binary()
 
-    %{response | body_fetched: true, body: body}
+    %{response | body_fetched: true, body: fetched_body}
   end
 
   def fetch_body(%__MODULE__{body_fetched: true} = response), do: response

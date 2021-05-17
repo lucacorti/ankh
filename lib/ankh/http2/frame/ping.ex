@@ -4,16 +4,16 @@ defmodule Ankh.HTTP2.Frame.Ping do
   defmodule Flags do
     @moduledoc false
 
-    @type t :: %__MODULE__{ack: boolean}
+    @type t :: %__MODULE__{ack: boolean()}
     defstruct ack: false
 
     defimpl Ankh.HTTP2.Frame.Encodable do
-      def decode(flags, <<_::7, 1::1>>, _), do: {:ok, %{flags | ack: true}}
-      def decode(flags, <<_::7, 0::1>>, _), do: {:ok, %{flags | ack: false}}
+      def decode(%Flags{} = flags, <<_::7, 1::1>>, _), do: {:ok, %{flags | ack: true}}
+      def decode(%Flags{} = flags, <<_::7, 0::1>>, _), do: {:ok, %{flags | ack: false}}
       def decode(_flags, _data, _options), do: {:error, :decode_error}
 
-      def encode(%{ack: true}, _), do: {:ok, <<0::7, 1::1>>}
-      def encode(%{ack: false}, _), do: {:ok, <<0::7, 0::1>>}
+      def encode(%Flags{ack: true}, _), do: {:ok, <<0::7, 1::1>>}
+      def encode(%Flags{ack: false}, _), do: {:ok, <<0::7, 0::1>>}
       def encode(_flags, _options), do: {:error, :encode_error}
     end
   end
@@ -21,14 +21,18 @@ defmodule Ankh.HTTP2.Frame.Ping do
   defmodule Payload do
     @moduledoc false
 
-    @type t :: %__MODULE__{data: binary}
+    @type t :: %__MODULE__{data: binary()}
     defstruct data: <<>>
 
     defimpl Ankh.HTTP2.Frame.Encodable do
-      def decode(payload, data, _) when is_binary(data), do: {:ok, %{payload | data: data}}
+      def decode(%Payload{} = payload, data, _) when is_binary(data),
+        do: {:ok, %{payload | data: data}}
+
       def decode(_payload, _data, _options), do: {:error, :decode_error}
 
-      def encode(%{data: data}, _) when is_binary(data), do: {:ok, [data]}
+      def encode(%Payload{data: data}, _) when is_binary(data),
+        do: {:ok, [data]}
+
       def encode(_payload, _options), do: {:error, :encode_error}
     end
   end

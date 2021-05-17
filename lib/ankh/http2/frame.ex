@@ -22,7 +22,7 @@ defmodule Ankh.HTTP2.Frame do
   @type data :: iodata()
 
   @typedoc "Encode/Decode options"
-  @type options :: Keyword.t()
+  @type options :: keyword()
 
   @header_size 9
 
@@ -33,12 +33,15 @@ defmodule Ankh.HTTP2.Frame do
   - flags: data type implementing `Ankh.HTTP2.Frame.Encodable`
   - payload: data type implementing `Ankh.HTTP2.Frame.Encodable`
   """
-  @spec __using__(type: type, flags: atom | nil, payload: atom | nil) :: Macro.t()
+  @spec __using__(type: type(), flags: atom() | nil, payload: atom() | nil) :: Macro.t()
   defmacro __using__(args) do
     with {:ok, type} <- Keyword.fetch(args, :type),
          flags <- Keyword.get(args, :flags),
          payload <- Keyword.get(args, :payload) do
       quote bind_quoted: [type: type, flags: flags, payload: payload] do
+        alias Ankh.HTTP2.Frame
+        alias Ankh.HTTP2.Stream, as: HTTP2Stream
+
         @typedoc """
         - length: payload length in bytes
         - flags: data type implementing `Ankh.HTTP2.Frame.Encodable`
@@ -46,9 +49,9 @@ defmodule Ankh.HTTP2.Frame do
         - payload: data type implementing `Ankh.HTTP2.Frame.Encodable`
         """
         @type t :: %__MODULE__{
-                length: integer,
-                type: integer,
-                stream_id: integer,
+                length: Frame.length(),
+                type: Frame.type(),
+                stream_id: HTTP2Stream.id(),
                 flags: Encodable.t() | nil,
                 payload: Encodable.t() | nil
               }
@@ -76,7 +79,7 @@ defmodule Ankh.HTTP2.Frame do
     - binary: data to decode into the struct
     - options: options to pass as context to the decoding function
   """
-  @spec decode(t, binary, options) :: {:ok, t} | {:error, any()}
+  @spec decode(t(), binary(), options()) :: {:ok, t()} | {:error, any()}
   def decode(frame, data, options \\ [])
 
   def decode(frame, <<0::24, _type::8, flags::binary-size(1), _reserved::1, id::31>>, options) do
@@ -102,7 +105,7 @@ defmodule Ankh.HTTP2.Frame do
     - struct: struct using `Ankh.HTTP2.Frame`
     - options: options to pass as context to the encoding function
   """
-  @spec encode(t(), options) :: {:ok, t(), data} | {:error, any()}
+  @spec encode(t(), options()) :: {:ok, t(), data} | {:error, any()}
   def encode(frame, options \\ [])
 
   def encode(%{type: type, flags: flags, stream_id: id, payload: nil} = frame, options) do
@@ -155,7 +158,8 @@ defmodule Ankh.HTTP2.Frame do
   @spec stream(iodata()) :: Enumerable.t()
   def stream(data) do
     Stream.unfold(data, fn
-      <<length::24, type::8, _flags::binary-size(1), _reserved::1, id::31, rest::binary>> = data
+      <<length::24, type::8, _flags::binary-size(1), _reserved::1, id::31, rest::binary>> =
+          data
       when byte_size(rest) >= length ->
         frame_size = @header_size + length
         frame_data = binary_part(data, 0, frame_size)
