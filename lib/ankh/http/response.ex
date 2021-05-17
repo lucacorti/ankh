@@ -64,4 +64,60 @@ defmodule Ankh.HTTP.Response do
 
   @spec validate_body(t()) :: {:ok, t()} | :error
   defdelegate validate_body(response), to: HTTP
+
+  @spec validate_headers(HTTP.headers(), boolean(), [HTTP.header_name()]) ::
+          :ok | {:error, :protocol_error}
+  def validate_headers(headers, strict, forbidden \\ []),
+    do: do_validate_headers(headers, strict, forbidden, false, false)
+
+  defp do_validate_headers(
+         [],
+         _strict,
+         _forbidden,
+         true = _status,
+         _end_pseudo
+       ),
+       do: :ok
+
+  defp do_validate_headers([], _strict, _forbidden, _status, _end_pseudo),
+    do: {:error, :protocol_error}
+
+  defp do_validate_headers(
+         [{":status", value} | rest],
+         strict,
+         forbidden,
+         false = _status,
+         false
+       ) do
+    case Integer.parse(value) do
+      {status, ""} when status in 100..599 ->
+        do_validate_headers(rest, strict, forbidden, true, false)
+
+      _ ->
+        {:error, :protocol_error}
+    end
+  end
+
+  defp do_validate_headers(
+         [{":" <> _pseaudo_header, _value} | _rest],
+         _strict,
+         _forbidden,
+         _stats,
+         _end_pseudo
+       ),
+       do: {:error, :protocol_error}
+
+  defp do_validate_headers([{header, value} | rest], strict, forbidden, stats, _end_pseudo) do
+    case {String.downcase(header), value} do
+      {"te", value} when value != "trailers" ->
+        {:error, :protocol_error}
+
+      {name, _value} ->
+        if name not in forbidden and HTTP.header_name_valid?(header, strict) do
+          do_validate_headers(rest, strict, forbidden, stats, true)
+        else
+          {:error, :protocol_error}
+        end
+    end
+  end
 end

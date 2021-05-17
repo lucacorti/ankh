@@ -66,7 +66,8 @@ defmodule Ankh.HTTP2 do
 
     alias HPack.Table
 
-    import Ankh.HTTP2.Stream, only: [is_local_stream: 2]
+    import Ankh.HTTP2.Stream,
+      only: [is_local_stream: 2, is_client_stream: 1, is_server_stream: 1]
 
     require Logger
 
@@ -715,7 +716,7 @@ defmodule Ankh.HTTP2 do
 
     defp process_stream_response(
            %HTTP2{recv_hpack: recv_hpack, send_settings: send_settings} = protocol,
-           _frame,
+           frame,
            responses,
            {type, ref, hbf, end_stream}
          )
@@ -727,7 +728,7 @@ defmodule Ankh.HTTP2 do
       |> HPack.decode(recv_hpack, max_header_table_size)
       |> case do
         {:ok, recv_hpack, headers} ->
-          with {:ok, protocol} <- validate_headers(protocol, headers) do
+          with {:ok, protocol} <- validate_headers(protocol, frame, headers) do
             {
               :ok,
               %{protocol | recv_hpack: recv_hpack},
@@ -746,12 +747,47 @@ defmodule Ankh.HTTP2 do
     defp process_stream_response(protocol, _frame, responses, response),
       do: {:ok, protocol, [response | responses]}
 
-    defp validate_headers(%HTTP2{headers_type: :headers} = protocol, headers) do
-      with :ok <- HTTP.validate_headers(headers, true, ["connection"]),
+    defp validate_headers(
+           %HTTP2{headers_type: :headers, last_local_stream_id: llid} = protocol,
+           %{stream_id: id} = _frame,
+           headers
+         )
+         when is_client_stream(id) and is_local_stream(llid, id) do
+      with :ok <- Response.validate_headers(headers, true, ["connection"]),
            do: {:ok, %{protocol | headers_type: :trailers}}
     end
 
-    defp validate_headers(protocol, trailers) do
+    defp validate_headers(
+           %HTTP2{headers_type: :headers, last_local_stream_id: llid} = protocol,
+           %{stream_id: id} = _frame,
+           headers
+         )
+         when is_client_stream(id) and not is_local_stream(llid, id) do
+      with :ok <- Request.validate_headers(headers, true, ["connection"]),
+           do: {:ok, %{protocol | headers_type: :trailers}}
+    end
+
+    defp validate_headers(
+           %HTTP2{headers_type: :headers, last_local_stream_id: llid} = protocol,
+           %{stream_id: id} = _frame,
+           headers
+         )
+         when is_server_stream(id) and is_local_stream(llid, id) do
+      with :ok <- Request.validate_headers(headers, true, ["connection"]),
+           do: {:ok, %{protocol | headers_type: :trailers}}
+    end
+
+    defp validate_headers(
+           %HTTP2{headers_type: :headers, last_local_stream_id: llid} = protocol,
+           %{stream_id: id} = _frame,
+           headers
+         )
+         when is_server_stream(id) and not is_local_stream(llid, id) do
+      with :ok <- Response.validate_headers(headers, true, ["connection"]),
+           do: {:ok, %{protocol | headers_type: :trailers}}
+    end
+
+    defp validate_headers(protocol, _frame, trailers) do
       with :ok <- HTTP.validate_trailers(trailers, true),
            do: {:ok, protocol}
     end

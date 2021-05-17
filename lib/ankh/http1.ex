@@ -153,13 +153,28 @@ defmodule Ankh.HTTP1 do
 
     defp process_headers(
            ["" | rest],
-           %HTTP1{reference: reference, state: :headers} = protocol,
+           %HTTP1{reference: reference, state: :headers, mode: :server} = protocol,
            headers,
            responses
          ) do
       headers = Enum.reverse(headers)
 
-      with :ok <- HTTP.validate_headers(headers, false),
+      with :ok <- Request.validate_headers(headers, false),
+           do:
+             process_body(rest, %{protocol | state: :body}, [], [
+               {:headers, reference, headers, false} | responses
+             ])
+    end
+
+    defp process_headers(
+           ["" | rest],
+           %HTTP1{reference: reference, state: :headers, mode: :client} = protocol,
+           headers,
+           responses
+         ) do
+      headers = Enum.reverse(headers)
+
+      with :ok <- Response.validate_headers(headers, false),
            do:
              process_body(rest, %{protocol | state: :body}, [], [
                {:headers, reference, headers, false} | responses

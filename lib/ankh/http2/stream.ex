@@ -64,9 +64,17 @@ defmodule Ankh.HTTP2.Stream do
             state: :idle,
             window_size: @initial_window_size
 
-  @doc "Guard to test if a stream id is locally originated"
+  @doc "Tests if a stream id is locally originated"
   defguard is_local_stream(last_local_stream_id, stream_id)
            when rem(last_local_stream_id, 2) == rem(stream_id, 2)
+
+  @doc "Tests if a stream is client originated"
+  defguard is_client_stream(stream_id)
+           when rem(stream_id, 2) == 1
+
+  @doc "Tests if a stream is client originated"
+  defguard is_server_stream(stream_id)
+           when rem(stream_id, 2) == 0
 
   @doc """
   Starts a new stream fot the provided connection
