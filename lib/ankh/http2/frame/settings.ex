@@ -46,13 +46,9 @@ defmodule Ankh.HTTP2.Frame.Settings do
       @frame_size_limit 16_777_215
       @frame_size_initial 16_384
 
-      def decode(%Payload{} = payload, data, _) when rem(byte_size(data), 6) == 0 do
-        case decode_settings(data, []) do
-          settings when is_list(settings) ->
-            {:ok, %{payload | settings: Enum.reverse(settings)}}
-
-          {:error, _reason} = error ->
-            error
+      def decode(%Payload{} = payload, data, _options) when rem(byte_size(data), 6) == 0 do
+        with settings when is_list(settings) <- decode_settings(data, []) do
+          {:ok, %{payload | settings: Enum.reverse(settings)}}
         end
       end
 
