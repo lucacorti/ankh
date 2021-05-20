@@ -564,9 +564,7 @@ defmodule Ankh.HTTP2 do
       new_window_size = window_size + increment
 
       Logger.error(fn ->
-        "WINDOW_UPDATE window_size: #{new_window_size} larger than max_window_size #{
-          @max_window_size
-        }"
+        "WINDOW_UPDATE window_size: #{new_window_size} larger than max_window_size #{@max_window_size}"
       end)
 
       {:error, :flow_control_error}

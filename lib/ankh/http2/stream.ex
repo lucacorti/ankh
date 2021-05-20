@@ -103,9 +103,7 @@ defmodule Ankh.HTTP2.Stream do
     window_size = prev_window_size + (new_window_size - old_window_size)
 
     Logger.debug(fn ->
-      "STREAM #{id} SETTINGS window_size: #{prev_window_size} + (#{new_window_size} - #{
-        old_window_size
-      }) = #{window_size}"
+      "STREAM #{id} SETTINGS window_size: #{prev_window_size} + (#{new_window_size} - #{old_window_size}) = #{window_size}"
     end)
 
     %{stream | window_size: window_size}
@@ -119,9 +117,7 @@ defmodule Ankh.HTTP2.Stream do
     case recv_frame(%{state: new_state, recv_hbf_type: recv_hbf_type} = stream, frame) do
       {:ok, stream} ->
         Logger.debug(fn ->
-          "STREAM #{id} #{inspect(state)} -> #{inspect(new_state)} hbf: #{
-            inspect(recv_hbf_type)
-          } ON RECV #{inspect(frame)}"
+          "STREAM #{id} #{inspect(state)} -> #{inspect(new_state)} hbf: #{inspect(recv_hbf_type)} ON RECV #{inspect(frame)}"
         end)
 
         {:ok, stream, nil}
@@ -129,9 +125,7 @@ defmodule Ankh.HTTP2.Stream do
       {:ok, %__MODULE__{state: new_state, recv_hbf_type: recv_hbf_type} = stream,
        {type, data, end_stream}} ->
         Logger.debug(fn ->
-          "STREAM #{id} #{inspect(state)} -> #{inspect(new_state)} hbf: #{
-            inspect(recv_hbf_type)
-          } ON RECV #{inspect(frame)}"
+          "STREAM #{id} #{inspect(state)} -> #{inspect(new_state)} hbf: #{inspect(recv_hbf_type)} ON RECV #{inspect(frame)}"
         end)
 
         {:ok, stream, {type, reference, data, end_stream}}
@@ -227,9 +221,7 @@ defmodule Ankh.HTTP2.Stream do
     new_window_size = window_size + increment
 
     Logger.debug(fn ->
-      "STREAM #{id} WINDOW_UPDATE window_size: #{window_size} + #{increment} = #{
-        new_window_size
-      }"
+      "STREAM #{id} WINDOW_UPDATE window_size: #{window_size} + #{increment} = #{new_window_size}"
     end)
 
     {:ok, %{stream | window_size: new_window_size}}
@@ -413,9 +405,7 @@ defmodule Ankh.HTTP2.Stream do
     case send_frame(stream, frame) do
       {:ok, %{state: new_state, recv_hbf_type: recv_hbf_type} = stream} ->
         Logger.debug(fn ->
-          "STREAM #{id} #{inspect(state)} -> #{inspect(new_state)} hbf: #{
-            inspect(recv_hbf_type)
-          } ON SEND #{inspect(frame)}"
+          "STREAM #{id} #{inspect(state)} -> #{inspect(new_state)} hbf: #{inspect(recv_hbf_type)} ON SEND #{inspect(frame)}"
         end)
 
         {:ok, stream}
@@ -500,9 +490,7 @@ defmodule Ankh.HTTP2.Stream do
     new_window_size = window_size - length
 
     Logger.debug(fn ->
-      "STREAM #{stream_id} window_size after send: #{window_size} - #{length} = #{
-        new_window_size
-      }"
+      "STREAM #{stream_id} window_size after send: #{window_size} - #{length} = #{new_window_size}"
     end)
 
     {:ok, %{stream | state: state, window_size: new_window_size}}
