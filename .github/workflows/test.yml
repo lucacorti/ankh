@@ -1,6 +1,32 @@
 on: [push]
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    name: OTP ${{matrix.otp}} / Elixir ${{matrix.elixir}}
+    steps:
+      - uses: actions/checkout@v2
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: '24'
+          elixir-version: '1.12'
+      - uses: actions/cache@v1
+        env:
+          cache-name: mix
+        with:
+          path: ~/.mix
+          key: ${{ runner.os }}-${{ env.cache-name }}-${{ matrix.otp }}-${{ matrix.elixir }}
+      - uses: actions/cache@v1
+        env:
+          cache-name: build
+        with:
+          path: _build
+          key: ${{ runner.os }}-${{ env.cache-name }}-${{ matrix.otp }}-${{ matrix.elixir }}
+      - run: mix deps.get
+      - run: mix compile --warnings-as-errors
+      - run: mix format --check-formatted
+      - run: mix credo --strict --all
+      - run: mix dialyzer
   test:
     runs-on: ubuntu-latest
     name: OTP ${{matrix.otp}} / Elixir ${{matrix.elixir}}
@@ -29,8 +55,4 @@ jobs:
           path: _build
           key: ${{ runner.os }}-${{ env.cache-name }}-${{ matrix.otp }}-${{ matrix.elixir }}
       - run: mix deps.get
-      - run: mix compile --warnings-as-errors
-      - run: mix format --check-formatted
-      - run: mix credo --strict --all
       - run: mix test
-      - run: mix dialyzer
