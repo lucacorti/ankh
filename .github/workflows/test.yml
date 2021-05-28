@@ -3,13 +3,17 @@ on: [push]
 jobs:
   lint:
     runs-on: ubuntu-latest
-    name: OTP ${{matrix.otp}} / Elixir ${{matrix.elixir}}
+    name: Lint (OTP ${{matrix.otp}} / Elixir ${{matrix.elixir}})
+    strategy:
+      matrix:
+        otp: ['24']
+        elixir: ['1.12']
     steps:
       - uses: actions/checkout@v2
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: '24'
-          elixir-version: '1.12'
+          otp-version: ${{matrix.otp}}
+          elixir-version: ${{matrix.elixir}}
       - uses: actions/cache@v1
         env:
           cache-name: mix
@@ -29,7 +33,7 @@ jobs:
       - run: mix dialyzer
   test:
     runs-on: ubuntu-latest
-    name: OTP ${{matrix.otp}} / Elixir ${{matrix.elixir}}
+    name: Test (OTP ${{matrix.otp}} / Elixir ${{matrix.elixir}})
     strategy:
       matrix:
         otp: ['21', '22', '23', '24']
