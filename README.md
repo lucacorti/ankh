@@ -1,6 +1,6 @@
 # Ankh
 
-**Pure Elixir HTTP/2 implementation**
+**Pure Elixir HTTP implementation**
 
 Get the package from hex.pm at https://hex.pm/packages/ankh
 
