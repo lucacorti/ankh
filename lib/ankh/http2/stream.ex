@@ -1,6 +1,6 @@
 defmodule Ankh.HTTP2.Stream do
   @moduledoc """
-  HTTP/2 stream process
+  HTTP/2 Stream
 
   Struct implementing the HTTP/2 stream state machine
   """
