@@ -205,8 +205,8 @@ defmodule Ankh.HTTP2 do
 
         {rest, {_length, type, _id, data}},
         {:ok, %{recv_hbf_type: recv_hbf_type} = protocol, responses} ->
-          with {:ok, type} <- frame_for_type(protocol, type),
-               {:ok, frame} <- Frame.decode(type, data),
+          with {:ok, frame_type} <- frame_for_type(type),
+               {:ok, frame} <- Frame.decode(frame_type, data),
                {:ok, protocol, responses} <- recv_frame(protocol, frame, responses) do
             {:cont, {:ok, %{protocol | buffer: rest}, responses}}
           else
@@ -223,17 +223,17 @@ defmodule Ankh.HTTP2 do
       end)
     end
 
-    defp frame_for_type(_protocol, 0x0), do: {:ok, %Data{}}
-    defp frame_for_type(_protocol, 0x1), do: {:ok, %Headers{}}
-    defp frame_for_type(_protocol, 0x2), do: {:ok, %Priority{}}
-    defp frame_for_type(_protocol, 0x3), do: {:ok, %RstStream{}}
-    defp frame_for_type(_protocol, 0x4), do: {:ok, %Settings{}}
-    defp frame_for_type(_protocol, 0x5), do: {:ok, %PushPromise{}}
-    defp frame_for_type(_protocol, 0x6), do: {:ok, %Ping{}}
-    defp frame_for_type(_protocol, 0x7), do: {:ok, %GoAway{}}
-    defp frame_for_type(_protocol, 0x8), do: {:ok, %WindowUpdate{}}
-    defp frame_for_type(_protocol, 0x9), do: {:ok, %Continuation{}}
-    defp frame_for_type(_protocol, _type), do: {:error, :not_found}
+    defp frame_for_type(0x0), do: {:ok, %Data{}}
+    defp frame_for_type(0x1), do: {:ok, %Headers{}}
+    defp frame_for_type(0x2), do: {:ok, %Priority{}}
+    defp frame_for_type(0x3), do: {:ok, %RstStream{}}
+    defp frame_for_type(0x4), do: {:ok, %Settings{}}
+    defp frame_for_type(0x5), do: {:ok, %PushPromise{}}
+    defp frame_for_type(0x6), do: {:ok, %Ping{}}
+    defp frame_for_type(0x7), do: {:ok, %GoAway{}}
+    defp frame_for_type(0x8), do: {:ok, %WindowUpdate{}}
+    defp frame_for_type(0x9), do: {:ok, %Continuation{}}
+    defp frame_for_type(_type), do: {:error, :not_found}
 
     defp get_stream(%HTTP2{references: references} = protocol, reference)
          when is_reference(reference),
