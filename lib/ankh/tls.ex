@@ -1,5 +1,5 @@
 defmodule Ankh.TLS do
-  @moduledoc "TLS transport module"
+  @moduledoc "TLS transport implementation"
 
   require Logger
 
