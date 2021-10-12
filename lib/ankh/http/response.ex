@@ -87,7 +87,7 @@ defmodule Ankh.HTTP.Response do
          strict,
          forbidden,
          false = _status,
-         false
+         false = _end_pseudo
        ) do
     case Integer.parse(value) do
       {status, ""} when status in 100..599 ->

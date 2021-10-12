@@ -41,15 +41,14 @@ defmodule Ankh.HTTP do
           {:ok, Protocol.t()} | {:error, any()}
   def accept(uri, socket, options \\ [])
 
+  def accept(%URI{scheme: "http"} = uri, socket, options),
+    do: Protocol.accept(%HTTP1{}, uri, %TCP{}, socket, options)
+
   def accept(%URI{scheme: "https"} = uri, socket, options) do
     with {:ok, negotiated_protocol} <- Transport.negotiated_protocol(%TLS{socket: socket}),
          {:ok, protocol} <- protocol_for_id(negotiated_protocol),
          {:ok, protocol} <- Protocol.accept(protocol, uri, %TLS{}, socket, options),
          do: {:ok, protocol}
-  end
-
-  def accept(%URI{scheme: "http"} = uri, socket, options) do
-    Protocol.accept(%HTTP1{}, uri, %TCP{}, socket, options)
   end
 
   def accept(_uri, _socket, _options), do: {:error, :unsupported_uri_scheme}
@@ -63,6 +62,14 @@ defmodule Ankh.HTTP do
   @spec connect(URI.t(), Transport.options()) ::
           {:ok, Protocol.t()} | {:error, any()}
   def connect(uri, options \\ [])
+
+  def connect(%URI{scheme: "http"} = uri, options) do
+    {timeout, options} = Keyword.pop(options, :timeout, 5_000)
+
+    with {:ok, transport} <- Transport.connect(%TCP{}, uri, timeout, options),
+         {:ok, protocol} <- Protocol.connect(%HTTP1{}, uri, transport, options),
+         do: {:ok, protocol}
+  end
 
   def connect(%URI{scheme: "https"} = uri, options) do
     {:ok, tls_options} = Plug.SSL.configure(cipher_suite: :strong, key: nil, cert: nil)
@@ -81,16 +88,6 @@ defmodule Ankh.HTTP do
          {:ok, negotiated_protocol} <- Transport.negotiated_protocol(transport),
          {:ok, protocol} <- protocol_for_id(negotiated_protocol),
          {:ok, protocol} <- Protocol.connect(protocol, uri, transport, options),
-         do: {:ok, protocol}
-  end
-
-  def connect(%URI{scheme: "http"} = uri, options) do
-    {timeout, options} =
-      options
-      |> Keyword.pop(:timeout, 5_000)
-
-    with {:ok, transport} <- Transport.connect(%TCP{}, uri, timeout, options),
-         {:ok, protocol} <- Protocol.connect(%HTTP1{}, uri, transport, options),
          do: {:ok, protocol}
   end
 
