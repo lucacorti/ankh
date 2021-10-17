@@ -56,8 +56,8 @@ defmodule Ankh.HTTP do
   @doc """
   Establishes an HTTP connection to a server
 
-  After establishing the connection, `request` can be user to send request to the server and
-  `stream` can be used to receive receive responses.
+  After establishing the connection, `request` can be user to send request
+   and `stream` can be used to receive responses from the server.
   """
   @spec connect(URI.t(), Transport.options()) ::
           {:ok, Protocol.t()} | {:error, any()}
