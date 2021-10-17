@@ -146,7 +146,7 @@ defmodule Ankh.HTTP2.Frame do
   end
 
   @doc """
-  Returns s tream of frames from a buffer, returning the leftover buffer data
+  Returns a stream of frames from a buffer, returning the leftover buffer data
   and the frame header information and data (without decoding it) in a tuple:
 
   `{remaining_buffer, {length, type, id, frame_data}}`
