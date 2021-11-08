@@ -40,14 +40,14 @@ defmodule Ankh.HTTP1 do
         trailers: trailers
       } = Request.put_header(request, "host", host)
 
-      reference = make_ref()
-
       with :ok <-
              Transport.send(transport, [Atom.to_string(method), " ", path, " HTTP/1.1", @crlf]),
            :ok <- send_headers(transport, headers),
            :ok <- send_body(transport, body),
-           :ok <- send_headers(transport, trailers),
-           do: {:ok, %{protocol | reference: reference}, reference}
+           :ok <- send_headers(transport, trailers) do
+        reference = make_ref()
+        {:ok, %{protocol | reference: reference}, reference}
+      end
     end
 
     def respond(%HTTP1{transport: transport} = protocol, _request_reference, %Response{
@@ -62,8 +62,9 @@ defmodule Ankh.HTTP1 do
       with :ok <- Transport.send(transport, ["HTTP/1.1 ", status, " ", reason, @crlf]),
            :ok <- send_headers(transport, headers),
            :ok <- send_body(transport, body),
-           :ok <- send_headers(transport, trailers),
-           do: {:ok, %{protocol | reference: make_ref()}}
+           :ok <- send_headers(transport, trailers) do
+        {:ok, %{protocol | reference: make_ref()}}
+      end
     end
 
     def stream(%HTTP1{transport: transport} = protocol, msg) do
@@ -74,14 +75,9 @@ defmodule Ankh.HTTP1 do
     end
 
     defp send_headers(transport, headers) do
-      headers =
-        headers
-        |> Enum.reduce([@crlf], fn {name, value}, acc ->
-          [[name, ": ", value, @crlf] | acc]
-        end)
-        |> Enum.reverse()
+      headers = Enum.map(headers, fn {name, value} -> [name, ": ", value, @crlf] end)
 
-      Transport.send(transport, headers)
+      Transport.send(transport, [@crlf | headers])
     end
 
     defp send_body(transport, body), do: Transport.send(transport, [body, @crlf])
@@ -146,9 +142,9 @@ defmodule Ankh.HTTP1 do
          ) do
       trailers = Enum.reverse(trailers)
 
-      with :ok <- HTTP.validate_trailers(trailers, false),
-           do:
-             process_lines(lines, protocol, [{:headers, reference, trailers, true} | responses])
+      with :ok <- HTTP.validate_trailers(trailers, false) do
+        process_lines(lines, protocol, [{:headers, reference, trailers, true} | responses])
+      end
     end
 
     defp process_headers(
@@ -159,11 +155,11 @@ defmodule Ankh.HTTP1 do
          ) do
       headers = Enum.reverse(headers)
 
-      with :ok <- Request.validate_headers(headers, false),
-           do:
-             process_body(rest, %{protocol | state: :body}, [], [
-               {:headers, reference, headers, false} | responses
-             ])
+      with :ok <- Request.validate_headers(headers, false) do
+        process_body(rest, %{protocol | state: :body}, [], [
+          {:headers, reference, headers, false} | responses
+        ])
+      end
     end
 
     defp process_headers(
@@ -211,22 +207,22 @@ defmodule Ankh.HTTP1 do
            %HTTP1{reference: reference} = protocol,
            [_ | body],
            responses
-         ),
-         do:
-           process_lines(lines, protocol, [
-             {:data, reference, Enum.reverse(body), true} | responses
-           ])
+         ) do
+      process_lines(lines, protocol, [
+        {:data, reference, Enum.reverse(body), true} | responses
+      ])
+    end
 
     defp process_body(
            ["" | rest],
            %HTTP1{reference: reference, state: :body} = protocol,
            [_ | body],
            responses
-         ),
-         do:
-           process_headers(rest, %{protocol | state: :trailers}, [], [
-             {:data, reference, Enum.reverse(body), false} | responses
-           ])
+         ) do
+      process_headers(rest, %{protocol | state: :trailers}, [], [
+        {:data, reference, Enum.reverse(body), false} | responses
+      ])
+    end
 
     defp process_body(
            [data | rest],

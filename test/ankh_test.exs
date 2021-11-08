@@ -45,9 +45,6 @@ defmodule AnkhTest do
             unless complete do
               receive_response(protocol, reference)
             end
-
-          error ->
-            error
         end
     end
   end
