@@ -108,15 +108,13 @@ defmodule Ankh.HTTP2 do
 
     def connect(%HTTP2{} = protocol, uri, transport, options) do
       with {:ok, protocol} <- new(protocol, options),
-           :ok <- Transport.send(transport, @connection_preface),
-           {:ok, protocol} <-
-             send_settings(%{
-               protocol
-               | last_local_stream_id: -1,
-                 transport: transport,
-                 uri: uri
-             }) do
-        {:ok, protocol}
+           :ok <- Transport.send(transport, @connection_preface) do
+        send_settings(%{
+          protocol
+          | last_local_stream_id: -1,
+            transport: transport,
+            uri: uri
+        })
       end
     end
 
@@ -140,9 +138,7 @@ defmodule Ankh.HTTP2 do
     end
 
     def error(%HTTP2{} = protocol) do
-      with {:ok, protocol} <- send_error(protocol, :protocol_error) do
-        {:ok, protocol}
-      end
+      send_error(protocol, :protocol_error)
     end
 
     def stream(%HTTP2{buffer: buffer, transport: transport} = protocol, msg) do
@@ -176,9 +172,8 @@ defmodule Ankh.HTTP2 do
 
       with {:ok, protocol, stream} <- get_stream(protocol, reference),
            {:ok, protocol} <- send_headers(protocol, stream, response),
-           {:ok, protocol} <- send_data(protocol, stream, response),
-           {:ok, protocol} <- send_trailers(protocol, stream, response) do
-        {:ok, protocol}
+           {:ok, protocol} <- send_data(protocol, stream, response) do
+        send_trailers(protocol, stream, response)
       end
     end
 
@@ -259,9 +254,7 @@ defmodule Ankh.HTTP2 do
           {:ok, protocol, stream}
 
         nil when not is_local_stream(last_local_stream_id, stream_id) ->
-          with {:ok, protocol, stream} <- new_stream(protocol, stream_id) do
-            {:ok, protocol, stream}
-          end
+          new_stream(protocol, stream_id)
 
         _ ->
           {:error, :protocol_error}

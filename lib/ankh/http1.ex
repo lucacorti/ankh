@@ -68,9 +68,8 @@ defmodule Ankh.HTTP1 do
     end
 
     def stream(%HTTP1{transport: transport} = protocol, msg) do
-      with {:ok, data} <- Transport.handle_msg(transport, msg),
-           {:ok, protocol, responses} <- process_data(protocol, data) do
-        {:ok, protocol, responses}
+      with {:ok, data} <- Transport.handle_msg(transport, msg) do
+        process_data(protocol, data)
       end
     end
 
