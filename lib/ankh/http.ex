@@ -117,10 +117,23 @@ defmodule Ankh.HTTP do
     do: Protocol.respond(protocol, reference, response)
 
   @doc """
-  Receives data form the the peer and returns responses
+  Receives a transport message and returns responses
   """
-  @spec stream(Protocol.t(), any()) :: {:ok, Protocol.t(), any()} | {:error, any()}
-  def stream(protocol, msg), do: Protocol.stream(protocol, msg)
+  @spec stream(Protocol.t(), Transport.msg()) :: {:ok, Protocol.t(), any()} | {:error, any()}
+  def stream(%{transport: transport} = protocol, msg) do
+    with {:ok, data} <- Transport.handle_msg(transport, msg) do
+      stream_data(protocol, data)
+    end
+  end
+
+  @doc """
+  Receives data and returns responses
+  """
+  @spec stream_data(Protocol.t(), Transport.data()) ::
+          {:ok, Protocol.t(), any()} | {:error, any()}
+  def stream_data(protocol, data) do
+    Protocol.stream(protocol, data)
+  end
 
   @doc """
   Closes the underlying connection

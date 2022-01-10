@@ -141,9 +141,8 @@ defmodule Ankh.HTTP2 do
       send_error(protocol, :protocol_error)
     end
 
-    def stream(%HTTP2{buffer: buffer, transport: transport} = protocol, msg) do
-      with {:ok, data} <- Transport.handle_msg(transport, msg),
-           {:ok, protocol, responses} <- process_buffer(%{protocol | buffer: buffer <> data}) do
+    def stream(%HTTP2{buffer: buffer} = protocol, data) do
+      with {:ok, protocol, responses} <- process_buffer(%{protocol | buffer: buffer <> data}) do
         {:ok, protocol, Enum.reverse(responses)}
       end
     end
@@ -842,9 +841,7 @@ defmodule Ankh.HTTP2 do
            old_size,
            new_size
          ) do
-      new_size
-      |> Table.resize(send_hpack, old_size)
-      |> case do
+      case Table.resize(new_size, send_hpack, old_size) do
         {:ok, send_hpack} -> {:ok, %{protocol | send_hpack: send_hpack}}
         _ -> {:error, :compression_error}
       end

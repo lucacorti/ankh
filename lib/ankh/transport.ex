@@ -12,10 +12,14 @@ defprotocol Ankh.Transport do
   @typedoc "Socket"
   @type socket :: any()
 
-  @typedoc """
-  Transport options
-  """
+  @typedoc "Transport options"
   @type options :: keyword()
+
+  @typedoc "Transport message"
+  @type msg :: tuple()
+
+  @typedoc "Transport data"
+  @type data :: binary()
 
   @doc """
   Creates a new transport with the passed socket

@@ -67,10 +67,10 @@ defmodule Ankh.HTTP1 do
       end
     end
 
-    def stream(%HTTP1{transport: transport} = protocol, msg) do
-      with {:ok, data} <- Transport.handle_msg(transport, msg) do
-        process_data(protocol, data)
-      end
+    def stream(protocol, data) do
+      data
+      |> String.split(@crlf)
+      |> process_lines(protocol, [])
     end
 
     defp send_headers(transport, headers) do
@@ -80,12 +80,6 @@ defmodule Ankh.HTTP1 do
     end
 
     defp send_body(transport, body), do: Transport.send(transport, [body, @crlf])
-
-    defp process_data(protocol, data) do
-      data
-      |> String.split(@crlf)
-      |> process_lines(protocol, [])
-    end
 
     defp process_lines([], protocol, responses), do: {:ok, protocol, Enum.reverse(responses)}
 
