@@ -47,11 +47,10 @@ defmodule Ankh.Mixfile do
   defp docs do
     [
       groups_for_modules: [
-        Ankh: [~r/^Ankh$/, ~r/^Ankh.Protocol$/, ~r/^Ankh.Transport$/],
-        HTTP: [~r/^Ankh.HTTP$/, ~r/^Ankh.HTTP\..*/],
-        HTTP1: [~r/^Ankh.HTTP1.*/],
-        HTTP2: [~r/^Ankh.Protocol.HTTP2.*/],
-        Transports: [~r/Ankh.(TCP|TLS)$/]
+        HTTP1: [~r/^Ankh\.Protocol\.HTTP1\.*/],
+        HTTP2: [~r/^Ankh\.Protocol\.HTTP2\.*/],
+        Protocols: [~r/^Ankh\.Protocol$/, ~r/^Ankh\.Transport$/],
+        Transports: [~r/Ankh\.Transport\.*/]
       ]
     ]
   end

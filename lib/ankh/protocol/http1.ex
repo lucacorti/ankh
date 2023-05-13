@@ -38,7 +38,7 @@ defmodule Ankh.Protocol.HTTP1 do
         headers: headers,
         body: body,
         trailers: trailers
-      } = Request.put_header(request, "host", host)
+      } = HTTP.put_header(request, "host", host)
 
       with :ok <-
              Transport.send(transport, [Atom.to_string(method), " ", path, " HTTP/1.1", @crlf]),

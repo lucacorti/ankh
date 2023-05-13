@@ -150,10 +150,10 @@ defmodule Ankh.Protocol.HTTP2 do
         ) do
       request =
         request
-        |> Request.put_header(":method", Atom.to_string(method))
-        |> Request.put_header(":authority", authority)
-        |> Request.put_header(":scheme", scheme)
-        |> Request.put_header(":path", path)
+        |> HTTP.put_header(":method", Atom.to_string(method))
+        |> HTTP.put_header(":authority", authority)
+        |> HTTP.put_header(":scheme", scheme)
+        |> HTTP.put_header(":path", path)
 
       with {:ok, protocol, %{reference: reference} = stream} <- get_stream(protocol, nil),
            {:ok, protocol} <- send_headers(protocol, stream, request),
@@ -164,7 +164,7 @@ defmodule Ankh.Protocol.HTTP2 do
     end
 
     def respond(%@for{} = protocol, reference, %Response{status: status} = response) do
-      response = Response.put_header(response, ":status", Integer.to_string(status))
+      response = HTTP.put_header(response, ":status", Integer.to_string(status))
 
       with {:ok, protocol, stream} <- get_stream(protocol, reference),
            {:ok, protocol} <- send_headers(protocol, stream, response),

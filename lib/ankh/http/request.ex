@@ -111,27 +111,6 @@ defmodule Ankh.HTTP.Request do
     set_query(request, query)
   end
 
-  @spec fetch_header_values(t(), HTTP.header_name()) :: [HTTP.header_value()]
-  defdelegate fetch_header_values(request, header), to: HTTP
-
-  @spec fetch_trailer_values(t(), HTTP.header_name()) :: [HTTP.header_value()]
-  defdelegate fetch_trailer_values(request, trailer), to: HTTP
-
-  @spec put_header(t(), HTTP.header_name(), HTTP.header_value()) :: t()
-  defdelegate put_header(request, name, value), to: HTTP
-
-  @spec put_headers(t(), HTTP.headers()) :: t()
-  defdelegate put_headers(request, headers), to: HTTP
-
-  @spec put_trailer(t(), HTTP.header_name(), HTTP.header_value()) :: t()
-  defdelegate put_trailer(request, name, value), to: HTTP
-
-  @spec put_trailers(t(), HTTP.headers()) :: t()
-  defdelegate put_trailers(request, trailers), to: HTTP
-
-  @spec validate_body(t()) :: {:ok, t()} | :error
-  defdelegate validate_body(request), to: HTTP
-
   @spec validate_headers(HTTP.headers(), boolean(), [HTTP.header_name()]) ::
           :ok | {:error, :protocol_error}
   def validate_headers(headers, strict, forbidden \\ []),
