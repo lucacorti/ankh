@@ -6,10 +6,9 @@ defmodule Ankh.HTTP do
   """
 
   alias Ankh.{HTTP, Protocol, Transport}
+  alias Ankh.HTTP.{Error, Request, Response}
   alias Ankh.Protocol.{HTTP1, HTTP2}
   alias Ankh.Transport.{TCP, TLS}
-  alias HTTP.{Request, Response}
-  alias HTTP2.Error
 
   @typedoc "HTTP body"
   @type body :: iodata()
@@ -31,7 +30,7 @@ defmodule Ankh.HTTP do
   @type response ::
           {:data, reference(), iodata(), complete()}
           | {:headers | :push_promise, reference(), headers(), complete()}
-          | {:error, reference, Error.t(), complete()}
+          | {:error, reference, Error.reason(), complete()}
 
   @doc """
   Accepts an HTTP connection

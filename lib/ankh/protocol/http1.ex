@@ -98,7 +98,7 @@ defmodule Ankh.Protocol.HTTP1 do
           )
 
         _ ->
-          {:error, :invalid_response}
+          {:error, :protocol_error}
       end
     end
 
@@ -121,11 +121,11 @@ defmodule Ankh.Protocol.HTTP1 do
           )
 
         _ ->
-          {:error, :invalid_request}
+          {:error, :protocol_error}
       end
     end
 
-    defp process_lines(_lines, _protocol, _responses), do: {:error, :invalid_request}
+    defp process_lines(_lines, _protocol, _responses), do: {:error, :protocol_error}
 
     defp process_headers(
            [] = lines,
@@ -191,7 +191,7 @@ defmodule Ankh.Protocol.HTTP1 do
           process_headers(rest, protocol, [{name, String.trim(value)} | headers], responses)
 
         _line ->
-          {:error, :invalid_headers}
+          {:error, :protocol_error}
       end
     end
 
