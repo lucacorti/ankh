@@ -9,13 +9,13 @@ defmodule Ankh.Transport.TCP do
   defstruct socket: nil
 
   defimpl Transport do
-    @default_connect_options [:binary, active: false]
+    @default_connect_options [binary: true, active: false]
 
     def new(%@for{} = transport, socket), do: {:ok, %{transport | socket: socket}}
 
     def connect(%@for{} = transport, %URI{host: host, port: port}, timeout, options \\ []) do
       hostname = String.to_charlist(host)
-      options = @default_connect_options ++ options
+      options = Keyword.merge(options, @default_connect_options)
 
       with {:ok, socket} <- :gen_tcp.connect(hostname, port, options, timeout),
            :ok <- :inet.setopts(socket, active: :once) do
