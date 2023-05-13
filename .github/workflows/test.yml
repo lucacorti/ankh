@@ -22,7 +22,7 @@ jobs:
           - {otp: '25', elixir: '1.11'}
           - {otp: '25', elixir: '1.12'}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: erlef/setup-beam@v1
         with:
           otp-version: ${{ matrix.otp }}
@@ -38,14 +38,14 @@ jobs:
         elixir: ['1.14']
         otp: ['25.x']
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: erlef/setup-beam@v1
         id: beam
         with:
           otp-version: ${{ matrix.otp }}
           elixir-version: ${{ matrix.elixir }}
       - name: PLT cache
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           key: |
             ${{ runner.os }}-${{ steps.beam.outputs.elixir-version }}-${{ steps.beam.outputs.otp-version }}-plt
