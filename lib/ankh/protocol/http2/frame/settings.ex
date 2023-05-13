@@ -1,4 +1,4 @@
-defmodule Ankh.HTTP2.Frame.Settings do
+defmodule Ankh.Protocol.HTTP2.Frame.Settings do
   @moduledoc false
 
   defmodule Flags do
@@ -7,13 +7,13 @@ defmodule Ankh.HTTP2.Frame.Settings do
     @type t :: %__MODULE__{ack: boolean}
     defstruct ack: false
 
-    defimpl Ankh.HTTP2.Frame.Encodable do
-      def decode(%Flags{} = flags, <<_::7, 1::1>>, _), do: {:ok, %{flags | ack: true}}
-      def decode(%Flags{} = flags, <<_::7, 0::1>>, _), do: {:ok, %{flags | ack: false}}
+    defimpl Ankh.Protocol.HTTP2.Frame.Encodable do
+      def decode(%@for{} = flags, <<_::7, 1::1>>, _), do: {:ok, %{flags | ack: true}}
+      def decode(%@for{} = flags, <<_::7, 0::1>>, _), do: {:ok, %{flags | ack: false}}
       def decode(_flags, _data, _options), do: {:error, :decode_error}
 
-      def encode(%Flags{ack: true}, _), do: {:ok, <<0::7, 1::1>>}
-      def encode(%Flags{ack: false}, _), do: {:ok, <<0::7, 0::1>>}
+      def encode(%@for{ack: true}, _), do: {:ok, <<0::7, 1::1>>}
+      def encode(%@for{ack: false}, _), do: {:ok, <<0::7, 0::1>>}
       def encode(_flags, _options), do: {:error, :encode_error}
     end
   end
@@ -34,7 +34,7 @@ defmodule Ankh.HTTP2.Frame.Settings do
 
     defstruct settings: []
 
-    defimpl Ankh.HTTP2.Frame.Encodable do
+    defimpl Ankh.Protocol.HTTP2.Frame.Encodable do
       @header_table_size 0x1
       @enable_push 0x2
       @max_concurrent_streams 0x3
@@ -46,7 +46,7 @@ defmodule Ankh.HTTP2.Frame.Settings do
       @frame_size_limit 16_777_215
       @frame_size_initial 16_384
 
-      def decode(%Payload{} = payload, data, _options) when rem(byte_size(data), 6) == 0 do
+      def decode(%@for{} = payload, data, _options) when rem(byte_size(data), 6) == 0 do
         with settings when is_list(settings) <- decode_settings(data, []) do
           {:ok, %{payload | settings: Enum.reverse(settings)}}
         end
@@ -91,7 +91,7 @@ defmodule Ankh.HTTP2.Frame.Settings do
 
       defp decode_settings(<<>>, settings), do: settings
 
-      def encode(%Payload{settings: settings}, _options) do
+      def encode(%@for{settings: settings}, _options) do
         case encode_settings(settings, []) do
           settings when is_list(settings) ->
             {:ok, Enum.reverse(settings)}
@@ -142,5 +142,5 @@ defmodule Ankh.HTTP2.Frame.Settings do
     end
   end
 
-  use Ankh.HTTP2.Frame, type: 0x4, flags: Flags, payload: Payload
+  use Ankh.Protocol.HTTP2.Frame, type: 0x4, flags: Flags, payload: Payload
 end

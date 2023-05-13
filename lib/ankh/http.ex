@@ -5,7 +5,9 @@ defmodule Ankh.HTTP do
   This module implements `Ankh` public APIs and provides protocol negotiation.
   """
 
-  alias Ankh.{HTTP, HTTP1, HTTP2, Protocol, TCP, TLS, Transport}
+  alias Ankh.{HTTP, Protocol, Transport}
+  alias Ankh.Protocol.{HTTP1, HTTP2}
+  alias Ankh.Transport.{TCP, TLS}
   alias HTTP.{Request, Response}
   alias HTTP2.Error
 

@@ -1,15 +1,16 @@
-defmodule Ankh.HTTP2.Frame do
+defmodule Ankh.Protocol.HTTP2.Frame do
   @moduledoc """
   HTTP/2 frame struct
 
-  The __using__ macro injects the frame struct needed by `Ankh.HTTP2.Frame`.
+  The __using__ macro injects the frame struct needed by `Ankh.Protocol.HTTP2.Frame`.
   """
 
   require Logger
 
-  alias Ankh.HTTP2.Frame.Encodable
+  alias Ankh.Protocol.HTTP2
+  alias Ankh.Protocol.HTTP2.Frame.Encodable
 
-  @typedoc "Struct injected by the `Ankh.HTTP2.Frame` __using__ macro."
+  @typedoc "Struct injected by the `Ankh.Protocol.HTTP2.Frame` __using__ macro."
   @type t :: struct()
 
   @typedoc "Frame length"
@@ -30,8 +31,8 @@ defmodule Ankh.HTTP2.Frame do
   Injects the frame struct in a module.
 
   - type: HTTP/2 frame type code
-  - flags: data type implementing `Ankh.HTTP2.Frame.Encodable`
-  - payload: data type implementing `Ankh.HTTP2.Frame.Encodable`
+  - flags: data type implementing `Ankh.Protocol.HTTP2.Frame.Encodable`
+  - payload: data type implementing `Ankh.Protocol.HTTP2.Frame.Encodable`
   """
   @spec __using__(type: type(), flags: atom() | nil, payload: atom() | nil) :: Macro.t()
   defmacro __using__(args) do
@@ -39,19 +40,18 @@ defmodule Ankh.HTTP2.Frame do
          flags <- Keyword.get(args, :flags),
          payload <- Keyword.get(args, :payload) do
       quote bind_quoted: [type: type, flags: flags, payload: payload] do
-        alias Ankh.HTTP2.Frame
-        alias Ankh.HTTP2.Stream, as: HTTP2Stream
+        alias Ankh.Protocol.HTTP2.Frame
 
         @typedoc """
         - length: payload length in bytes
-        - flags: data type implementing `Ankh.HTTP2.Frame.Encodable`
+        - flags: data type implementing `Ankh.Protocol.HTTP2.Frame.Encodable`
         - stream_id: Stream ID of the frame
-        - payload: data type implementing `Ankh.HTTP2.Frame.Encodable`
+        - payload: data type implementing `Ankh.Protocol.HTTP2.Frame.Encodable`
         """
         @type t :: %__MODULE__{
                 length: Frame.length(),
                 type: Frame.type(),
-                stream_id: HTTP2Stream.id(),
+                stream_id: HTTP2.Stream.id(),
                 flags: Encodable.t() | nil,
                 payload: Encodable.t() | nil
               }
@@ -75,7 +75,7 @@ defmodule Ankh.HTTP2.Frame do
   Decodes a binary into a frame struct
 
   Parameters:
-    - struct: struct using `Ankh.HTTP2.Frame`
+    - struct: struct using `Ankh.Protocol.HTTP2.Frame`
     - binary: data to decode into the struct
     - options: options to pass as context to the decoding function
   """
@@ -102,7 +102,7 @@ defmodule Ankh.HTTP2.Frame do
   Encodes a frame struct into binary
 
   Parameters:
-    - struct: struct using `Ankh.HTTP2.Frame`
+    - struct: struct using `Ankh.Protocol.HTTP2.Frame`
     - options: options to pass as context to the encoding function
   """
   @spec encode(t(), options()) :: {:ok, t(), data} | {:error, any()}

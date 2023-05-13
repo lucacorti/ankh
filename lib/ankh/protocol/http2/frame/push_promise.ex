@@ -1,4 +1,4 @@
-defmodule Ankh.HTTP2.Frame.PushPromise do
+defmodule Ankh.Protocol.HTTP2.Frame.PushPromise do
   @moduledoc false
 
   defmodule Flags do
@@ -7,38 +7,38 @@ defmodule Ankh.HTTP2.Frame.PushPromise do
     @type t :: %__MODULE__{end_headers: boolean(), padded: boolean()}
     defstruct end_headers: false, padded: false
 
-    defimpl Ankh.HTTP2.Frame.Encodable do
-      def decode(%Flags{} = flags, <<_::4, 1::1, 1::1, _::2>>, _) do
+    defimpl Ankh.Protocol.HTTP2.Frame.Encodable do
+      def decode(%@for{} = flags, <<_::4, 1::1, 1::1, _::2>>, _) do
         {:ok, %{flags | end_headers: true, padded: true}}
       end
 
-      def decode(%Flags{} = flags, <<_::4, 1::1, 0::1, _::2>>, _) do
+      def decode(%@for{} = flags, <<_::4, 1::1, 0::1, _::2>>, _) do
         {:ok, %{flags | end_headers: false, padded: true}}
       end
 
-      def decode(%Flags{} = flags, <<_::4, 0::1, 1::1, _::2>>, _) do
+      def decode(%@for{} = flags, <<_::4, 0::1, 1::1, _::2>>, _) do
         {:ok, %{flags | end_headers: true, padded: false}}
       end
 
-      def decode(%Flags{} = flags, <<_::4, 0::1, 0::1, _::2>>, _) do
+      def decode(%@for{} = flags, <<_::4, 0::1, 0::1, _::2>>, _) do
         {:ok, %{flags | end_headers: false, padded: false}}
       end
 
       def decode(_flags, _data, _options), do: {:error, :decode_error}
 
-      def encode(%Flags{end_headers: true, padded: true}, _) do
+      def encode(%@for{end_headers: true, padded: true}, _) do
         {:ok, <<0::4, 1::1, 1::1, 0::2>>}
       end
 
-      def encode(%Flags{end_headers: true, padded: false}, _) do
+      def encode(%@for{end_headers: true, padded: false}, _) do
         {:ok, <<0::4, 0::1, 1::1, 0::2>>}
       end
 
-      def encode(%Flags{end_headers: false, padded: true}, _) do
+      def encode(%@for{end_headers: false, padded: true}, _) do
         {:ok, <<0::4, 1::1, 0::1, 0::2>>}
       end
 
-      def encode(%Flags{end_headers: false, padded: false}, _) do
+      def encode(%@for{end_headers: false, padded: false}, _) do
         {:ok, <<0::4, 0::1, 0::1, 0::2>>}
       end
 
@@ -49,7 +49,7 @@ defmodule Ankh.HTTP2.Frame.PushPromise do
   defmodule Payload do
     @moduledoc false
 
-    alias Ankh.HTTP2.Stream, as: HTTP2Stream
+    alias Ankh.Protocol.HTTP2.Stream, as: HTTP2Stream
 
     @type t :: %__MODULE__{
             pad_length: non_neg_integer(),
@@ -58,11 +58,11 @@ defmodule Ankh.HTTP2.Frame.PushPromise do
           }
     defstruct pad_length: 0, promised_stream_id: 0, hbf: []
 
-    defimpl Ankh.HTTP2.Frame.Encodable do
-      alias Ankh.HTTP2.Frame.PushPromise.{Flags, Payload}
+    defimpl Ankh.Protocol.HTTP2.Frame.Encodable do
+      alias Ankh.Protocol.HTTP2.Frame.PushPromise.Flags
 
       def decode(
-            %Payload{} = payload,
+            %@for{} = payload,
             <<pl::8, _::1, psi::31, data::binary>>,
             flags: %Flags{padded: true}
           ) do
@@ -76,7 +76,7 @@ defmodule Ankh.HTTP2.Frame.PushPromise do
       end
 
       def decode(
-            %Payload{} = payload,
+            %@for{} = payload,
             <<_::8, _::1, psi::31, hbf::binary>>,
             flags: %Flags{padded: false}
           ) do
@@ -86,13 +86,13 @@ defmodule Ankh.HTTP2.Frame.PushPromise do
       def decode(_payload, _data, _options), do: {:error, :decode_error}
 
       def encode(
-            %Payload{pad_length: pad_length, promised_stream_id: psi, hbf: hbf},
+            %@for{pad_length: pad_length, promised_stream_id: psi, hbf: hbf},
             flags: %Flags{padded: true}
           ) do
         {:ok, [<<pad_length::8, 0::1, psi::31>>, hbf, :binary.copy(<<0>>, pad_length)]}
       end
 
-      def encode(%Payload{promised_stream_id: psi, hbf: hbf}, flags: %Flags{padded: false}) do
+      def encode(%@for{promised_stream_id: psi, hbf: hbf}, flags: %Flags{padded: false}) do
         {:ok, [<<0::1, psi::31>>, hbf]}
       end
 
@@ -100,5 +100,5 @@ defmodule Ankh.HTTP2.Frame.PushPromise do
     end
   end
 
-  use Ankh.HTTP2.Frame, type: 0x5, flags: Flags, payload: Payload
+  use Ankh.Protocol.HTTP2.Frame, type: 0x5, flags: Flags, payload: Payload
 end

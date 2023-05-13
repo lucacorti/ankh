@@ -1,4 +1,4 @@
-defmodule Ankh.TCP do
+defmodule Ankh.Transport.TCP do
   @moduledoc "TCP transport implementation"
 
   require Logger
@@ -9,13 +9,11 @@ defmodule Ankh.TCP do
   defstruct socket: nil
 
   defimpl Transport do
-    alias Ankh.TCP
-
     @default_connect_options [:binary, active: false]
 
-    def new(%TCP{} = transport, socket), do: {:ok, %{transport | socket: socket}}
+    def new(%@for{} = transport, socket), do: {:ok, %{transport | socket: socket}}
 
-    def connect(%TCP{} = transport, %URI{host: host, port: port}, timeout, options \\ []) do
+    def connect(%@for{} = transport, %URI{host: host, port: port}, timeout, options \\ []) do
       hostname = String.to_charlist(host)
       options = @default_connect_options ++ options
 
@@ -25,7 +23,7 @@ defmodule Ankh.TCP do
       end
     end
 
-    def accept(%TCP{socket: socket} = transport, options \\ []) do
+    def accept(%@for{socket: socket} = transport, options \\ []) do
       options = Keyword.merge(options, active: :once)
 
       with :ok <- :gen_tcp.controlling_process(socket, self()),
@@ -34,11 +32,11 @@ defmodule Ankh.TCP do
       end
     end
 
-    def send(%TCP{socket: socket}, data), do: :gen_tcp.send(socket, data)
+    def send(%@for{socket: socket}, data), do: :gen_tcp.send(socket, data)
 
-    def recv(%TCP{socket: socket}, size, timeout), do: :gen_tcp.recv(socket, size, timeout)
+    def recv(%@for{socket: socket}, size, timeout), do: :gen_tcp.recv(socket, size, timeout)
 
-    def close(%TCP{socket: socket} = transport) do
+    def close(%@for{socket: socket} = transport) do
       with :ok <- :gen_tcp.close(socket), do: {:ok, %{transport | socket: nil}}
     end
 
@@ -46,8 +44,8 @@ defmodule Ankh.TCP do
       with :ok <- :inet.setopts(socket, active: :once), do: {:ok, data}
     end
 
-    def handle_msg(%TCP{socket: socket}, {:tcp_error, socket, reason}), do: {:error, reason}
-    def handle_msg(%TCP{socket: socket}, {:tcp_closed, socket}), do: {:error, :closed}
+    def handle_msg(%@for{socket: socket}, {:tcp_error, socket, reason}), do: {:error, reason}
+    def handle_msg(%@for{socket: socket}, {:tcp_closed, socket}), do: {:error, :closed}
     def handle_msg(_tcp, msg), do: {:other, msg}
 
     def negotiated_protocol(_tcp), do: {:error, :protocol_not_negotiated}

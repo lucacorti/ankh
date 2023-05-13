@@ -1,4 +1,4 @@
-defmodule Ankh.HTTP1 do
+defmodule Ankh.Protocol.HTTP1 do
   @moduledoc "HTTP/1 protocol implementation"
 
   alias Ankh.{Protocol, Transport}
@@ -15,23 +15,23 @@ defmodule Ankh.HTTP1 do
   defstruct mode: nil, reference: nil, transport: nil, uri: nil, state: :status
 
   defimpl Protocol do
-    alias Ankh.{HTTP, HTTP1}
+    alias Ankh.HTTP
     alias HTTP.{Request, Response}
 
     @crlf "\r\n"
 
-    def accept(%HTTP1{} = protocol, uri, transport, socket, options) do
+    def accept(%@for{} = protocol, uri, transport, socket, options) do
       with {:ok, transport} <- Transport.new(transport, socket),
            {:ok, transport} <- Transport.accept(transport, options),
            do: {:ok, %{protocol | mode: :server, transport: transport, uri: uri}}
     end
 
-    def connect(%HTTP1{} = protocol, uri, transport, _options),
+    def connect(%@for{} = protocol, uri, transport, _options),
       do: {:ok, %{protocol | mode: :client, transport: transport, uri: uri}}
 
     def error(_protocol), do: :ok
 
-    def request(%HTTP1{transport: transport, uri: %URI{host: host}} = protocol, request) do
+    def request(%@for{transport: transport, uri: %URI{host: host}} = protocol, request) do
       %Request{
         method: method,
         path: path,
@@ -50,7 +50,7 @@ defmodule Ankh.HTTP1 do
       end
     end
 
-    def respond(%HTTP1{transport: transport} = protocol, _request_reference, %Response{
+    def respond(%@for{transport: transport} = protocol, _request_reference, %Response{
           status: status,
           headers: headers,
           body: body,
@@ -85,7 +85,7 @@ defmodule Ankh.HTTP1 do
 
     defp process_lines(
            ["HTTP/1.1 " <> status | rest],
-           %HTTP1{mode: :client, state: :status} = protocol,
+           %@for{mode: :client, state: :status} = protocol,
            responses
          ) do
       case String.split(status, " ", parts: 2) do
@@ -104,7 +104,7 @@ defmodule Ankh.HTTP1 do
 
     defp process_lines(
            [request | rest],
-           %HTTP1{mode: :server, state: :status, uri: %URI{scheme: scheme}} = protocol,
+           %@for{mode: :server, state: :status, uri: %URI{scheme: scheme}} = protocol,
            responses
          ) do
       case String.split(request, " ", parts: 3) do
@@ -129,7 +129,7 @@ defmodule Ankh.HTTP1 do
 
     defp process_headers(
            [] = lines,
-           %HTTP1{reference: reference, state: :trailers} = protocol,
+           %@for{reference: reference, state: :trailers} = protocol,
            trailers,
            responses
          ) do
@@ -142,7 +142,7 @@ defmodule Ankh.HTTP1 do
 
     defp process_headers(
            ["" | rest],
-           %HTTP1{reference: reference, state: :headers, mode: :server} = protocol,
+           %@for{reference: reference, state: :headers, mode: :server} = protocol,
            headers,
            responses
          ) do
@@ -157,7 +157,7 @@ defmodule Ankh.HTTP1 do
 
     defp process_headers(
            ["" | rest],
-           %HTTP1{reference: reference, state: :headers, mode: :client} = protocol,
+           %@for{reference: reference, state: :headers, mode: :client} = protocol,
            headers,
            responses
          ) do
@@ -172,7 +172,7 @@ defmodule Ankh.HTTP1 do
 
     defp process_headers(
            [header | rest],
-           %HTTP1{state: state} = protocol,
+           %@for{state: state} = protocol,
            headers,
            responses
          )
@@ -197,7 +197,7 @@ defmodule Ankh.HTTP1 do
 
     defp process_body(
            [] = lines,
-           %HTTP1{reference: reference} = protocol,
+           %@for{reference: reference} = protocol,
            [_ | body],
            responses
          ) do
@@ -208,7 +208,7 @@ defmodule Ankh.HTTP1 do
 
     defp process_body(
            ["" | rest],
-           %HTTP1{reference: reference, state: :body} = protocol,
+           %@for{reference: reference, state: :body} = protocol,
            [_ | body],
            responses
          ) do
@@ -219,7 +219,7 @@ defmodule Ankh.HTTP1 do
 
     defp process_body(
            [data | rest],
-           %HTTP1{state: :body} = protocol,
+           %@for{state: :body} = protocol,
            body,
            responses
          ) do

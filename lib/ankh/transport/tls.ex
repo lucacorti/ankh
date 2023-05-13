@@ -1,4 +1,4 @@
-defmodule Ankh.TLS do
+defmodule Ankh.Transport.TLS do
   @moduledoc "TLS transport implementation"
 
   require Logger
@@ -9,16 +9,14 @@ defmodule Ankh.TLS do
   defstruct socket: nil
 
   defimpl Transport do
-    alias Ankh.TLS
-
     @default_connect_options binary: true,
                              active: false,
                              secure_renegotiate: true,
                              cacertfile: CAStore.file_path()
 
-    def new(%TLS{} = transport, socket), do: {:ok, %{transport | socket: socket}}
+    def new(%@for{} = transport, socket), do: {:ok, %{transport | socket: socket}}
 
-    def connect(%TLS{} = transport, %URI{host: host, port: port}, timeout, options \\ []) do
+    def connect(%@for{} = transport, %URI{host: host, port: port}, timeout, options \\ []) do
       hostname = String.to_charlist(host)
       options = Keyword.merge(options, @default_connect_options)
 
@@ -28,7 +26,7 @@ defmodule Ankh.TLS do
       end
     end
 
-    def accept(%TLS{socket: socket} = transport, options \\ []) do
+    def accept(%@for{socket: socket} = transport, options \\ []) do
       options = Keyword.merge(options, active: :once)
 
       with :ok <- :ssl.controlling_process(socket, self()),
@@ -37,11 +35,11 @@ defmodule Ankh.TLS do
       end
     end
 
-    def send(%TLS{socket: socket}, data), do: :ssl.send(socket, data)
+    def send(%@for{socket: socket}, data), do: :ssl.send(socket, data)
 
-    def recv(%TLS{socket: socket}, size, timeout), do: :ssl.recv(socket, size, timeout)
+    def recv(%@for{socket: socket}, size, timeout), do: :ssl.recv(socket, size, timeout)
 
-    def close(%TLS{socket: socket} = transport) do
+    def close(%@for{socket: socket} = transport) do
       with :ok <- :ssl.close(socket), do: {:ok, %{transport | socket: nil}}
     end
 
@@ -53,6 +51,6 @@ defmodule Ankh.TLS do
     def handle_msg(_tls, {:ssl_closed, _socket}), do: {:error, :closed}
     def handle_msg(_tls, msg), do: {:other, msg}
 
-    def negotiated_protocol(%TLS{socket: socket}), do: :ssl.negotiated_protocol(socket)
+    def negotiated_protocol(%@for{socket: socket}), do: :ssl.negotiated_protocol(socket)
   end
 end

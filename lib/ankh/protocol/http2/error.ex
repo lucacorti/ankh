@@ -1,9 +1,9 @@
-defmodule Ankh.HTTP2.Error do
+defmodule Ankh.Protocol.HTTP2.Error do
   @moduledoc """
   HTTP/2 Error encoding and decoding
   """
 
-  @errors [
+  errors = [
     {0x0, :no_error, "Graceful shutdown"},
     {0x1, :protocol_error, "Protocol error detected"},
     {0x2, :internal_error, "Implementation fault"},
@@ -23,7 +23,7 @@ defmodule Ankh.HTTP2.Error do
   @typedoc "HTTP/2 Error"
   @type t ::
           unquote(
-            Enum.map_join(@errors, " | ", &inspect(elem(&1, 1)))
+            Enum.map_join(errors, " | ", &inspect(elem(&1, 1)))
             |> Code.string_to_quoted!()
           )
 
@@ -34,21 +34,21 @@ defmodule Ankh.HTTP2.Error do
   Returns a human readable string for the corresponding error code atom
   """
   @spec format(t()) :: String.t()
-  for {_code, name, message} <- @errors do
+  for {_code, name, message} <- errors do
     def format(unquote(name)), do: unquote(message)
   end
 
   def format(_name), do: "Protocol error detected"
 
   @spec decode(code()) :: t()
-  for {code, name, _message} <- @errors do
+  for {code, name, _message} <- errors do
     def decode(unquote(code)), do: unquote(name)
   end
 
   def decode(_code), do: :protocol_error
 
   @spec encode(t()) :: binary()
-  for {code, name, _message} <- @errors do
+  for {code, name, _message} <- errors do
     def encode(unquote(name)), do: <<unquote(code)::32>>
   end
 

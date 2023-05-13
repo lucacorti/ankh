@@ -1,4 +1,4 @@
-defmodule Ankh.HTTP2.Frame.Headers do
+defmodule Ankh.Protocol.HTTP2.Frame.Headers do
   @moduledoc false
 
   defmodule Flags do
@@ -12,165 +12,165 @@ defmodule Ankh.HTTP2.Frame.Headers do
           }
     defstruct end_stream: false, end_headers: false, padded: false, priority: false
 
-    defimpl Ankh.HTTP2.Frame.Encodable do
-      def decode(%Flags{} = flags, <<_::2, 0::1, _::1, 0::1, 0::1, _::1, 0::1>>, _options) do
+    defimpl Ankh.Protocol.HTTP2.Frame.Encodable do
+      def decode(%@for{} = flags, <<_::2, 0::1, _::1, 0::1, 0::1, _::1, 0::1>>, _options) do
         {:ok, %{flags | end_stream: false, end_headers: false, padded: false, priority: false}}
       end
 
-      def decode(%Flags{} = flags, <<_::2, 0::1, _::1, 0::1, 0::1, _::1, 1::1>>, _options) do
+      def decode(%@for{} = flags, <<_::2, 0::1, _::1, 0::1, 0::1, _::1, 1::1>>, _options) do
         {:ok, %{flags | end_stream: true, end_headers: false, padded: false, priority: false}}
       end
 
-      def decode(%Flags{} = flags, <<_::2, 0::1, _::1, 0::1, 1::1, _::1, 1::1>>, _options) do
+      def decode(%@for{} = flags, <<_::2, 0::1, _::1, 0::1, 1::1, _::1, 1::1>>, _options) do
         {:ok, %{flags | end_stream: true, end_headers: true, padded: false, priority: false}}
       end
 
-      def decode(%Flags{} = flags, <<_::2, 0::1, _::1, 1::1, 1::1, _::1, 1::1>>, _options) do
+      def decode(%@for{} = flags, <<_::2, 0::1, _::1, 1::1, 1::1, _::1, 1::1>>, _options) do
         {:ok, %{flags | end_stream: true, end_headers: true, padded: true, priority: false}}
       end
 
-      def decode(%Flags{} = flags, <<_::2, 1::1, _::1, 1::1, 1::1, _::1, 1::1>>, _options) do
+      def decode(%@for{} = flags, <<_::2, 1::1, _::1, 1::1, 1::1, _::1, 1::1>>, _options) do
         {:ok, %{flags | end_stream: true, end_headers: true, padded: true, priority: true}}
       end
 
-      def decode(%Flags{} = flags, <<_::2, 1::1, _::1, 1::1, 1::1, _::1, 0::1>>, _options) do
+      def decode(%@for{} = flags, <<_::2, 1::1, _::1, 1::1, 1::1, _::1, 0::1>>, _options) do
         {:ok, %{flags | end_stream: false, end_headers: true, padded: true, priority: true}}
       end
 
-      def decode(%Flags{} = flags, <<_::2, 1::1, _::1, 1::1, 0::1, _::1, 0::1>>, _options) do
+      def decode(%@for{} = flags, <<_::2, 1::1, _::1, 1::1, 0::1, _::1, 0::1>>, _options) do
         {:ok, %{flags | end_stream: false, end_headers: false, padded: true, priority: true}}
       end
 
-      def decode(%Flags{} = flags, <<_::2, 1::1, _::1, 0::1, 0::1, _::1, 0::1>>, _options) do
+      def decode(%@for{} = flags, <<_::2, 1::1, _::1, 0::1, 0::1, _::1, 0::1>>, _options) do
         {:ok, %{flags | end_stream: false, end_headers: false, padded: false, priority: true}}
       end
 
-      def decode(%Flags{} = flags, <<_::2, 1::1, _::1, 0::1, 0::1, _::1, 1::1>>, _options) do
+      def decode(%@for{} = flags, <<_::2, 1::1, _::1, 0::1, 0::1, _::1, 1::1>>, _options) do
         {:ok, %{flags | end_stream: true, end_headers: false, padded: false, priority: true}}
       end
 
-      def decode(%Flags{} = flags, <<_::2, 1::1, _::1, 0::1, 1::1, _::1, 1::1>>, _options) do
+      def decode(%@for{} = flags, <<_::2, 1::1, _::1, 0::1, 1::1, _::1, 1::1>>, _options) do
         {:ok, %{flags | end_stream: true, end_headers: true, padded: false, priority: true}}
       end
 
-      def decode(%Flags{} = flags, <<_::2, 1::1, _::1, 1::1, 0::1, _::1, 1::1>>, _options) do
+      def decode(%@for{} = flags, <<_::2, 1::1, _::1, 1::1, 0::1, _::1, 1::1>>, _options) do
         {:ok, %{flags | end_stream: true, end_headers: false, padded: true, priority: true}}
       end
 
-      def decode(%Flags{} = flags, <<_::2, 0::1, _::1, 1::1, 0::1, _::1, 1::1>>, _options) do
+      def decode(%@for{} = flags, <<_::2, 0::1, _::1, 1::1, 0::1, _::1, 1::1>>, _options) do
         {:ok, %{flags | end_stream: true, end_headers: false, padded: true, priority: false}}
       end
 
-      def decode(%Flags{} = flags, <<_::2, 0::1, _::1, 1::1, 0::1, _::1, 0::1>>, _options) do
+      def decode(%@for{} = flags, <<_::2, 0::1, _::1, 1::1, 0::1, _::1, 0::1>>, _options) do
         {:ok, %{flags | end_stream: false, end_headers: false, padded: true, priority: false}}
       end
 
-      def decode(%Flags{} = flags, <<_::2, 0::1, _::1, 0::1, 1::1, _::1, 0::1>>, _options) do
+      def decode(%@for{} = flags, <<_::2, 0::1, _::1, 0::1, 1::1, _::1, 0::1>>, _options) do
         {:ok, %{flags | end_stream: false, end_headers: true, padded: false, priority: false}}
       end
 
-      def decode(%Flags{} = flags, <<_::2, 1::1, _::1, 0::1, 1::1, _::1, 0::1>>, _options) do
+      def decode(%@for{} = flags, <<_::2, 1::1, _::1, 0::1, 1::1, _::1, 0::1>>, _options) do
         {:ok, %{flags | end_stream: false, end_headers: true, padded: false, priority: true}}
       end
 
-      def decode(%Flags{} = flags, <<_::2, 0::1, _::1, 1::1, 1::1, _::1, 0::1>>, _options) do
+      def decode(%@for{} = flags, <<_::2, 0::1, _::1, 1::1, 1::1, _::1, 0::1>>, _options) do
         {:ok, %{flags | end_stream: false, end_headers: true, padded: true, priority: false}}
       end
 
       def decode(_flags, _data, _options), do: {:error, :decode_error}
 
       def encode(
-            %Flags{end_stream: false, end_headers: false, padded: false, priority: false},
+            %@for{end_stream: false, end_headers: false, padded: false, priority: false},
             _options
           ),
           do: {:ok, <<0::2, 0::1, 0::1, 0::1, 0::1, 0::1, 0::1>>}
 
       def encode(
-            %Flags{end_stream: true, end_headers: false, padded: false, priority: false},
+            %@for{end_stream: true, end_headers: false, padded: false, priority: false},
             _options
           ),
           do: {:ok, <<0::2, 0::1, 0::1, 0::1, 0::1, 0::1, 1::1>>}
 
       def encode(
-            %Flags{end_stream: true, end_headers: true, padded: false, priority: false},
+            %@for{end_stream: true, end_headers: true, padded: false, priority: false},
             _options
           ),
           do: {:ok, <<0::2, 0::1, 0::1, 0::1, 1::1, 0::1, 1::1>>}
 
       def encode(
-            %Flags{end_stream: true, end_headers: true, padded: true, priority: false},
+            %@for{end_stream: true, end_headers: true, padded: true, priority: false},
             _options
           ),
           do: {:ok, <<0::2, 0::1, 0::1, 1::1, 1::1, 0::1, 1::1>>}
 
       def encode(
-            %Flags{end_stream: true, end_headers: true, padded: true, priority: true},
+            %@for{end_stream: true, end_headers: true, padded: true, priority: true},
             _options
           ),
           do: {:ok, <<0::2, 1::1, 0::1, 1::1, 1::1, 0::1, 1::1>>}
 
       def encode(
-            %Flags{end_stream: false, end_headers: true, padded: true, priority: true},
+            %@for{end_stream: false, end_headers: true, padded: true, priority: true},
             _options
           ),
           do: {:ok, <<0::2, 1::1, 0::1, 1::1, 1::1, 0::1, 0::1>>}
 
       def encode(
-            %Flags{end_stream: false, end_headers: false, padded: true, priority: true},
+            %@for{end_stream: false, end_headers: false, padded: true, priority: true},
             _options
           ),
           do: {:ok, <<0::2, 1::1, 0::1, 1::1, 0::1, 0::1, 0::1>>}
 
       def encode(
-            %Flags{end_stream: false, end_headers: false, padded: false, priority: true},
+            %@for{end_stream: false, end_headers: false, padded: false, priority: true},
             _options
           ),
           do: {:ok, <<0::2, 1::1, 0::1, 0::1, 0::1, 0::1, 0::1>>}
 
       def encode(
-            %Flags{end_stream: true, end_headers: false, padded: false, priority: true},
+            %@for{end_stream: true, end_headers: false, padded: false, priority: true},
             _options
           ),
           do: {:ok, <<0::2, 1::1, 0::1, 0::1, 0::1, 0::1, 1::1>>}
 
       def encode(
-            %Flags{end_stream: true, end_headers: true, padded: false, priority: true},
+            %@for{end_stream: true, end_headers: true, padded: false, priority: true},
             _options
           ),
           do: {:ok, <<0::2, 1::1, 0::1, 0::1, 1::1, 0::1, 1::1>>}
 
       def encode(
-            %Flags{end_stream: true, end_headers: false, padded: true, priority: true},
+            %@for{end_stream: true, end_headers: false, padded: true, priority: true},
             _options
           ),
           do: {:ok, <<0::2, 1::1, 0::1, 1::1, 0::1, 0::1, 1::1>>}
 
       def encode(
-            %Flags{end_stream: true, end_headers: false, padded: true, priority: false},
+            %@for{end_stream: true, end_headers: false, padded: true, priority: false},
             _options
           ),
           do: {:ok, <<0::2, 0::1, 0::1, 1::1, 0::1, 0::1, 1::1>>}
 
       def encode(
-            %Flags{end_stream: false, end_headers: false, padded: true, priority: false},
+            %@for{end_stream: false, end_headers: false, padded: true, priority: false},
             _options
           ),
           do: {:ok, <<0::2, 0::1, 0::1, 1::1, 0::1, 0::1, 0::1>>}
 
       def encode(
-            %Flags{end_stream: false, end_headers: true, padded: false, priority: false},
+            %@for{end_stream: false, end_headers: true, padded: false, priority: false},
             _options
           ),
           do: {:ok, <<0::2, 0::1, 0::1, 0::1, 1::1, 0::1, 0::1>>}
 
       def encode(
-            %Flags{end_stream: false, end_headers: true, padded: false, priority: true},
+            %@for{end_stream: false, end_headers: true, padded: false, priority: true},
             _options
           ),
           do: {:ok, <<0::2, 1::1, 0::1, 0::1, 1::1, 0::1, 0::1>>}
 
       def encode(
-            %Flags{end_stream: false, end_headers: true, padded: true, priority: false},
+            %@for{end_stream: false, end_headers: true, padded: true, priority: false},
             _options
           ),
           do: {:ok, <<0::2, 0::1, 0::1, 1::1, 1::1, 0::1, 0::1>>}
@@ -181,7 +181,7 @@ defmodule Ankh.HTTP2.Frame.Headers do
 
   defmodule Payload do
     @moduledoc false
-    alias Ankh.HTTP2.Stream, as: HTTP2Stream
+    alias Ankh.Protocol.HTTP2.Stream, as: HTTP2Stream
 
     @type t :: %__MODULE__{
             pad_length: non_neg_integer(),
@@ -192,11 +192,11 @@ defmodule Ankh.HTTP2.Frame.Headers do
           }
     defstruct pad_length: 0, exclusive: false, stream_dependency: 0, weight: 0, hbf: []
 
-    defimpl Ankh.HTTP2.Frame.Encodable do
-      alias Ankh.HTTP2.Frame.Headers.Flags
+    defimpl Ankh.Protocol.HTTP2.Frame.Encodable do
+      alias Ankh.Protocol.HTTP2.Frame.Headers.Flags
 
       def decode(
-            %Payload{} = payload,
+            %@for{} = payload,
             <<pl::8, 1::1, sd::31, wh::8, data::binary>>,
             flags: %Flags{padded: true, priority: true}
           ) do
@@ -212,7 +212,7 @@ defmodule Ankh.HTTP2.Frame.Headers do
       end
 
       def decode(
-            %Payload{} = payload,
+            %@for{} = payload,
             <<pl::8, 0::1, sd::31, wh::8, data::binary>>,
             flags: %Flags{padded: true, priority: true}
           ) do
@@ -228,7 +228,7 @@ defmodule Ankh.HTTP2.Frame.Headers do
       end
 
       def decode(
-            %Payload{} = payload,
+            %@for{} = payload,
             <<pl::8, data::binary>>,
             flags: %Flags{padded: true, priority: false}
           ) do
@@ -236,7 +236,7 @@ defmodule Ankh.HTTP2.Frame.Headers do
       end
 
       def decode(
-            %Payload{} = payload,
+            %@for{} = payload,
             <<1::1, sd::31, wh::8, hbf::binary>>,
             flags: %Flags{padded: false, priority: true}
           ) do
@@ -244,7 +244,7 @@ defmodule Ankh.HTTP2.Frame.Headers do
       end
 
       def decode(
-            %Payload{} = payload,
+            %@for{} = payload,
             <<0::1, sd::31, wh::8, hbf::binary>>,
             flags: %Flags{padded: false, priority: true}
           ) do
@@ -252,7 +252,7 @@ defmodule Ankh.HTTP2.Frame.Headers do
       end
 
       def decode(
-            %Payload{} = payload,
+            %@for{} = payload,
             <<hbf::binary>>,
             flags: %Flags{padded: false, priority: false}
           ) do
@@ -262,7 +262,7 @@ defmodule Ankh.HTTP2.Frame.Headers do
       def decode(_payload, _data, _options), do: {:error, :decode_error}
 
       def encode(
-            %Payload{
+            %@for{
               pad_length: pad_length,
               exclusive: true,
               stream_dependency: sd,
@@ -275,7 +275,7 @@ defmodule Ankh.HTTP2.Frame.Headers do
       end
 
       def encode(
-            %Payload{
+            %@for{
               pad_length: pad_length,
               exclusive: false,
               stream_dependency: sd,
@@ -288,44 +288,44 @@ defmodule Ankh.HTTP2.Frame.Headers do
       end
 
       def encode(
-            %Payload{pad_length: pad_length, hbf: hbf},
+            %@for{pad_length: pad_length, hbf: hbf},
             flags: %Flags{padded: true, priority: false}
           ) do
         {:ok, [<<pad_length::8>>, hbf, :binary.copy(<<0>>, pad_length)]}
       end
 
       def encode(
-            %Payload{exclusive: true, stream_dependency: sd, weight: wh, hbf: hbf},
+            %@for{exclusive: true, stream_dependency: sd, weight: wh, hbf: hbf},
             flags: %Flags{padded: false, priority: true}
           ) do
         {:ok, [<<1::1, sd::31, wh::8>>, hbf]}
       end
 
       def encode(
-            %Payload{exclusive: false, stream_dependency: sd, weight: wh, hbf: hbf},
+            %@for{exclusive: false, stream_dependency: sd, weight: wh, hbf: hbf},
             flags: %Flags{padded: false, priority: true}
           ) do
         {:ok, [<<0::1, sd::31, wh::8>>, hbf]}
       end
 
-      def encode(%Payload{hbf: hbf}, flags: %Flags{padded: false, priority: false}),
+      def encode(%@for{hbf: hbf}, flags: %Flags{padded: false, priority: false}),
         do: {:ok, [hbf]}
 
       def encode(_payload, _options), do: {:error, :encode_error}
     end
   end
 
-  use Ankh.HTTP2.Frame, type: 0x1, flags: Flags, payload: Payload
+  use Ankh.Protocol.HTTP2.Frame, type: 0x1, flags: Flags, payload: Payload
 
-  defimpl Ankh.HTTP2.Frame.Splittable do
-    alias Ankh.HTTP2.Frame.{Continuation, Headers}
+  defimpl Ankh.Protocol.HTTP2.Frame.Splittable do
+    alias Ankh.Protocol.HTTP2.Frame.Continuation
 
-    def split(%Headers{flags: flags, payload: %Headers.Payload{hbf: hbf}} = frame, frame_size)
+    def split(%@for{flags: flags, payload: %@for.Payload{hbf: hbf}} = frame, frame_size)
         when byte_size(hbf) <= frame_size do
-      [%Headers{frame | flags: %Headers.Flags{flags | end_headers: true}}]
+      [%@for{frame | flags: %@for.Flags{flags | end_headers: true}}]
     end
 
-    def split(%Headers{payload: %Headers.Payload{hbf: hbf} = payload} = frame, frame_size) do
+    def split(%@for{payload: %@for.Payload{hbf: hbf} = payload} = frame, frame_size) do
       <<chunk::size(frame_size), rest::binary>> = hbf
 
       do_split(
@@ -334,7 +334,7 @@ defmodule Ankh.HTTP2.Frame.Headers do
           payload: %Continuation.Payload{hbf: rest}
         },
         frame_size,
-        [%Headers{frame | payload: %Headers.Payload{payload | hbf: chunk}}]
+        [%@for{frame | payload: %@for.Payload{payload | hbf: chunk}}]
       )
     end
 

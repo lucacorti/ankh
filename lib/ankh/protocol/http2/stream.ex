@@ -1,4 +1,4 @@
-defmodule Ankh.HTTP2.Stream do
+defmodule Ankh.Protocol.HTTP2.Stream do
   @moduledoc """
   HTTP/2 Stream
 
@@ -8,7 +8,7 @@ defmodule Ankh.HTTP2.Stream do
   require Logger
 
   alias Ankh.HTTP
-  alias Ankh.HTTP2.Frame
+  alias Ankh.Protocol.HTTP2.Frame
 
   alias Frame.{
     Continuation,

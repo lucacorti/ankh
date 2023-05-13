@@ -2,7 +2,7 @@ defprotocol Ankh.Protocol do
   @moduledoc """
   HTTP Protocol interface
 
-  HTTP protocol implementations like `Ankh.HTTP1` and `Ankh.HTTP2` implement this protocol
+  HTTP protocol implementations like `Ankh.HTTP1` and `Ankh.Protocol.HTTP2` implement this protocol
   and can be used via `Ankh.HTTP`.
   """
 
