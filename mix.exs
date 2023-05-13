@@ -49,7 +49,7 @@ defmodule Ankh.Mixfile do
       groups_for_modules: [
         HTTP1: [~r/^Ankh\.Protocol\.HTTP1\.*/],
         HTTP2: [~r/^Ankh\.Protocol\.HTTP2\.*/],
-        Protocols: [~r/^Ankh\.Protocol$/, ~r/^Ankh\.Transport$/],
+        Internals: [~r/^Ankh\.Protocol$/, ~r/^Ankh\.Transport$/],
         Transports: [~r/Ankh\.Transport\.*/]
       ]
     ]
