@@ -3,7 +3,6 @@ defmodule Ankh.Protocol.HTTP2 do
 
   alias Ankh.{Protocol, Protocol.HTTP2, Transport}
   alias Ankh.Protocol.HTTP2.{Frame, Frame.Settings}
-  alias HPack.Table
 
   @opaque t :: %__MODULE__{
             buffer: iodata(),
@@ -13,10 +12,10 @@ defmodule Ankh.Protocol.HTTP2 do
             last_local_stream_id: HTTP2.Stream.id(),
             last_remote_stream_id: HTTP2.Stream.id(),
             recv_hbf_type: HTTP2.Stream.hbf_type(),
-            recv_hpack: Table.t(),
+            recv_hpack: HPAX.table(),
             recv_settings: Settings.Payload.settings(),
             references: %{HTTP2.Stream.id() => reference()},
-            send_hpack: Table.t(),
+            send_hpack: HPAX.table(),
             send_queue: :queue.queue(Frame.t()),
             send_settings: Settings.Payload.settings(),
             streams: %{HTTP2.Stream.id() => HTTP2.Stream.t()},
@@ -60,8 +59,6 @@ defmodule Ankh.Protocol.HTTP2 do
       Splittable,
       WindowUpdate
     }
-
-    alias HPack.Table
 
     import Ankh.Protocol.HTTP2.Stream,
       only: [is_local_stream: 2, is_client_stream: 1, is_server_stream: 1]
@@ -121,20 +118,17 @@ defmodule Ankh.Protocol.HTTP2 do
       recv_settings = Keyword.merge(@default_settings, settings)
       header_table_size = Keyword.get(recv_settings, :header_table_size)
 
-      with send_hpack <- Table.new(@initial_header_table_size),
-           recv_hpack <- Table.new(header_table_size) do
-        {
-          :ok,
-          %{
-            protocol
-            | send_hpack: send_hpack,
-              send_settings: @default_settings,
-              recv_hpack: recv_hpack,
-              recv_settings: recv_settings,
-              window_size: @initial_window_size
-          }
+      {
+        :ok,
+        %{
+          protocol
+          | send_hpack: HPAX.new(@initial_header_table_size),
+            send_settings: @default_settings,
+            recv_hpack: HPAX.new(header_table_size),
+            recv_settings: recv_settings,
+            window_size: @initial_window_size
         }
-      end
+      }
     end
 
     def error(%@for{} = protocol) do
@@ -339,19 +333,13 @@ defmodule Ankh.Protocol.HTTP2 do
            size
          )
          when is_list(headers) do
-      headers
-      |> HPack.encode(send_hpack)
-      |> case do
-        {:ok, send_hpack, hbf} ->
-          process_queued_frame(
-            %{protocol | send_hpack: send_hpack},
-            %{frame | payload: %Headers.Payload{payload | hbf: hbf}},
-            size
-          )
+      {hbf, send_hpack} = HPAX.encode(:store, headers, send_hpack)
 
-        _ ->
-          {:error, :compression_error}
-      end
+      process_queued_frame(
+        %{protocol | send_hpack: send_hpack},
+        %{frame | payload: %Headers.Payload{payload | hbf: IO.iodata_to_binary(hbf)}},
+        size
+      )
     end
 
     defp process_queued_frame(%@for{send_queue: send_queue} = protocol, %Data{} = frame, size)
@@ -442,13 +430,12 @@ defmodule Ankh.Protocol.HTTP2 do
     defp send_settings(%@for{send_hpack: send_hpack, recv_settings: recv_settings} = protocol) do
       header_table_size = Keyword.get(recv_settings, :header_table_size)
 
-      with {:ok, send_hpack} <- Table.resize(header_table_size, send_hpack),
-           {:ok, %@for{} = protocol} <-
-             send_frame(protocol, %Settings{
-               payload: %Settings.Payload{settings: recv_settings}
-             }) do
-        {:ok, %{protocol | send_hpack: send_hpack}}
-      else
+      case send_frame(protocol, %Settings{
+             payload: %Settings.Payload{settings: recv_settings}
+           }) do
+        {:ok, %@for{} = protocol} ->
+          {:ok, %{protocol | send_hpack: HPAX.resize(send_hpack, header_table_size)}}
+
         _ ->
           {:error, :compression_error}
       end
@@ -487,7 +474,6 @@ defmodule Ankh.Protocol.HTTP2 do
            responses
          ) do
       new_send_settings = Keyword.merge(send_settings, settings)
-      old_header_table_size = Keyword.get(send_settings, :header_table_size)
       new_header_table_size = Keyword.get(new_send_settings, :header_table_size)
       old_window_size = Keyword.get(send_settings, :initial_window_size)
       new_window_size = Keyword.get(new_send_settings, :initial_window_size)
@@ -495,7 +481,7 @@ defmodule Ankh.Protocol.HTTP2 do
       with {:ok, protocol} <-
              send_frame(protocol, %Settings{flags: %Settings.Flags{ack: true}, payload: nil}),
            {:ok, protocol} <-
-             adjust_header_table_size(protocol, old_header_table_size, new_header_table_size),
+             adjust_header_table_size(protocol, new_header_table_size),
            {:ok, protocol} <-
              adjust_streams_window_size(protocol, old_window_size, new_window_size),
            {:ok, protocol} <-
@@ -713,19 +699,14 @@ defmodule Ankh.Protocol.HTTP2 do
          do: {:ok, protocol, [response | responses]}
 
     defp process_stream_response(
-           %@for{recv_hpack: recv_hpack, send_settings: send_settings} = protocol,
+           %@for{recv_hpack: recv_hpack} = protocol,
            frame,
            responses,
            {type, ref, hbf, end_stream}
          )
          when type in [:headers, :push_promise] do
-      max_header_table_size = Keyword.get(send_settings, :header_table_size)
-
-      hbf
-      |> Enum.join()
-      |> HPack.decode(recv_hpack, max_header_table_size)
-      |> case do
-        {:ok, recv_hpack, headers} ->
+      case HPAX.decode(Enum.join(hbf), recv_hpack) do
+        {:ok, headers, recv_hpack} ->
           with {:ok, protocol} <- validate_headers(protocol, frame, headers) do
             {
               :ok,
@@ -844,15 +825,8 @@ defmodule Ankh.Protocol.HTTP2 do
       })
     end
 
-    defp adjust_header_table_size(
-           %@for{send_hpack: send_hpack} = protocol,
-           old_size,
-           new_size
-         ) do
-      case Table.resize(new_size, send_hpack, old_size) do
-        {:ok, send_hpack} -> {:ok, %{protocol | send_hpack: send_hpack}}
-        _ -> {:error, :compression_error}
-      end
+    defp adjust_header_table_size(%@for{send_hpack: send_hpack} = protocol, new_size) do
+      {:ok, %{protocol | send_hpack: HPAX.resize(send_hpack, new_size)}}
     end
 
     defp adjust_streams_window_size(
