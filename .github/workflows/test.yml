@@ -15,7 +15,7 @@ jobs:
     name: Test (OTP ${{ matrix.otp }} / Elixir ${{ matrix.elixir }})
     strategy:
       matrix:
-        elixir: ['1.15', '1.14', '1.13', '1.12']
+        elixir: ['1.15.0-rc.0', '1.14', '1.13', '1.12']
         otp: ['26', '25', '24', '23']
         exclude:
           - {otp: '26', elixir: '1.12'}
@@ -34,7 +34,7 @@ jobs:
     name: Linting
     strategy:
       matrix:
-        elixir: ['1.15']
+        elixir: ['1.15-rc.0']
         otp: ['26']
     steps:
       - uses: actions/checkout@v3
