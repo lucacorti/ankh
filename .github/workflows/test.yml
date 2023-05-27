@@ -19,7 +19,6 @@ jobs:
         otp: ['26', '25', '24', '23']
         exclude:
           - {otp: '23', elixir: '1.15.0-rc.0'}
-          - {otp: '24', elixir: '1.15.0-rc.0'}
           - {otp: '25', elixir: '1.12'}
           - {otp: '26', elixir: '1.12'}
           - {otp: '26', elixir: '1.13'}
