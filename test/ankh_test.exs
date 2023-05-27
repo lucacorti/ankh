@@ -30,7 +30,7 @@ defmodule AnkhTest do
       msg ->
         case HTTP.stream(protocol, msg) do
           {:other, msg} ->
-            Logger.warn("unknown message: #{inspect(msg)}")
+            Logger.warning("unknown message: #{inspect(msg)}")
 
           {:ok, protocol, []} ->
             receive_response(protocol, reference)
