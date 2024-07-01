@@ -36,7 +36,7 @@ defmodule Ankh.Mixfile do
   defp deps do
     [
       {:castore, "~> 1.0"},
-      {:hpax, "~> 0.2"},
+      {:hpax, "~> 1.0"},
       {:plug, "~> 1.0"},
       {:credo, "~> 1.0", only: [:dev], runtime: false},
       {:ex_doc, "~> 0.34.0", only: [:dev], runtime: false},
