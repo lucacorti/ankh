@@ -26,9 +26,6 @@ jobs:
           - { otp: "27", elixir: "1.15" }
           - { otp: "27", elixir: "1.14" }
           - { otp: "26", elixir: "1.14" }
-          - { otp: "27", elixir: "1.13" }
-          - { otp: "26", elixir: "1.13" }
-          - { otp: "25", elixir: "1.13" }
     steps:
       - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
