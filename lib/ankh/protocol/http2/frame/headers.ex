@@ -319,10 +319,14 @@ defmodule Ankh.Protocol.HTTP2.Frame.Headers do
 
   defimpl Ankh.Protocol.HTTP2.Frame.Splittable do
     alias Ankh.Protocol.HTTP2.Frame.Continuation
+    alias Ankh.Protocol.HTTP2.Frame.Headers.Flags
 
-    def split(%@for{flags: flags, payload: %@for.Payload{hbf: hbf}} = frame, frame_size)
+    def split(
+          %@for{flags: %Flags{} = flags, payload: %@for.Payload{hbf: hbf}} = frame,
+          frame_size
+        )
         when byte_size(hbf) <= frame_size do
-      [%@for{frame | flags: %@for.Flags{flags | end_headers: true}}]
+      [%@for{frame | flags: %{flags | end_headers: true}}]
     end
 
     def split(%@for{payload: %@for.Payload{hbf: hbf} = payload} = frame, frame_size) do

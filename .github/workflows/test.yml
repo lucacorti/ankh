@@ -15,19 +15,20 @@ jobs:
     name: Test (OTP ${{ matrix.otp }} / Elixir ${{ matrix.elixir }})
     strategy:
       matrix:
-        elixir: ["1.18", "1.17", "1.16", "1.15", "1.14"]
-        otp: ["27", "26", "25", "24"]
+        elixir: ["1.19", "1.18", "1.17", "1.16", "1.15"]
+        otp: ["28", "27", "26", "25", "24"]
         exclude:
-          - { otp: "25", elixir: "1.18" }
+          - { otp: "24", elixir: "1.19" }
           - { otp: "24", elixir: "1.18" }
           - { otp: "24", elixir: "1.17" }
+          - { otp: "25", elixir: "1.19" }
           - { otp: "27", elixir: "1.16" }
-          - { otp: "22", elixir: "1.16" }
           - { otp: "27", elixir: "1.15" }
-          - { otp: "27", elixir: "1.14" }
-          - { otp: "26", elixir: "1.14" }
+          - { otp: "28", elixir: "1.17" }
+          - { otp: "28", elixir: "1.16" }
+          - { otp: "28", elixir: "1.15" }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: erlef/setup-beam@v1
         with:
           otp-version: ${{ matrix.otp }}
@@ -38,19 +39,15 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     name: Linting
-    strategy:
-      matrix:
-        elixir: ["1.18"]
-        otp: ["27"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: erlef/setup-beam@v1
         id: beam
         with:
-          otp-version: ${{ matrix.otp }}
-          elixir-version: ${{ matrix.elixir }}
+          version-file: .tool-versions
+          version-type: strict
       - name: PLT cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           key: |
             ${{ runner.os }}-${{ steps.beam.outputs.elixir-version }}-${{ steps.beam.outputs.otp-version }}-plt
