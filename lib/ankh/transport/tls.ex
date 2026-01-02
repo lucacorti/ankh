@@ -11,7 +11,6 @@ defmodule Ankh.Transport.TLS do
   defimpl Transport do
     @default_connect_options binary: true,
                              active: false,
-                             secure_renegotiate: true,
                              cacertfile: CAStore.file_path()
 
     def new(%@for{} = transport, socket), do: {:ok, %{transport | socket: socket}}
