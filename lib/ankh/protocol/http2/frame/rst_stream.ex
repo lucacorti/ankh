@@ -20,8 +20,6 @@ defmodule Ankh.Protocol.HTTP2.Frame.RstStream do
 
       def encode(%@for{error_code: error}, _),
         do: {:ok, [HTTP2.Error.encode(error)]}
-
-      def encode(_payload, _options), do: {:error, :encode_error}
     end
   end
 

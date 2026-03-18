@@ -330,7 +330,7 @@ defmodule Ankh.Protocol.HTTP2.Frame.Headers do
     end
 
     def split(%@for{payload: %@for.Payload{hbf: hbf} = payload} = frame, frame_size) do
-      <<chunk::size(frame_size), rest::binary>> = hbf
+      <<chunk::size(^frame_size), rest::binary>> = hbf
 
       do_split(
         %Continuation{
@@ -349,7 +349,7 @@ defmodule Ankh.Protocol.HTTP2.Frame.Headers do
            frames
          )
          when byte_size(hbf) > frame_size do
-      <<chunk::size(frame_size), rest::binary>> = hbf
+      <<chunk::size(^frame_size), rest::binary>> = hbf
 
       frames = [
         %Continuation{

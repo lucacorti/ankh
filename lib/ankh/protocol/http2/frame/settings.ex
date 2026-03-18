@@ -101,8 +101,6 @@ defmodule Ankh.Protocol.HTTP2.Frame.Settings do
         end
       end
 
-      def encode(_payload, _options), do: {:error, :encode_error}
-
       defp encode_settings([{:header_table_size, value} | rest], data),
         do: encode_settings(rest, [<<@header_table_size::16, value::32>> | data])
 
