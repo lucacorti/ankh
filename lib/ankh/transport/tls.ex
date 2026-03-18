@@ -1,8 +1,6 @@
 defmodule Ankh.Transport.TLS do
   @moduledoc "TLS transport implementation"
 
-  require Logger
-
   alias Ankh.Transport
 
   @opaque t :: %__MODULE__{socket: :ssl.socket()}
