@@ -29,8 +29,6 @@ defmodule Ankh.Protocol.HTTP2.Frame.GoAway do
 
       def encode(%@for{last_stream_id: lsid, error_code: error, data: data}, _),
         do: {:ok, [<<0::1, lsid::31>>, HTTP2.Error.encode(error), data]}
-
-      def encode(_payload, _options), do: {:error, :encode_error}
     end
   end
 

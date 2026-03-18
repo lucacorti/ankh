@@ -15,8 +15,6 @@ defmodule Ankh.Protocol.HTTP2.Frame.WindowUpdate do
 
       def encode(%@for{increment: increment}, _),
         do: {:ok, [<<0::1, increment::31>>]}
-
-      def encode(_payload, _options), do: {:error, :encode_error}
     end
   end
 
