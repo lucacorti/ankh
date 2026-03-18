@@ -302,11 +302,7 @@ defmodule Ankh.Protocol.HTTP2 do
             {[protocol], {protocol, queue}}
           else
             {:ok, protocol, frames} ->
-              protocol =
-                Enum.reduce(frames, protocol, fn frame, %@for{send_queue: queue} = protocol ->
-                  %{protocol | send_queue: :queue.in_r(frame, queue)}
-                end)
-
+              protocol = queue_frames(protocol, frames)
               {[protocol], {protocol, :queue.new()}}
 
             max_frame_size when is_integer(max_frame_size) and max_frame_size <= 0 ->
@@ -325,6 +321,12 @@ defmodule Ankh.Protocol.HTTP2 do
         fn _protocol -> :ok end
       )
       |> Enum.reduce({:ok, protocol}, fn protocol, _acc -> {:ok, protocol} end)
+    end
+
+    defp queue_frames(protocol, frames) do
+      Enum.reduce(frames, protocol, fn frame, %@for{send_queue: queue} = protocol ->
+        %{protocol | send_queue: :queue.in_r(frame, queue)}
+      end)
     end
 
     defp process_queued_frame(
