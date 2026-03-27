@@ -150,7 +150,6 @@ defmodule Ankh.HTTP do
     # clauses ({:error, _}) always see a consistent shape.
     case Transport.connect(%QUIC{}, uri, timeout, quic_options) do
       {:ok, transport} -> Protocol.connect(%HTTP3{}, uri, transport, options)
-      {:error, reason, _props} -> {:error, reason}
       {:error, _} = error -> error
     end
   end

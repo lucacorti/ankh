@@ -187,9 +187,7 @@ defmodule Ankh.Protocol.HTTP3 do
     @doc """
     Closes the QUIC connection, signalling a connection-level error to the peer.
     """
-    def error(%@for{transport: transport}) do
-      QUIC.close_connection(transport)
-    end
+    def error(%@for{transport: transport}), do: Transport.close(transport)
 
     # -------------------------------------------------------------------------
     # request/2
@@ -633,8 +631,7 @@ defmodule Ankh.Protocol.HTTP3 do
         "HTTP/3 new stream: handle=#{inspect(stream_handle)}, unidirectional=#{unidirectional?}"
       )
 
-      protocol = %@for{protocol | streams: Map.put(streams, stream_handle, stream)}
-      {:ok, protocol, []}
+      {:ok, %@for{protocol | streams: Map.put(streams, stream_handle, stream)}, []}
     end
   end
 end

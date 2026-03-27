@@ -134,20 +134,6 @@ defmodule Ankh.Transport.QUIC do
     end
   end
 
-  @doc """
-  Closes the QUIC **connection** without first closing a specific stream.
-
-  Used by `Ankh.Protocol.HTTP3.error/1` to tear down the whole connection
-  when a connection-level error is detected.
-  """
-  @spec close_connection(t()) :: :ok | {:error, any()}
-  def close_connection(%__MODULE__{connection: conn}) when not is_nil(conn) do
-    case :quicer.close_connection(conn) do
-      :ok -> :ok
-      {:error, _} = error -> error
-    end
-  end
-
   defimpl Transport do
     # Default ALPN for HTTP/3.
     @default_alpn ["h3"]
@@ -227,8 +213,15 @@ defmodule Ankh.Transport.QUIC do
         )
         |> Map.new()
 
-      with {:ok, conn} <- :quicer.connect(hostname, port || 443, conn_opts, timeout) do
-        {:ok, %{transport | connection: conn}}
+      case :quicer.connect(hostname, port || 443, conn_opts, timeout) do
+        {:ok, conn} ->
+          {:ok, %{transport | connection: conn}}
+
+        {:error, :transport_down, _props} ->
+          {:error, :closed}
+
+        {:error, reason} ->
+          {:error, reason}
       end
     end
 
@@ -426,19 +419,14 @@ defmodule Ankh.Transport.QUIC do
     Delegates to `:quicer.negotiated_protocol/1` on the connection handle.
     Returns `{:error, :protocol_not_negotiated}` if no connection is present.
     """
-    # quicer's negotiated_protocol/1 delegates to quicer_nif:getopt/3, a NIF
-    # whose Dialyzer success-typing resolves to only {:error, atom()}.  The
-    # quicer @spec correctly declares {:ok, binary()} | {:error, any()}, but
-    # Dialyzer's conservative NIF analysis cannot see the {:ok, _} branch as
-    # reachable.  This is a confirmed false positive; suppress it here rather
-    # than in the ignore-warnings file because Erlex fails to parse the raw
-    # Erlang type in the warning args, causing dialyxir's filter to silently
-    # skip the entry.
     @dialyzer {:nowarn_function, [negotiated_protocol: 1]}
     def negotiated_protocol(%@for{connection: conn}) when not is_nil(conn) do
       case :quicer.negotiated_protocol(conn) do
         {:ok, protocol} ->
           {:ok, protocol}
+
+        {:error, _reason, _props} ->
+          {:error, :protocol_not_negotiated}
 
         {:error, _reason} ->
           {:error, :protocol_not_negotiated}
