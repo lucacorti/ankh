@@ -3,8 +3,8 @@ defmodule Ankh.Protocol.HTTP3 do
   HTTP/3 protocol implementation for Ankh.
 
   This module implements the `Ankh.Protocol` protocol over a QUIC connection
-  managed by the `quicer` library. It supports both the client (`connect/4`) and
-  server (`accept/5`) sides of an HTTP/3 connection.
+  managed by the `Ankh.Transport.QUIC` transport. It supports both the client
+  (`connect/4`) and server (`accept/5`) sides of an HTTP/3 connection.
 
   ## Architecture
 
@@ -14,7 +14,7 @@ defmodule Ankh.Protocol.HTTP3 do
   forwarded directly to this protocol's `stream/2` callback rather than being
   unwrapped by the transport layer.
 
-  Each QUIC stream is tracked in the `streams` map keyed by the opaque quicer
+  Each QUIC stream is tracked in the `streams` map keyed by the opaque QUIC
   stream handle. A parallel `references` map provides the reverse lookup from
   Elixir request references to stream handles, allowing callers to correlate
   `stream/2` response events back to the originating `request/2` or `respond/3`
@@ -133,7 +133,7 @@ defmodule Ankh.Protocol.HTTP3 do
     the mandatory SETTINGS preface (RFC 9114 §6.2.1) before returning.
 
     The `socket` argument must be a raw QUIC connection handle (`reference()`)
-    as returned by quicer after accepting a connection from a listener.
+    as returned by the transport after accepting a connection from a listener.
     """
     def accept(%@for{} = protocol, uri, transport, socket, _options) do
       with {:ok, %QUIC{connection: conn} = transport} <- Transport.new(transport, socket),
@@ -361,15 +361,52 @@ defmodule Ankh.Protocol.HTTP3 do
     end
 
     def stream(%@for{} = protocol, {:quic, :peer_send_shutdown, stream_handle, _props}) do
-      handle_peer_send_shutdown(protocol, stream_handle)
+      case Map.get(protocol.streams, stream_handle) do
+        nil ->
+          {:ok, protocol, []}
+
+        stream ->
+          stream = Stream.remote_fin(stream)
+
+          {
+            :ok,
+            %@for{protocol | streams: Map.put(protocol.streams, stream_handle, stream)},
+            [{:data, stream.reference, <<>>, true}]
+          }
+      end
     end
 
     def stream(%@for{} = protocol, {:quic, :stream_closed, stream_handle, _props}) do
-      handle_stream_closed(protocol, stream_handle)
+      case Map.get(protocol.streams, stream_handle) do
+        nil ->
+          {:ok, protocol, []}
+
+        stream ->
+          stream =
+            stream
+            |> Stream.remote_fin()
+            |> Stream.local_fin()
+
+          {
+            :ok,
+            %@for{protocol | streams: Map.put(protocol.streams, stream_handle, stream)},
+            []
+          }
+      end
     end
 
     def stream(%@for{} = protocol, {:quic, :new_stream, stream_handle, props}) do
-      handle_new_stream(protocol, stream_handle, props)
+      unidirectional? = Map.get(props, :flags, 0) == 1
+      stream = Stream.new_incoming(stream_handle, unidirectional?)
+
+      %QUIC{} = quic_transport = protocol.transport
+      QUIC.rearm_stream(%QUIC{quic_transport | stream: stream_handle})
+
+      Logger.debug(
+        "HTTP/3 new stream: handle=#{inspect(stream_handle)}, unidirectional=#{unidirectional?}"
+      )
+
+      {:ok, %@for{protocol | streams: Map.put(protocol.streams, stream_handle, stream)}, []}
     end
 
     def stream(%@for{} = _protocol, {:quic, :transport_shutdown, _conn, _props}) do
@@ -388,7 +425,7 @@ defmodule Ankh.Protocol.HTTP3 do
     # Private helpers
     # =========================================================================
 
-    # Resolves an Elixir request reference to its quicer stream handle and
+    # Resolves an Elixir request reference to its QUIC stream handle and
     # per-stream state struct.  Returns `{:error, :unknown_reference}` when
     # the reference is not present in the protocol maps.
     defp lookup_stream(%@for{references: references, streams: streams}, ref) do
@@ -529,9 +566,8 @@ defmodule Ankh.Protocol.HTTP3 do
            stream,
            _stream_handle,
            %Data{payload: %Data.Payload{data: data}}
-         ) do
-      {:ok, protocol, stream, [{:data, stream.reference, data, false}]}
-    end
+         ),
+         do: {:ok, protocol, stream, [{:data, stream.reference, data, false}]}
 
     # SETTINGS frame — update `remote_settings` and log; no response event.
     defp recv_frame(
@@ -545,15 +581,13 @@ defmodule Ankh.Protocol.HTTP3 do
     end
 
     # GOAWAY frame — emit a connection-level error event (RFC 9114 §7.2.6).
-    defp recv_frame(%@for{} = protocol, stream, _stream_handle, %GoAway{}) do
-      {:ok, protocol, stream, [{:error, stream.reference, :goaway, true}]}
-    end
+    defp recv_frame(%@for{} = protocol, stream, _stream_handle, %GoAway{}),
+      do: {:ok, protocol, stream, [{:error, stream.reference, :goaway, true}]}
 
     # All other known and unknown frame types are silently ignored per
     # RFC 9114 §9 ("extension frames MUST be ignored").
-    defp recv_frame(%@for{} = protocol, stream, _stream_handle, _frame) do
-      {:ok, protocol, stream, []}
-    end
+    defp recv_frame(%@for{} = protocol, stream, _stream_handle, _frame),
+      do: {:ok, protocol, stream, []}
 
     # Validates pseudo-headers on the first HEADERS block of a stream.
     #
@@ -579,59 +613,5 @@ defmodule Ankh.Protocol.HTTP3 do
     end
 
     defp validate_incoming_headers(_protocol, _stream, _headers), do: :ok
-
-    # Handles a `:peer_send_shutdown` (remote FIN) event.
-    #
-    # Transitions the stream to `:half_closed_remote` (or `:closed` if the local
-    # side has already sent a FIN) and emits an empty DATA event with
-    # `complete = true` to signal end-of-stream to the caller.
-    defp handle_peer_send_shutdown(%@for{streams: streams} = protocol, stream_handle) do
-      case Map.get(streams, stream_handle) do
-        nil ->
-          {:ok, protocol, []}
-
-        stream ->
-          stream = Stream.remote_fin(stream)
-          protocol = %@for{protocol | streams: Map.put(streams, stream_handle, stream)}
-          {:ok, protocol, [{:data, stream.reference, <<>>, true}]}
-      end
-    end
-
-    # Handles a `:stream_closed` event: both transport sides are finished.
-    # Applies `remote_fin` and `local_fin` to drive the stream to `:closed`.
-    defp handle_stream_closed(%@for{streams: streams} = protocol, stream_handle) do
-      case Map.get(streams, stream_handle) do
-        nil ->
-          {:ok, protocol, []}
-
-        stream ->
-          stream =
-            stream
-            |> Stream.remote_fin()
-            |> Stream.local_fin()
-
-          protocol = %@for{protocol | streams: Map.put(streams, stream_handle, stream)}
-          {:ok, protocol, []}
-      end
-    end
-
-    # Handles a `:new_stream` notification from quicer (server-side).
-    #
-    # Creates the per-stream state (bidirectional for request streams,
-    # unidirectional for control/QPACK/push streams), arms active delivery
-    # for the new stream, and returns with no immediate response events.
-    defp handle_new_stream(%@for{streams: streams} = protocol, stream_handle, props) do
-      unidirectional? = Map.get(props, :flags, 0) == 1
-      stream = Stream.new_incoming(stream_handle, unidirectional?)
-
-      %QUIC{} = quic_transport = protocol.transport
-      QUIC.rearm_stream(%QUIC{quic_transport | stream: stream_handle})
-
-      Logger.debug(
-        "HTTP/3 new stream: handle=#{inspect(stream_handle)}, unidirectional=#{unidirectional?}"
-      )
-
-      {:ok, %@for{protocol | streams: Map.put(streams, stream_handle, stream)}, []}
-    end
   end
 end
