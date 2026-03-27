@@ -409,7 +409,8 @@ defmodule Ankh.Protocol.HTTP3 do
       {:ok, %@for{protocol | streams: Map.put(protocol.streams, stream_handle, stream)}, []}
     end
 
-    def stream(%@for{} = _protocol, {:quic, :transport_shutdown, _conn, _props}), do: {:error, :closed}
+    def stream(%@for{} = _protocol, {:quic, :transport_shutdown, _conn, _props}),
+      do: {:error, :closed}
 
     def stream(%@for{} = _protocol, {:quic, :closed, _conn, _props}), do: {:error, :closed}
 
