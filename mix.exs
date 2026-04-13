@@ -38,6 +38,7 @@ defmodule Ankh.Mixfile do
       {:castore, "~> 1.0"},
       {:hpax, "~> 1.0"},
       {:plug, "~> 1.0"},
+      {:quicer, git: "https://github.com/emqx/quic.git", tag: "0.2.16", optional: true},
       {:credo, "~> 1.0", only: [:dev], runtime: false},
       {:ex_doc, "~> 0.40.0", only: [:dev], runtime: false},
       {:dialyxir, "~> 1.0", only: [:dev], runtime: false}
@@ -49,6 +50,7 @@ defmodule Ankh.Mixfile do
       groups_for_modules: [
         HTTP1: [~r/^Ankh\.Protocol\.HTTP1\.*/],
         HTTP2: [~r/^Ankh\.Protocol\.HTTP2\.*/],
+        HTTP3: [~r/^Ankh\.Protocol\.HTTP3\.*/],
         Internals: [~r/^Ankh\.Protocol$/, ~r/^Ankh\.Transport$/],
         Transports: [~r/Ankh\.Transport\.*/]
       ]
