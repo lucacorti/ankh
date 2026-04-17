@@ -5,8 +5,6 @@ defmodule Ankh.Protocol.HTTP2.Frame do
   The __using__ macro injects the frame struct needed by `Ankh.Protocol.HTTP2.Frame`.
   """
 
-  require Logger
-
   alias Ankh.Protocol.HTTP2
   alias Ankh.Protocol.HTTP2.Frame.Encodable
 

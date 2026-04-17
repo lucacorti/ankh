@@ -20,7 +20,7 @@ defprotocol Ankh.Protocol.HTTP2.Frame.Encodable do
     - options: options to pass as context to the decoding function
   """
   @spec decode(t(), binary(), options()) :: {:ok, t()} | {:error, any()}
-  def decode(struct, binary, options \\ [])
+  def decode(struct, binary, options)
 
   @doc """
   Encodes an `Ankh.Protocol.HTTP2.Frame.Encodable` conforming data type into an IO list
@@ -30,7 +30,7 @@ defprotocol Ankh.Protocol.HTTP2.Frame.Encodable do
     - options: options to pass as context to the encoding function
   """
   @spec encode(t(), options()) :: {:ok, iodata()} | {:error, any()}
-  def encode(data, options \\ [])
+  def encode(data, options)
 end
 
 defimpl Ankh.Protocol.HTTP2.Frame.Encodable, for: Any do

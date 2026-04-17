@@ -34,8 +34,7 @@ defmodule Ankh.Protocol.HTTP2.Frame.Continuation do
 
       def decode(_payload, _options), do: {:error, :decode_error}
 
-      def encode(%@for{hbf: hbf}, _), do: {:ok, [hbf]}
-      def encode(_payload, _options), do: {:error, :encode_error}
+      def encode(%@for{hbf: hbf}, _options), do: {:ok, [hbf]}
     end
   end
 

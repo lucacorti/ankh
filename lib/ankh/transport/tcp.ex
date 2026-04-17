@@ -1,8 +1,6 @@
 defmodule Ankh.Transport.TCP do
   @moduledoc "TCP transport implementation"
 
-  require Logger
-
   alias Ankh.Transport
 
   @opaque t :: %__MODULE__{socket: :gen_tcp.socket()}
