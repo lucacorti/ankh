@@ -51,16 +51,16 @@ defmodule Ankh.Protocol.HTTP3 do
 
   ## Incoming message dispatch
 
-  `stream/2` pattern-matches the raw QUIC tuple messages delivered by quicer:
+  `stream/2` pattern-matches the raw QUIC tuple messages delivered by erlang_quic:
 
-    * `{:quic, data, handle, _}` — binary data; appended to the stream buffer
-      and parsed as HTTP/3 frames.
-    * `{:quic, :peer_send_shutdown, handle, _}` — remote FIN; signals
-      end-of-stream to the caller via an empty DATA event with `complete = true`.
-    * `{:quic, :stream_closed, handle, _}` — stream fully closed by both sides.
-    * `{:quic, :new_stream, handle, props}` — new inbound stream from the peer
-      (server-side).
-    * `{:quic, :transport_shutdown | :closed, _, _}` — connection teardown;
+    * `{:quic, conn, {:stream_data, id, data, fin}}` — binary data (and optional
+      FIN); appended to the stream buffer and parsed as HTTP/3 frames. When
+      `fin = true` an empty DATA event with `complete = true` is also emitted.
+    * `{:quic, conn, {:stream_opened, id}}` — new inbound stream from the peer
+      (server-side).  Stream directionality is derived from the stream ID.
+    * `{:quic, conn, {:stream_reset, id, code}}` — stream reset by the peer;
+      both half-closes are recorded.
+    * `{:quic, conn, {:transport_error | :closed, …}}` — connection teardown;
       returns `{:error, :closed}`.
 
   ## References
@@ -71,7 +71,7 @@ defmodule Ankh.Protocol.HTTP3 do
   """
 
   alias Ankh.{Protocol, Transport}
-  alias Ankh.Protocol.HTTP3.{QPACK, Stream}
+  alias Ankh.Protocol.HTTP3.Stream
   alias Ankh.Transport.QUIC
 
   @typedoc """
@@ -83,8 +83,8 @@ defmodule Ankh.Protocol.HTTP3 do
   """
   @opaque t :: %__MODULE__{
             mode: :client | :server | nil,
-            recv_qpack: QPACK.t() | nil,
-            send_qpack: QPACK.t() | nil,
+            recv_qpack: :quic_qpack.state() | nil,
+            send_qpack: :quic_qpack.state() | nil,
             streams: %{optional(reference()) => Stream.t()},
             references: %{optional(reference()) => reference()},
             transport: QUIC.t() | nil,
@@ -105,7 +105,7 @@ defmodule Ankh.Protocol.HTTP3 do
 
   defimpl Protocol do
     alias Ankh.HTTP.{Request, Response}
-    alias Ankh.Protocol.HTTP3.{Frame, QPACK, Stream}
+    alias Ankh.Protocol.HTTP3.{Frame, Stream}
 
     alias Ankh.Protocol.HTTP3.Frame.{
       CancelPush,
@@ -146,8 +146,8 @@ defmodule Ankh.Protocol.HTTP3 do
            | mode: :server,
              transport: transport,
              uri: uri,
-             recv_qpack: QPACK.new(),
-             send_qpack: QPACK.new()
+             recv_qpack: :quic_qpack.new(),
+             send_qpack: :quic_qpack.new()
          }}
       end
     end
@@ -174,8 +174,8 @@ defmodule Ankh.Protocol.HTTP3 do
            | mode: :client,
              transport: transport,
              uri: uri,
-             recv_qpack: QPACK.new(),
-             send_qpack: QPACK.new()
+             recv_qpack: :quic_qpack.new(),
+             send_qpack: :quic_qpack.new()
          }}
       end
     end
@@ -220,16 +220,12 @@ defmodule Ankh.Protocol.HTTP3 do
       ]
 
       all_headers = pseudo_headers ++ req_headers
-      {hbf, send_qpack} = QPACK.encode(:store, all_headers, protocol.send_qpack)
+      {hbf, send_qpack} = :quic_qpack.encode(all_headers, protocol.send_qpack)
 
-      headers_bin = IO.iodata_to_binary(hbf)
-
-      {:ok, _, headers_frame_data} =
-        Frame.encode(%Headers{payload: %Headers.Payload{hbf: headers_bin}})
-
-      headers_frame_bin = IO.iodata_to_binary(headers_frame_data)
-
-      with {:ok, stream_transport} <- QUIC.open_stream(transport),
+      with {:ok, _, headers_frame_data} <-
+             Frame.encode(%Headers{payload: %Headers.Payload{hbf: IO.iodata_to_binary(hbf)}}),
+           headers_frame_bin = IO.iodata_to_binary(headers_frame_data),
+           {:ok, stream_transport} <- QUIC.open_stream(transport),
            :ok <- Transport.send(stream_transport, headers_frame_bin) do
         if IO.iodata_length(body) > 0 do
           body_bin = IO.iodata_to_binary(body)
@@ -282,15 +278,12 @@ defmodule Ankh.Protocol.HTTP3 do
           %Response{status: status, headers: resp_headers, body: body, trailers: trailers}
         ) do
       with {:ok, handle, stream} <- lookup_stream(protocol, request_reference) do
-        pseudo_headers = [{":status", Integer.to_string(status)}]
-        all_headers = pseudo_headers ++ resp_headers
+        headers = [{":status", Integer.to_string(status)} | resp_headers]
 
-        {hbf, send_qpack} = QPACK.encode(:store, all_headers, protocol.send_qpack)
-
-        headers_bin = IO.iodata_to_binary(hbf)
+        {hbf, send_qpack} = :quic_qpack.encode(headers, protocol.send_qpack)
 
         {:ok, _, headers_frame_data} =
-          Frame.encode(%Headers{payload: %Headers.Payload{hbf: headers_bin}})
+          Frame.encode(%Headers{payload: %Headers.Payload{hbf: IO.iodata_to_binary(hbf)}})
 
         headers_frame_bin = IO.iodata_to_binary(headers_frame_data)
         %QUIC{} = quic_transport = protocol.transport
@@ -309,7 +302,7 @@ defmodule Ankh.Protocol.HTTP3 do
 
         send_qpack =
           if trailers != [] do
-            {trailer_hbf, sq} = QPACK.encode(:store, trailers, send_qpack)
+            {trailer_hbf, sq} = :quic_qpack.encode(trailers, send_qpack)
             trailer_bin = IO.iodata_to_binary(trailer_hbf)
 
             {:ok, _, trailer_frame_data} =
@@ -355,64 +348,38 @@ defmodule Ankh.Protocol.HTTP3 do
       * `{:data, ref, data, complete?}` — a DATA frame or end-of-stream signal
       * `{:error, ref, reason, true}` — a stream-level protocol error
     """
-    def stream(%@for{} = protocol, {:quic, data, stream_handle, _props})
+    # -------------------------------------------------------------------------
+    # stream/2 — incoming erlang_quic message dispatcher
+    # -------------------------------------------------------------------------
+
+    # Data on a stream (no FIN).
+    def stream(%@for{} = protocol, {:quic, _conn, {:stream_data, stream_id, data, false}})
         when is_binary(data) do
-      handle_stream_data(protocol, stream_handle, data)
+      handle_stream_data(protocol, stream_id, data)
     end
 
-    def stream(%@for{} = protocol, {:quic, :peer_send_shutdown, stream_handle, _props}) do
-      case Map.get(protocol.streams, stream_handle) do
-        nil ->
-          {:ok, protocol, []}
-
-        stream ->
-          stream = Stream.remote_fin(stream)
-
-          {
-            :ok,
-            %@for{protocol | streams: Map.put(protocol.streams, stream_handle, stream)},
-            [{:data, stream.reference, <<>>, true}]
-          }
+    # Data WITH FIN — process frames then signal end of stream.
+    def stream(%@for{} = protocol, {:quic, _conn, {:stream_data, stream_id, data, true}}) do
+      with {:ok, protocol, responses} <- handle_stream_data(protocol, stream_id, data),
+           {:ok, protocol, fin_responses} <- handle_peer_send_shutdown(protocol, stream_id) do
+        {:ok, protocol, responses ++ fin_responses}
       end
     end
 
-    def stream(%@for{} = protocol, {:quic, :stream_closed, stream_handle, _props}) do
-      case Map.get(protocol.streams, stream_handle) do
-        nil ->
-          {:ok, protocol, []}
-
-        stream ->
-          stream =
-            stream
-            |> Stream.remote_fin()
-            |> Stream.local_fin()
-
-          {
-            :ok,
-            %@for{protocol | streams: Map.put(protocol.streams, stream_handle, stream)},
-            []
-          }
-      end
+    # New stream opened by peer (server-side).
+    def stream(%@for{} = protocol, {:quic, _conn, {:stream_opened, stream_id}}) do
+      handle_new_stream(protocol, stream_id)
     end
 
-    def stream(%@for{} = protocol, {:quic, :new_stream, stream_handle, props}) do
-      unidirectional? = Map.get(props, :flags, 0) == 1
-      stream = Stream.new_incoming(stream_handle, unidirectional?)
-
-      %QUIC{} = quic_transport = protocol.transport
-      QUIC.rearm_stream(%QUIC{quic_transport | stream: stream_handle})
-
-      Logger.debug(
-        "HTTP/3 new stream: handle=#{inspect(stream_handle)}, unidirectional=#{unidirectional?}"
-      )
-
-      {:ok, %@for{protocol | streams: Map.put(protocol.streams, stream_handle, stream)}, []}
+    # Peer reset the stream.
+    def stream(%@for{} = protocol, {:quic, _conn, {:stream_reset, stream_id, _error_code}}) do
+      handle_stream_closed(protocol, stream_id)
     end
 
-    def stream(%@for{} = _protocol, {:quic, :transport_shutdown, _conn, _props}),
+    def stream(%@for{} = _protocol, {:quic, _conn, {:transport_error, _code, _reason}}),
       do: {:error, :closed}
 
-    def stream(%@for{} = _protocol, {:quic, :closed, _conn, _props}), do: {:error, :closed}
+    def stream(%@for{} = _protocol, {:quic, _conn, {:closed, _reason}}), do: {:error, :closed}
 
     def stream(%@for{} = protocol, _msg), do: {:ok, protocol, []}
 
@@ -436,10 +403,11 @@ defmodule Ankh.Protocol.HTTP3 do
     #
     # Retrieves (or lazily creates) the per-stream state, optionally strips the
     # unidirectional stream-type byte (RFC 9114 §6.2 / RFC 9204 §4.2) from
-    # newly-seen streams, appends the data to the stream buffer, runs the HTTP/3
-    # frame parser, and re-arms active delivery.
-    defp handle_stream_data(%@for{streams: streams} = protocol, stream_handle, data) do
-      stream = Map.get(streams, stream_handle, Stream.new_incoming(stream_handle, false))
+    # newly-seen streams, appends the data to the stream buffer, and runs the
+    # HTTP/3 frame parser.  No re-arm is needed — erlang_quic delivers messages
+    # automatically.
+    defp handle_stream_data(%@for{streams: streams} = protocol, stream_id, data) do
+      stream = Map.get(streams, stream_id, Stream.new_incoming(stream_id, false))
 
       # For unidirectional streams whose kind has not yet been identified,
       # the very first byte of data is the stream-type byte.  Strip it, resolve
@@ -448,11 +416,55 @@ defmodule Ankh.Protocol.HTTP3 do
 
       stream = Stream.append(stream, effective_data)
 
-      with {:ok, protocol, responses} <- process_stream_frames(protocol, stream_handle, stream) do
-        %QUIC{} = quic_transport = protocol.transport
-        QUIC.rearm_stream(%QUIC{quic_transport | stream: stream_handle})
-        {:ok, protocol, responses}
+      process_stream_frames(protocol, stream_id, stream)
+    end
+
+    # Signals end-of-stream to the caller via an empty DATA event with
+    # `complete = true`.  Called when the peer sends FIN (fin=true on the last
+    # :stream_data, or implicitly after a :stream_reset).
+    defp handle_peer_send_shutdown(%@for{streams: streams} = protocol, stream_id) do
+      case Map.get(streams, stream_id) do
+        nil ->
+          {:ok, protocol, []}
+
+        stream ->
+          stream = Stream.remote_fin(stream)
+
+          {
+            :ok,
+            %@for{protocol | streams: Map.put(protocol.streams, stream_id, stream)},
+            [{:data, stream.reference, <<>>, true}]
+          }
       end
+    end
+
+    # Marks both halves of the stream as closed.  Called when the peer resets
+    # the stream via a RESET_STREAM frame.
+    defp handle_stream_closed(%@for{streams: streams} = protocol, stream_id) do
+      case Map.get(streams, stream_id) do
+        nil ->
+          {:ok, protocol, []}
+
+        stream ->
+          stream =
+            stream
+            |> Stream.remote_fin()
+            |> Stream.local_fin()
+
+          {:ok, %@for{protocol | streams: Map.put(protocol.streams, stream_id, stream)}, []}
+      end
+    end
+
+    # Registers a newly opened inbound stream.  Unidirectionality is inferred
+    # from bit 1 of the QUIC stream ID (RFC 9000 §2.1): if set, the stream is
+    # unidirectional.
+    defp handle_new_stream(%@for{} = protocol, stream_id) do
+      unidirectional? = Bitwise.band(stream_id, 2) != 0
+      stream = Stream.new_incoming(stream_id, unidirectional?)
+
+      Logger.debug("HTTP/3 new stream: id=#{stream_id}, unidirectional=#{unidirectional?}")
+
+      {:ok, %@for{protocol | streams: Map.put(protocol.streams, stream_id, stream)}, []}
     end
 
     # Strips the stream-type byte from an unidirectional stream whose kind is not
@@ -532,14 +544,14 @@ defmodule Ankh.Protocol.HTTP3 do
     # HEADERS frame — QPACK-decode the HBF, validate pseudo-headers, emit
     # a `:headers` response event.
     defp recv_frame(
-           %@for{recv_qpack: recv_qpack} = protocol,
+           %@for{} = protocol,
            stream,
            _stream_handle,
            %Headers{payload: %Headers.Payload{hbf: hbf}}
          ) do
-      case QPACK.decode(hbf, recv_qpack) do
-        {:ok, headers, recv_qpack} ->
-          protocol = %@for{protocol | recv_qpack: recv_qpack}
+      case :quic_qpack.decode(hbf, protocol.recv_qpack) do
+        {{:ok, headers}, recv_qpack} ->
+          protocol = %{protocol | recv_qpack: recv_qpack}
 
           case validate_incoming_headers(protocol, stream, headers) do
             :ok ->
@@ -550,8 +562,21 @@ defmodule Ankh.Protocol.HTTP3 do
               {:ok, protocol, stream, [{:error, stream.reference, reason, true}]}
           end
 
-        {:error, reason} ->
-          {:ok, protocol, stream, [{:error, stream.reference, reason, true}]}
+        {{:blocked, _stream_id}, recv_qpack} ->
+          {
+            :ok,
+            %{protocol | recv_qpack: recv_qpack},
+            stream,
+            [{:error, stream.reference, :stream_blocked, true}]
+          }
+
+        {{:error, reason}, recv_qpack} ->
+          {
+            :ok,
+            %{protocol | recv_qpack: recv_qpack},
+            stream,
+            [{:error, stream.reference, reason, true}]
+          }
       end
     end
 
