@@ -79,12 +79,15 @@ defmodule Ankh.HTTP do
     end
   end
 
-  def accept(%URI{scheme: "https"} = uri, socket, options) when is_reference(socket) do
-    # QUIC connection — check negotiated ALPN and dispatch to HTTP/3.
-    with {:ok, negotiated_protocol} <-
-           Transport.negotiated_protocol(%QUIC{connection: socket}),
+  def accept(%URI{scheme: "https"} = uri, socket, options) when is_pid(socket) do
+    # erlang_quic (pure Erlang) connection — pid carries the negotiated ALPN.
+    # The caller may pass alpn: binary() in options; default to "h3" for QUIC.
+    alpn = Keyword.get(options, :alpn, "h3")
+    transport = %QUIC{alpn: alpn}
+
+    with {:ok, negotiated_protocol} <- Transport.negotiated_protocol(transport),
          {:ok, protocol} <- protocol_for_id(negotiated_protocol) do
-      Protocol.accept(protocol, uri, %QUIC{}, socket, options)
+      Protocol.accept(protocol, uri, transport, socket, options)
     end
   end
 
@@ -131,23 +134,18 @@ defmodule Ankh.HTTP do
 
   def connect(_uri, _options), do: {:error, :unsupported_uri_scheme}
 
-  # Establishes an HTTP/3 connection over QUIC.
+  # Establishes an HTTP/3 connection over QUIC using erlang_quic.
   #
-  # quicer's alpn() type is an Erlang string() (charlist), not a binary.
-  # peer_unidi_stream_count: 3 lets the server open the three unidirectional
+  # erlang_quic takes ALPN as Elixir binaries (not charlists).
+  # max_streams_uni: 3 allows the server to open the three unidirectional
   # streams required by HTTP/3 (control, QPACK encoder, QPACK decoder).
   defp connect_quic(%URI{} = uri, options) do
     {timeout, options} = Keyword.pop(options, :timeout, 5_000)
 
     quic_options =
-      [alpn: [~c"h3"], verify: :verify_peer, peer_unidi_stream_count: 3]
-      |> Keyword.merge(
-        Keyword.take(options, [:cacertfile, :certfile, :keyfile, :password, :verify])
-      )
+      [alpn: ["h3"], verify: true, max_streams_uni: 3]
+      |> Keyword.merge(Keyword.take(options, [:verify, :max_streams_uni]))
 
-    # quicer returns a 3-tuple for transport-level failures (e.g. DNS errors,
-    # TLS handshake failures).  Normalise to a 2-tuple so the caller's case
-    # clauses ({:error, _}) always see a consistent shape.
     case Transport.connect(%QUIC{}, uri, timeout, quic_options) do
       {:ok, transport} -> Protocol.connect(%HTTP3{}, uri, transport, options)
       {:error, _} = error -> error

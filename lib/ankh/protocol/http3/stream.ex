@@ -43,12 +43,12 @@ defmodule Ankh.Protocol.HTTP3.Stream do
 
   QUIC streams support independent half-closes on each side:
 
-    * `remote_fin/1` — call when the peer signals `peer_send_shutdown` (it has
+    * `remote_fin/1` — call when the peer signals end-of-stream (it has
       finished sending).  Transitions `:open → :half_closed_remote` and
       `:half_closed_local → :closed`.
     * `local_fin/1` — call after sending a FIN (e.g. via
-      `:quicer.shutdown_stream/1`).  Transitions `:open → :half_closed_local`
-      and `:half_closed_remote → :closed`.
+      `Ankh.Transport.QUIC.shutdown_stream/1`).  Transitions
+      `:open → :half_closed_local` and `:half_closed_remote → :closed`.
 
   States that are already past the relevant half-close are left unchanged.
 
@@ -114,7 +114,7 @@ defmodule Ankh.Protocol.HTTP3.Stream do
 
   @typedoc "Per-QUIC-stream HTTP/3 state struct."
   @type t :: %__MODULE__{
-          handle: :quicer.stream_handle() | nil,
+          handle: non_neg_integer() | nil,
           reference: reference() | nil,
           state: state(),
           kind: stream_kind(),
@@ -152,7 +152,7 @@ defmodule Ankh.Protocol.HTTP3.Stream do
       iex> stream.state
       :open
   """
-  @spec new_request(handle :: :quicer.stream_handle()) :: t()
+  @spec new_request(handle :: non_neg_integer()) :: t()
   def new_request(handle) do
     %__MODULE__{
       handle: handle,
@@ -182,7 +182,7 @@ defmodule Ankh.Protocol.HTTP3.Stream do
       iex> stream.kind
       :unknown_unidirectional
   """
-  @spec new_incoming(handle :: :quicer.stream_handle(), unidirectional? :: boolean()) :: t()
+  @spec new_incoming(handle :: non_neg_integer(), unidirectional? :: boolean()) :: t()
   def new_incoming(handle, false = _unidirectional?) do
     %__MODULE__{
       handle: handle,
@@ -300,8 +300,8 @@ defmodule Ankh.Protocol.HTTP3.Stream do
   @doc """
   Records that the remote peer has finished sending on this stream.
 
-  This is typically triggered by a `{:quic, :peer_send_shutdown, …}` message
-  from the quicer NIF.
+  This is typically triggered when the peer sets `fin=true` on the final
+  `{:quic, conn, {:stream_data, stream_id, data, true}}` message.
 
   State transitions:
 
@@ -332,7 +332,7 @@ defmodule Ankh.Protocol.HTTP3.Stream do
   Records that the local side has finished sending on this stream.
 
   Call this after successfully writing a FIN to the QUIC layer (e.g. via
-  `:quicer.shutdown_stream/1` or the `fin` flag on the last `:quicer.send/3`).
+  `Ankh.Transport.QUIC.shutdown_stream/1`).
 
   State transitions:
 

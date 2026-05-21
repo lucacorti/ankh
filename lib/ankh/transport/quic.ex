@@ -1,67 +1,65 @@
 defmodule Ankh.Transport.QUIC do
   @moduledoc """
-  QUIC transport implementation using the `quicer` library.
+  QUIC transport implementation using the `erlang_quic` library.
 
-  This transport uses `quicer` (https://github.com/emqx/quic), an Erlang/Elixir
-  binding for MsQuic — Microsoft's cross-platform QUIC implementation.
+  This transport uses `erlang_quic` (https://github.com/benoitc/erlang_quic), a
+  pure-Erlang QUIC implementation (RFC 9000 / 9001).
 
   ## Differences from TCP/TLS
 
   Unlike TCP or TLS transports, which expose a single bytestream socket, QUIC is
   inherently multiplexed. The QUIC transport therefore manages two distinct handles:
 
-    * A **connection handle** (`t:connection/0`) — the underlying QUIC connection.
-    * A **stream handle** (`t:stream/0`) — a single bidirectional QUIC stream used
-      for data exchange within that connection.
+    * A **connection handle** (`t:connection/0`) — the underlying QUIC connection
+      (a `pid()`).
+    * A **stream handle** (`t:stream/0`) — a non-negative integer identifying one
+      bidirectional QUIC stream used for data exchange within that connection.
 
   For the client path, both handles are established during `connect/4`. For the
   server path, the connection handle is set via `new/2` (typically after accepting
   a raw QUIC connection from a listener), and the stream handle is obtained by
   calling `accept/2`, which waits for the remote peer to open a stream.
 
-  ## Active mode and message handling
+  ## Message delivery
 
-  QUIC streams are kept in `active: :once` mode, mirroring the behaviour of the
-  TCP and TLS transports. After each `{:quic, data, stream, props}` message is
-  processed by `handle_msg/2` the stream is immediately re-armed for the next
-  delivery. Callers should therefore drive the transport through `handle_msg/2`
-  rather than `recv/3` when operating in message-passing mode.
+  `erlang_quic` delivers all QUIC events as messages to the owning process
+  automatically — there is no `active: :once` mode to re-arm. After each message
+  the process can simply call `handle_msg/2` to decode it.
 
   ## ALPN
 
-  The default ALPN token is `"h3"` (HTTP/3). This can be overridden via the
-  `:alpn` option passed to `connect/4`.
+  The default ALPN token is `"h3"` (HTTP/3) as a binary string.
 
   ## Dependencies
 
-  Requires the `quicer` optional dependency to be present **and started** (i.e.
-  the `:quicer` OTP application must be running).
+  Requires the `quic` optional dependency (erlang_quic) to be present and started.
   """
 
   require Logger
 
   alias Ankh.Transport
 
-  @typedoc "QUIC connection handle (opaque reference returned by quicer)"
-  @type connection :: reference()
+  @typedoc "QUIC connection handle (pid returned by erlang_quic)"
+  @type connection :: pid()
 
-  @typedoc "QUIC stream handle (opaque reference returned by quicer)"
-  @type stream :: reference()
+  @typedoc "QUIC stream identifier (non-negative integer returned by erlang_quic)"
+  @type stream :: non_neg_integer()
 
   @type t :: %__MODULE__{
           connection: connection() | nil,
-          stream: stream() | nil
+          stream: stream() | nil,
+          alpn: String.t() | nil
         }
 
-  defstruct connection: nil, stream: nil
+  defstruct connection: nil, stream: nil, alpn: nil
 
   # ---------------------------------------------------------------------------
   # HTTP/3 stream-management helpers
   #
-  # These functions are NOT part of the Ankh.Transport protocol.  They are
+  # These functions are NOT part of the Ankh.Transport protocol. They are
   # public module-level functions that the Ankh.Protocol.HTTP3 implementation
   # uses to manage the multiple concurrent QUIC streams that HTTP/3 requires,
-  # without reaching into the :quicer NIF directly.
+  # without reaching into the :quic module directly.
   # ---------------------------------------------------------------------------
 
   @doc """
@@ -69,13 +67,12 @@ defmodule Ankh.Transport.QUIC do
   transport struct with that stream handle set.
 
   Used by `Ankh.Protocol.HTTP3.request/2` to obtain a fresh stream for each
-  HTTP/3 request.  The stream is armed with `active: :once` so the first
-  incoming message is delivered automatically.
+  HTTP/3 request.
   """
   @spec open_stream(t()) :: {:ok, t()} | {:error, any()}
   def open_stream(%__MODULE__{connection: conn} = transport) when not is_nil(conn) do
-    case :quicer.start_stream(conn, %{active: :once}) do
-      {:ok, handle} -> {:ok, %{transport | stream: handle}}
+    case :quic.open_stream(conn) do
+      {:ok, stream_id} -> {:ok, %{transport | stream: stream_id}}
       {:error, _} = error -> error
     end
   end
@@ -85,20 +82,13 @@ defmodule Ankh.Transport.QUIC do
   writes `preface` on it.
 
   Used by the HTTP/3 protocol to set up the control stream immediately after
-  a connection is established.  The stream is opened in passive mode (`active:
-  false`) because it is write-only from this endpoint's perspective; data
-  arriving on peer-initiated unidirectional streams is delivered via the
-  `:new_stream` / binary-data QUIC messages instead.
+  a connection is established.
   """
   @spec open_unidirectional_stream(t(), iodata()) :: :ok | {:error, any()}
   def open_unidirectional_stream(%__MODULE__{connection: conn}, preface)
       when not is_nil(conn) do
-    # open_flag: 1 is QUIC_STREAM_OPEN_FLAG_UNIDIRECTIONAL
-    with {:ok, handle} <- :quicer.start_stream(conn, %{open_flag: 1, active: false}) do
-      case :quicer.send(handle, IO.iodata_to_binary(preface)) do
-        {:ok, _bytes} -> :ok
-        {:error, _} = error -> error
-      end
+    with {:ok, stream_id} <- :quic.open_unidirectional_stream(conn) do
+      :quic.send_data(conn, stream_id, IO.iodata_to_binary(preface), false)
     end
   end
 
@@ -106,42 +96,17 @@ defmodule Ankh.Transport.QUIC do
   Gracefully shuts down the **send side** of the stored stream (QUIC FIN),
   signalling to the peer that no more data will be sent.
 
-  This does **not** close the connection.  Used after sending the last frame
-  on a request or response stream so the peer knows the message is complete.
+  This does **not** close the connection.
   """
   @spec shutdown_stream(t()) :: :ok | {:error, any()}
-  def shutdown_stream(%__MODULE__{stream: stream}) when not is_nil(stream) do
-    :quicer.shutdown_stream(stream, 5_000)
-  end
-
-  @doc """
-  Re-arms `active: :once` mode on the stored stream after a single QUIC data
-  message has been delivered.
-
-  Must be called inside the `stream/2` handler each time a
-  `{:quic, data, stream_handle, props}` message is processed, so that the
-  next incoming message is delivered to the owning process.
-  """
-  @spec rearm_stream(t()) :: :ok
-  def rearm_stream(%__MODULE__{stream: stream}) when not is_nil(stream) do
-    case :quicer.setopt(stream, :active, :once) do
-      :ok ->
-        :ok
-
-      {:error, reason} ->
-        Logger.debug("QUIC stream re-arm error: #{inspect(reason)}")
-        :ok
-    end
+  def shutdown_stream(%__MODULE__{connection: conn, stream: stream})
+      when not is_nil(conn) and not is_nil(stream) do
+    :quic.send_data(conn, stream, <<>>, true)
   end
 
   defimpl Transport do
     # Default ALPN for HTTP/3.
     @default_alpn ["h3"]
-
-    # Stream options used when opening or accepting a stream.
-    # `active: :once` delivers exactly one message then disarms, matching
-    # the behaviour of the TCP/TLS transports.
-    @default_stream_opts [active: :once]
 
     # ---------------------------------------------------------------------------
     # new/2
@@ -152,21 +117,19 @@ defmodule Ankh.Transport.QUIC do
 
     Accepts either:
 
-      * A bare `connection_handle()` — used on the server path where the
-        connection has already been accepted from a listener.  The stream
-        field is left `nil` and must be populated via `accept/2` before
-        data can flow.
+      * A bare `connection()` (pid) — used on the server path where the
+        connection has already been accepted from a listener. The stream field is
+        left `nil` and must be populated via `accept/2` before data can flow.
 
-      * A `{connection_handle(), stream_handle()}` tuple — used when both
-        handles are already known (e.g. when handing an established session
-        off to another process).
+      * A `{connection(), stream()}` tuple — used when both handles are already
+        known.
     """
     def new(%@for{} = transport, {connection, stream})
-        when is_reference(connection) and is_reference(stream) do
+        when is_pid(connection) and is_integer(stream) do
       {:ok, %{transport | connection: connection, stream: stream}}
     end
 
-    def new(%@for{} = transport, connection) when is_reference(connection) do
+    def new(%@for{} = transport, connection) when is_pid(connection) do
       {:ok, %{transport | connection: connection}}
     end
 
@@ -177,6 +140,12 @@ defmodule Ankh.Transport.QUIC do
     @doc """
     Opens a QUIC connection to the given `uri`.
 
+    `erlang_quic`'s connect is asynchronous: `:quic.connect/4` returns
+    `{:ok, conn_pid}` immediately and the calling process then receives
+    `{:quic, conn_pid, {:connected, info}}` when the TLS handshake completes.
+    This function blocks internally (using `receive … after timeout`) to present
+    a synchronous interface to the caller.
+
     Returns a transport with only the `connection` field set (`stream: nil`).
     Streams are not opened automatically; use `Ankh.Transport.QUIC.open_stream/1`
     or `Ankh.Transport.QUIC.open_unidirectional_stream/2` at the protocol layer
@@ -184,46 +153,56 @@ defmodule Ankh.Transport.QUIC do
 
     Supported options (all optional):
 
-      * `:alpn` — list of ALPN tokens; defaults to `[~c"h3"]`.
-        Must be charlists (Erlang strings), not Elixir binaries.
-      * `:verify` — peer certificate verification; defaults to `:verify_peer`.
+      * `:alpn` — list of ALPN tokens as binaries; defaults to `["h3"]`.
+      * `:verify` — peer certificate verification; pass `true` or `:verify_peer`
+        to verify. Defaults to `false`.
       * `:cacertfile` — path to a CA certificate bundle.
       * `:certfile` — path to a client certificate (mTLS).
       * `:keyfile` — path to the private key for the client certificate.
       * `:password` — passphrase for an encrypted private key.
-      * `:peer_unidi_stream_count` — number of unidirectional streams the remote
-        peer is allowed to open; useful for HTTP/3 control/QPACK streams.
     """
     def connect(%@for{} = transport, %URI{host: host, port: port}, timeout, options) do
-      hostname = String.to_charlist(host)
       alpn = Keyword.get(options, :alpn, @default_alpn)
-      verify = Keyword.get(options, :verify, :verify_peer)
+
+      verify =
+        case Keyword.get(options, :verify, false) do
+          :verify_peer -> true
+          :verify_none -> false
+          v when is_boolean(v) -> v
+          _ -> false
+        end
 
       conn_opts =
-        [alpn: alpn, verify: verify]
-        |> Keyword.merge(
-          Keyword.take(options, [
-            :cacertfile,
-            :certfile,
-            :keyfile,
-            :password,
-            :peer_unidi_stream_count,
-            :peer_bidi_stream_count
-          ])
-        )
-        |> Map.new()
+        %{alpn: alpn, verify: verify}
+        |> maybe_put(:cacertfile, Keyword.get(options, :cacertfile))
+        |> maybe_put(:certfile, Keyword.get(options, :certfile))
+        |> maybe_put(:keyfile, Keyword.get(options, :keyfile))
+        |> maybe_put(:password, Keyword.get(options, :password))
 
-      case :quicer.connect(hostname, port || 443, conn_opts, timeout) do
-        {:ok, conn} ->
-          {:ok, %{transport | connection: conn}}
+      case :quic.connect(host, port || 443, conn_opts, self()) do
+        {:ok, conn_pid} ->
+          receive do
+            {:quic, ^conn_pid, {:connected, _info}} ->
+              negotiated = List.first(alpn, "h3")
+              {:ok, %{transport | connection: conn_pid, alpn: negotiated}}
 
-        {:error, :transport_down, _props} ->
-          {:error, :closed}
+            {:quic, ^conn_pid, {:closed, reason}} ->
+              {:error, reason}
+
+            {:quic, ^conn_pid, {:transport_error, _code, reason}} ->
+              {:error, reason}
+          after
+            timeout ->
+              {:error, :timeout}
+          end
 
         {:error, reason} ->
           {:error, reason}
       end
     end
+
+    defp maybe_put(map, _key, nil), do: map
+    defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
     # ---------------------------------------------------------------------------
     # accept/2
@@ -233,16 +212,21 @@ defmodule Ankh.Transport.QUIC do
     Accepts an inbound QUIC stream on an already-established connection.
 
     The connection handle must have been set beforehand via `new/2`.  This call
-    blocks until the remote peer opens a stream or an error occurs.
+    blocks until the remote peer opens a stream (delivering
+    `{:quic, conn, {:stream_opened, stream_id}}`) or until the 5-second timeout
+    expires.
 
-    Any additional `options` are merged with the default stream options and
-    forwarded to `:quicer.accept_stream/2`.
+    Note: in HTTP/3 mode streams arrive as asynchronous messages handled by
+    `Ankh.Protocol.HTTP3.stream/2`, so this function is primarily used for
+    single-stream protocols (HTTP/1.1, HTTP/2) over QUIC.
     """
-    def accept(%@for{connection: conn} = transport, options) when not is_nil(conn) do
-      stream_opts = @default_stream_opts |> Keyword.merge(options) |> Map.new()
-
-      with {:ok, stream} <- :quicer.accept_stream(conn, stream_opts) do
-        {:ok, %{transport | stream: stream}}
+    def accept(%@for{connection: conn} = transport, _options) when not is_nil(conn) do
+      receive do
+        {:quic, ^conn, {:stream_opened, stream_id}} ->
+          {:ok, %{transport | stream: stream_id}}
+      after
+        5_000 ->
+          {:error, :timeout}
       end
     end
 
@@ -257,15 +241,12 @@ defmodule Ankh.Transport.QUIC do
     @doc """
     Sends `data` over the QUIC stream synchronously.
 
-    The data is converted to a binary via `IO.iodata_to_binary/1` before being
-    handed off to `:quicer.send/2`, which blocks until the send is acknowledged
-    by the transport layer.
+    Converts `data` to a binary via `IO.iodata_to_binary/1` and calls
+    `:quic.send_data/4` with `fin = false`.
     """
-    def send(%@for{stream: stream}, data) when not is_nil(stream) do
-      case :quicer.send(stream, IO.iodata_to_binary(data)) do
-        {:ok, _bytes_sent} -> :ok
-        {:error, _} = error -> error
-      end
+    def send(%@for{connection: conn, stream: stream}, data)
+        when not is_nil(conn) and not is_nil(stream) do
+      :quic.send_data(conn, stream, IO.iodata_to_binary(data), false)
     end
 
     def send(%@for{stream: nil}, _data) do
@@ -277,16 +258,21 @@ defmodule Ankh.Transport.QUIC do
     # ---------------------------------------------------------------------------
 
     @doc """
-    Passively reads up to `size` bytes from the QUIC stream.
+    Passively reads data from the QUIC stream by blocking on the next
+    `{:quic, conn, {:stream_data, stream_id, data, _fin}}` message.
 
-    Pass `size = 0` to retrieve all currently available data in the receive
-    buffer (the quicer default behaviour for a zero-length read).
-
-    The `timeout` argument is accepted for interface compatibility but is not
-    forwarded to quicer; quicer manages its own internal timeouts.
+    The `size` argument is accepted for interface compatibility but is not
+    enforced — `erlang_quic` does not support partial reads.
     """
-    def recv(%@for{stream: stream}, size, _timeout) when not is_nil(stream) do
-      :quicer.recv(stream, size)
+    def recv(%@for{connection: conn, stream: stream}, _size, timeout)
+        when not is_nil(conn) and not is_nil(stream) do
+      receive do
+        {:quic, ^conn, {:stream_data, ^stream, data, _fin}} ->
+          {:ok, data}
+      after
+        timeout ->
+          {:error, :timeout}
+      end
     end
 
     def recv(%@for{stream: nil}, _size, _timeout) do
@@ -298,33 +284,14 @@ defmodule Ankh.Transport.QUIC do
     # ---------------------------------------------------------------------------
 
     @doc """
-    Gracefully closes the QUIC stream and then the underlying connection.
+    Closes the underlying QUIC connection.
 
-    The stream is shut down with a FIN (graceful half-close of the send side)
-    before the connection is closed.  Errors from individual close calls are
-    logged but do not prevent the other handle from being closed.
+    Unlike the quicer-based implementation there is no separate stream-close
+    call; `:quic.close/1` tears down the whole connection.
     """
-    def close(%@for{connection: conn, stream: stream} = transport) do
-      if not is_nil(stream) do
-        case :quicer.close_stream(stream) do
-          :ok ->
-            :ok
-
-          {:error, reason} = error ->
-            Logger.debug("QUIC stream close error: #{inspect(reason)}")
-            error
-        end
-      end
-
+    def close(%@for{connection: conn} = transport) do
       if not is_nil(conn) do
-        case :quicer.close_connection(conn) do
-          :ok ->
-            :ok
-
-          {:error, reason} = error ->
-            Logger.debug("QUIC connection close error: #{inspect(reason)}")
-            error
-        end
+        :quic.close(conn)
       end
 
       {:ok, %{transport | connection: nil, stream: nil}}
@@ -335,73 +302,64 @@ defmodule Ankh.Transport.QUIC do
     # ---------------------------------------------------------------------------
 
     @doc """
-    Handles asynchronous messages delivered by the quicer NIF.
+    Handles asynchronous messages delivered by `erlang_quic`.
 
     ## Handled messages
 
-      * `{:quic, data, stream, props}` — binary data arrived on our stream.
-        The stream is re-armed for the next `active: :once` delivery before
-        returning `{:ok, data}`.
-      * `{:quic, :peer_send_shutdown, stream, _}` — the remote peer has
-        half-closed its send side (sent a FIN).
-      * `{:quic, :peer_send_aborted, stream, _}` — the remote peer aborted
-        its send side.
-      * `{:quic, :stream_closed, stream, _}` — the stream has been fully
-        closed by both sides.
-      * `{:quic, :transport_shutdown, conn, _}` — the QUIC connection was
-        shut down by the transport (e.g. idle timeout, network loss).
-      * `{:quic, :closed, conn, _}` — the QUIC connection was closed.
+      * `{:quic, conn, {:stream_data, stream_id, data, false}}` — binary data
+        arrived on our stream. Returns `{:ok, data}`.
+      * `{:quic, conn, {:stream_data, stream_id, data, true}}` — final data
+        chunk with FIN. Returns `{:ok, data}` if non-empty, `{:error, :closed}`
+        otherwise.
+      * `{:quic, conn, {:stream_reset, stream_id, _}}` — stream reset by peer.
+      * `{:quic, conn, {:closed, _}}` — connection closed.
+      * `{:quic, conn, {:transport_error, _, _}}` — transport-level error.
 
     All other messages return `{:other, msg}` so the caller can handle them.
     """
 
     # HTTP/3 passthrough mode: when no specific stream is stored, the QUIC
     # transport is operating as a bare connection handle on behalf of the
-    # HTTP/3 protocol layer.  Pass every QUIC message through as-is so that
-    # `Ankh.Protocol.HTTP3.stream/2` can inspect the stream handle and
-    # dispatch to the correct per-request stream state machine.
-    def handle_msg(%@for{stream: nil}, {:quic, _, _, _} = msg), do: {:ok, msg}
+    # HTTP/3 protocol layer. Pass every QUIC message through as-is so that
+    # `Ankh.Protocol.HTTP3.stream/2` can dispatch to the correct per-request
+    # stream state machine.
+    def handle_msg(%@for{stream: nil}, {:quic, _, _} = msg), do: {:ok, msg}
 
-    # Binary data on our stream — re-arm active mode and return the payload.
-    def handle_msg(%@for{stream: stream}, {:quic, data, stream, _props})
+    # Binary data on our stream, no FIN.
+    def handle_msg(
+          %@for{connection: conn, stream: stream},
+          {:quic, conn, {:stream_data, stream, data, false}}
+        )
         when is_binary(data) and not is_nil(stream) do
-      case :quicer.setopt(stream, :active, :once) do
-        :ok ->
-          {:ok, data}
-
-        {:error, reason} ->
-          Logger.debug("QUIC stream re-arm error: #{inspect(reason)}")
-          {:ok, data}
-      end
+      {:ok, data}
     end
 
-    # Remote peer finished sending (graceful FIN).
-    def handle_msg(%@for{stream: stream}, {:quic, :peer_send_shutdown, stream, _props})
+    # Final data chunk with FIN.
+    def handle_msg(
+          %@for{connection: conn, stream: stream},
+          {:quic, conn, {:stream_data, stream, data, true}}
+        )
+        when is_binary(data) and not is_nil(stream) do
+      if data != <<>>, do: {:ok, data}, else: {:error, :closed}
+    end
+
+    # Stream reset by peer.
+    def handle_msg(
+          %@for{connection: conn, stream: stream},
+          {:quic, conn, {:stream_reset, stream, _error_code}}
+        )
         when not is_nil(stream) do
-      {:error, :closed}
-    end
-
-    # Remote peer aborted its send side.
-    def handle_msg(%@for{stream: stream}, {:quic, :peer_send_aborted, stream, _error_code})
-        when not is_nil(stream) do
-      {:error, :closed}
-    end
-
-    # Stream has been fully closed.
-    def handle_msg(%@for{stream: stream}, {:quic, :stream_closed, stream, _props})
-        when not is_nil(stream) do
-      {:error, :closed}
-    end
-
-    # Transport-level shutdown (e.g. idle timeout, network error).
-    def handle_msg(%@for{connection: conn}, {:quic, :transport_shutdown, conn, props})
-        when not is_nil(conn) do
-      Logger.debug("QUIC transport shutdown: #{inspect(props)}")
       {:error, :closed}
     end
 
     # Connection closed.
-    def handle_msg(%@for{connection: conn}, {:quic, :closed, conn, _props})
+    def handle_msg(%@for{connection: conn}, {:quic, conn, {:closed, _reason}})
+        when not is_nil(conn) do
+      {:error, :closed}
+    end
+
+    # Transport error.
+    def handle_msg(%@for{connection: conn}, {:quic, conn, {:transport_error, _code, _reason}})
         when not is_nil(conn) do
       {:error, :closed}
     end
@@ -414,23 +372,19 @@ defmodule Ankh.Transport.QUIC do
     # ---------------------------------------------------------------------------
 
     @doc """
-    Returns the ALPN protocol negotiated during the QUIC handshake.
+    Returns the ALPN protocol stored during `connect/4`, or `"h3"` if this
+    transport was initialised on the server side without going through `connect/4`.
 
-    Delegates to `:quicer.negotiated_protocol/1` on the connection handle.
-    Returns `{:error, :protocol_not_negotiated}` if no connection is present.
+    `erlang_quic` does not expose a `negotiated_protocol/1` query function;
+    the negotiated ALPN is inferred from the first token in the requested list
+    (connection succeeds only if the server agrees).
     """
-    @dialyzer {:nowarn_function, [negotiated_protocol: 1]}
+    def negotiated_protocol(%@for{alpn: alpn}) when not is_nil(alpn) do
+      {:ok, alpn}
+    end
+
     def negotiated_protocol(%@for{connection: conn}) when not is_nil(conn) do
-      case :quicer.negotiated_protocol(conn) do
-        {:ok, protocol} ->
-          {:ok, protocol}
-
-        {:error, _reason, _props} ->
-          {:error, :protocol_not_negotiated}
-
-        {:error, _reason} ->
-          {:error, :protocol_not_negotiated}
-      end
+      {:ok, "h3"}
     end
 
     def negotiated_protocol(%@for{connection: nil}) do
