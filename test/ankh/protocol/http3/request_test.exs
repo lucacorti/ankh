@@ -7,10 +7,6 @@ defmodule Ankh.Protocol.HTTP3.RequestTest do
   alias Ankh.HTTP
   alias Ankh.HTTP.Request
 
-  # -------------------------------------------------------------------------
-  # Response helper
-  # -------------------------------------------------------------------------
-
   # Drives the receive loop until end_stream = true is signalled for `ref`,
   # returning {:ok, status, headers, body_binary} or {:error, reason}.
   defp collect_response(protocol, ref, timeout \\ 10_000) do
@@ -100,10 +96,6 @@ defmodule Ankh.Protocol.HTTP3.RequestTest do
     {protocol, ref}
   end
 
-  # -------------------------------------------------------------------------
-  # Basic GET requests
-  # -------------------------------------------------------------------------
-
   describe "basic GET requests over HTTP/3" do
     test "GET / from cloudflare-quic.com returns HTTP 200" do
       protocol = connect_h3!("https://cloudflare-quic.com")
@@ -183,10 +175,6 @@ defmodule Ankh.Protocol.HTTP3.RequestTest do
     end
   end
 
-  # -------------------------------------------------------------------------
-  # Request headers propagation
-  # -------------------------------------------------------------------------
-
   describe "request header propagation" do
     test "custom User-Agent header is sent (reflected in cf-ray)" do
       # Cloudflare always returns cf-ray regardless, but custom UA is sent —
@@ -222,10 +210,6 @@ defmodule Ankh.Protocol.HTTP3.RequestTest do
       assert status in 200..399
     end
   end
-
-  # -------------------------------------------------------------------------
-  # Protocol negotiation
-  # -------------------------------------------------------------------------
 
   describe "protocol negotiation" do
     test "protocols: [:h3] connects with HTTP/3" do
@@ -271,10 +255,6 @@ defmodule Ankh.Protocol.HTTP3.RequestTest do
     end
   end
 
-  # -------------------------------------------------------------------------
-  # Multiple sequential requests on the same connection
-  # -------------------------------------------------------------------------
-
   describe "multiple sequential requests" do
     test "two sequential GET requests on the same H3 connection both succeed" do
       protocol = connect_h3!("https://cloudflare-quic.com")
@@ -314,10 +294,6 @@ defmodule Ankh.Protocol.HTTP3.RequestTest do
       assert byte_size(body1) == byte_size(body2)
     end
   end
-
-  # -------------------------------------------------------------------------
-  # QPACK header decoding correctness
-  # -------------------------------------------------------------------------
 
   describe "QPACK header decoding" do
     test "all response header names are lowercase strings" do
@@ -375,10 +351,6 @@ defmodule Ankh.Protocol.HTTP3.RequestTest do
       end
     end
   end
-
-  # -------------------------------------------------------------------------
-  # Error handling
-  # -------------------------------------------------------------------------
 
   describe "connection error handling" do
     test "connecting to an unreachable host returns an error" do
