@@ -67,10 +67,6 @@ defmodule Ankh.Protocol.HTTP3.Frame do
 
   alias Ankh.Protocol.HTTP3.Frame.Encodable
 
-  # ---------------------------------------------------------------------------
-  # Types
-  # ---------------------------------------------------------------------------
-
   @typedoc "Frame type code (integer on the wire)."
   @type type :: non_neg_integer()
 
@@ -82,10 +78,6 @@ defmodule Ankh.Protocol.HTTP3.Frame do
 
   @typedoc "The generic frame struct injected by `__using__/1`."
   @type t :: struct()
-
-  # ---------------------------------------------------------------------------
-  # __using__ macro
-  # ---------------------------------------------------------------------------
 
   @doc """
   Injects the frame struct into the calling module.
@@ -156,10 +148,6 @@ defmodule Ankh.Protocol.HTTP3.Frame do
     end
   end
 
-  # ---------------------------------------------------------------------------
-  # stream/1
-  # ---------------------------------------------------------------------------
-
   @doc """
   Returns a lazy stream of `{rest, frame_token}` pairs unfolded from `data`.
 
@@ -210,10 +198,6 @@ defmodule Ankh.Protocol.HTTP3.Frame do
     end)
   end
 
-  # ---------------------------------------------------------------------------
-  # decode/2
-  # ---------------------------------------------------------------------------
-
   @doc """
   Decodes `payload_binary` into the given frame struct by delegating to
   `Encodable.decode/2` on the struct's `:payload` field.
@@ -229,15 +213,11 @@ defmodule Ankh.Protocol.HTTP3.Frame do
       # decoded.length == 5
   """
   @spec decode(t(), binary()) :: {:ok, t()} | {:error, any()}
-  def decode(frame, payload_binary) when is_binary(payload_binary) do
-    with {:ok, decoded_payload} <- Encodable.decode(frame.payload, payload_binary) do
-      {:ok, %{frame | length: byte_size(payload_binary), payload: decoded_payload}}
+  def decode(frame, payload) when is_binary(payload) do
+    with {:ok, decoded_payload} <- Encodable.decode(frame.payload, payload) do
+      {:ok, %{frame | length: byte_size(payload), payload: decoded_payload}}
     end
   end
-
-  # ---------------------------------------------------------------------------
-  # encode/1
-  # ---------------------------------------------------------------------------
 
   @doc """
   Encodes a frame struct into its wire representation.
@@ -258,20 +238,15 @@ defmodule Ankh.Protocol.HTTP3.Frame do
   @spec encode(t()) :: {:ok, t(), data()} | {:error, any()}
   def encode(%{type: type, payload: payload} = frame) do
     with {:ok, encoded_payload} <- Encodable.encode(payload) do
-      payload_bin = IO.iodata_to_binary(encoded_payload)
-      length = byte_size(payload_bin)
+      length = IO.iodata_length(encoded_payload)
 
       {
         :ok,
         %{frame | length: length},
-        [encode_vli(type), encode_vli(length), payload_bin]
+        [encode_vli(type), encode_vli(length), encoded_payload]
       }
     end
   end
-
-  # ---------------------------------------------------------------------------
-  # VLI encode / decode
-  # ---------------------------------------------------------------------------
 
   @doc """
   Encodes a non-negative integer as a QUIC variable-length integer.
@@ -328,14 +303,6 @@ defmodule Ankh.Protocol.HTTP3.Frame do
   def decode_vli(<<3::2, n::62, rest::binary>>), do: {:ok, n, rest}
   def decode_vli(_), do: {:error, :incomplete}
 
-  # ---------------------------------------------------------------------------
-  # Control stream preface
-  # ---------------------------------------------------------------------------
-
-  @control_stream_type 0x00
-
-  # ---------------------------------------------------------------------------
-
   @doc """
   Returns the binary that MUST be written immediately after opening an HTTP/3
   control stream (RFC 9114 §6.2.1).
@@ -359,7 +326,8 @@ defmodule Ankh.Protocol.HTTP3.Frame do
   @spec control_stream_preface() :: binary()
   def control_stream_preface do
     <<
-      @control_stream_type,
+      # Stream-type byte (0x00) - HTTP/3 control stream.
+      0x00,
       # SETTINGS frame type (VLI 1-byte)
       0x04,
       # SETTINGS payload length: 4 bytes (VLI 1-byte)
