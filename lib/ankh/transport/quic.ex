@@ -88,7 +88,7 @@ defmodule Ankh.Transport.QUIC do
   def open_unidirectional_stream(%__MODULE__{connection: conn}, preface)
       when not is_nil(conn) do
     with {:ok, stream_id} <- :quic.open_unidirectional_stream(conn) do
-      :quic.send_data(conn, stream_id, IO.iodata_to_binary(preface), false)
+      :quic.send_data(conn, stream_id, preface, false)
     end
   end
 
@@ -105,13 +105,6 @@ defmodule Ankh.Transport.QUIC do
   end
 
   defimpl Transport do
-    # Default ALPN for HTTP/3.
-    @default_alpn ["h3"]
-
-    # ---------------------------------------------------------------------------
-    # new/2
-    # ---------------------------------------------------------------------------
-
     @doc """
     Initialises the transport from an existing QUIC handle.
 
@@ -125,17 +118,11 @@ defmodule Ankh.Transport.QUIC do
         known.
     """
     def new(%@for{} = transport, {connection, stream})
-        when is_pid(connection) and is_integer(stream) do
-      {:ok, %{transport | connection: connection, stream: stream}}
-    end
+        when is_pid(connection) and is_integer(stream),
+        do: {:ok, %{transport | connection: connection, stream: stream}}
 
-    def new(%@for{} = transport, connection) when is_pid(connection) do
-      {:ok, %{transport | connection: connection}}
-    end
-
-    # ---------------------------------------------------------------------------
-    # connect/4
-    # ---------------------------------------------------------------------------
+    def new(%@for{} = transport, connection) when is_pid(connection),
+      do: {:ok, %{transport | connection: connection}}
 
     @doc """
     Opens a QUIC connection to the given `uri`.
@@ -162,14 +149,14 @@ defmodule Ankh.Transport.QUIC do
       * `:password` — passphrase for an encrypted private key.
     """
     def connect(%@for{} = transport, %URI{host: host, port: port}, timeout, options) do
-      alpn = Keyword.get(options, :alpn, @default_alpn)
+      alpn = Keyword.get(options, :alpn, ["h3"])
 
       verify =
         case Keyword.get(options, :verify, false) do
           :verify_peer -> true
           :verify_none -> false
-          v when is_boolean(v) -> v
-          _ -> false
+          verify when is_boolean(verify) -> verify
+          _verify -> false
         end
 
       conn_opts =
@@ -204,10 +191,6 @@ defmodule Ankh.Transport.QUIC do
     defp maybe_put(map, _key, nil), do: map
     defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
-    # ---------------------------------------------------------------------------
-    # accept/2
-    # ---------------------------------------------------------------------------
-
     @doc """
     Accepts an inbound QUIC stream on an already-established connection.
 
@@ -230,32 +213,18 @@ defmodule Ankh.Transport.QUIC do
       end
     end
 
-    def accept(%@for{connection: nil}, _options) do
-      {:error, :no_connection}
-    end
-
-    # ---------------------------------------------------------------------------
-    # send/2
-    # ---------------------------------------------------------------------------
+    def accept(%@for{connection: nil}, _options), do: {:error, :no_connection}
 
     @doc """
     Sends `data` over the QUIC stream synchronously.
 
-    Converts `data` to a binary via `IO.iodata_to_binary/1` and calls
-    `:quic.send_data/4` with `fin = false`.
+    Calls `:quic.send_data/4` with `fin = false`.
     """
     def send(%@for{connection: conn, stream: stream}, data)
-        when not is_nil(conn) and not is_nil(stream) do
-      :quic.send_data(conn, stream, IO.iodata_to_binary(data), false)
-    end
+        when not is_nil(conn) and not is_nil(stream),
+        do: :quic.send_data(conn, stream, data, false)
 
-    def send(%@for{stream: nil}, _data) do
-      {:error, :no_stream}
-    end
-
-    # ---------------------------------------------------------------------------
-    # recv/3
-    # ---------------------------------------------------------------------------
+    def send(%@for{stream: nil}, _data), do: {:error, :no_stream}
 
     @doc """
     Passively reads data from the QUIC stream by blocking on the next
@@ -275,13 +244,7 @@ defmodule Ankh.Transport.QUIC do
       end
     end
 
-    def recv(%@for{stream: nil}, _size, _timeout) do
-      {:error, :no_stream}
-    end
-
-    # ---------------------------------------------------------------------------
-    # close/1
-    # ---------------------------------------------------------------------------
+    def recv(%@for{stream: nil}, _size, _timeout), do: {:error, :no_stream}
 
     @doc """
     Closes the underlying QUIC connection.
@@ -296,10 +259,6 @@ defmodule Ankh.Transport.QUIC do
 
       {:ok, %{transport | connection: nil, stream: nil}}
     end
-
-    # ---------------------------------------------------------------------------
-    # handle_msg/2
-    # ---------------------------------------------------------------------------
 
     @doc """
     Handles asynchronous messages delivered by `erlang_quic`.
@@ -330,9 +289,7 @@ defmodule Ankh.Transport.QUIC do
           %@for{connection: conn, stream: stream},
           {:quic, conn, {:stream_data, stream, data, false}}
         )
-        when is_binary(data) and not is_nil(stream) do
-      {:ok, data}
-    end
+        when is_binary(data) and not is_nil(stream), do: {:ok, data}
 
     # Final data chunk with FIN.
     def handle_msg(
@@ -348,28 +305,18 @@ defmodule Ankh.Transport.QUIC do
           %@for{connection: conn, stream: stream},
           {:quic, conn, {:stream_reset, stream, _error_code}}
         )
-        when not is_nil(stream) do
-      {:error, :closed}
-    end
+        when not is_nil(stream), do: {:error, :closed}
 
     # Connection closed.
     def handle_msg(%@for{connection: conn}, {:quic, conn, {:closed, _reason}})
-        when not is_nil(conn) do
-      {:error, :closed}
-    end
+        when not is_nil(conn), do: {:error, :closed}
 
     # Transport error.
     def handle_msg(%@for{connection: conn}, {:quic, conn, {:transport_error, _code, _reason}})
-        when not is_nil(conn) do
-      {:error, :closed}
-    end
+        when not is_nil(conn), do: {:error, :closed}
 
     # Unrelated message — pass it through for the caller to handle.
     def handle_msg(_quic, msg), do: {:other, msg}
-
-    # ---------------------------------------------------------------------------
-    # negotiated_protocol/1
-    # ---------------------------------------------------------------------------
 
     @doc """
     Returns the ALPN protocol stored during `connect/4`, or `"h3"` if this
@@ -379,16 +326,8 @@ defmodule Ankh.Transport.QUIC do
     the negotiated ALPN is inferred from the first token in the requested list
     (connection succeeds only if the server agrees).
     """
-    def negotiated_protocol(%@for{alpn: alpn}) when not is_nil(alpn) do
-      {:ok, alpn}
-    end
-
-    def negotiated_protocol(%@for{connection: conn}) when not is_nil(conn) do
-      {:ok, "h3"}
-    end
-
-    def negotiated_protocol(%@for{connection: nil}) do
-      {:error, :protocol_not_negotiated}
-    end
+    def negotiated_protocol(%@for{alpn: alpn}) when not is_nil(alpn), do: {:ok, alpn}
+    def negotiated_protocol(%@for{connection: conn}) when not is_nil(conn), do: {:ok, "h3"}
+    def negotiated_protocol(%@for{connection: nil}), do: {:error, :protocol_not_negotiated}
   end
 end

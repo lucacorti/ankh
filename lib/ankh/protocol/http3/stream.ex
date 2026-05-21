@@ -65,10 +65,6 @@ defmodule Ankh.Protocol.HTTP3.Stream do
   and decoding belong in `Ankh.Protocol.HTTP3.Frame`.
   """
 
-  # ---------------------------------------------------------------------------
-  # Types
-  # ---------------------------------------------------------------------------
-
   @typedoc """
   HTTP/3 stream states, mirroring the QUIC stream half-close model.
 
@@ -130,10 +126,6 @@ defmodule Ankh.Protocol.HTTP3.Stream do
             buffer: <<>>,
             recv_headers: false,
             send_headers: false
-
-  # ---------------------------------------------------------------------------
-  # Construction
-  # ---------------------------------------------------------------------------
 
   @doc """
   Creates a new client-opened request stream for the given QUIC stream handle.
@@ -201,10 +193,6 @@ defmodule Ankh.Protocol.HTTP3.Stream do
     }
   end
 
-  # ---------------------------------------------------------------------------
-  # Kind identification
-  # ---------------------------------------------------------------------------
-
   @doc """
   Resolves the kind of a unidirectional stream from its first stream-type byte.
 
@@ -233,24 +221,14 @@ defmodule Ankh.Protocol.HTTP3.Stream do
       :unknown_unidirectional
   """
   @spec identify_kind(t(), stream_type_byte :: non_neg_integer()) :: t()
-  def identify_kind(%__MODULE__{kind: :request} = stream, _stream_type_byte), do: stream
+  def identify_kind(%__MODULE__{kind: :request} = stream, _type_byte), do: stream
+  def identify_kind(%__MODULE__{} = stream, 0x00), do: %{stream | kind: :control}
+  def identify_kind(%__MODULE__{} = stream, 0x01), do: %{stream | kind: :push}
+  def identify_kind(%__MODULE__{} = stream, 0x02), do: %{stream | kind: :qpack_encoder}
+  def identify_kind(%__MODULE__{} = stream, 0x03), do: %{stream | kind: :qpack_decoder}
 
-  def identify_kind(%__MODULE__{} = stream, stream_type_byte) do
-    kind =
-      case stream_type_byte do
-        0x00 -> :control
-        0x01 -> :push
-        0x02 -> :qpack_encoder
-        0x03 -> :qpack_decoder
-        _ -> :unknown_unidirectional
-      end
-
-    %{stream | kind: kind}
-  end
-
-  # ---------------------------------------------------------------------------
-  # Buffer management
-  # ---------------------------------------------------------------------------
+  def identify_kind(%__MODULE__{} = stream, _type_byte),
+    do: %{stream | kind: :unknown_unidirectional}
 
   @doc """
   Appends `data` to the stream's receive buffer.
@@ -269,9 +247,8 @@ defmodule Ankh.Protocol.HTTP3.Stream do
       <<0x01, 0x05, "hello">>
   """
   @spec append(t(), binary()) :: t()
-  def append(%__MODULE__{buffer: buffer} = stream, data) when is_binary(data) do
-    %{stream | buffer: buffer <> data}
-  end
+  def append(%__MODULE__{buffer: buffer} = stream, data) when is_binary(data),
+    do: %{stream | buffer: buffer <> data}
 
   @doc """
   Replaces the stream buffer with `remainder`.
@@ -289,13 +266,8 @@ defmodule Ankh.Protocol.HTTP3.Stream do
       <<0xFF>>
   """
   @spec consume_buffer(t(), binary()) :: t()
-  def consume_buffer(%__MODULE__{} = stream, remainder) when is_binary(remainder) do
-    %{stream | buffer: remainder}
-  end
-
-  # ---------------------------------------------------------------------------
-  # FIN / half-close transitions
-  # ---------------------------------------------------------------------------
+  def consume_buffer(%__MODULE__{} = stream, remainder) when is_binary(remainder),
+    do: %{stream | buffer: remainder}
 
   @doc """
   Records that the remote peer has finished sending on this stream.
@@ -358,10 +330,6 @@ defmodule Ankh.Protocol.HTTP3.Stream do
     do: %{stream | state: :closed}
 
   def local_fin(%__MODULE__{} = stream), do: stream
-
-  # ---------------------------------------------------------------------------
-  # State predicates
-  # ---------------------------------------------------------------------------
 
   @doc """
   Returns `true` when the stream has reached the `:closed` state.
