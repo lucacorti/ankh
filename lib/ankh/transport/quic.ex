@@ -51,15 +51,6 @@ defmodule Ankh.Transport.QUIC do
 
   defstruct connection: nil, stream: nil, alpn: nil
 
-  # ---------------------------------------------------------------------------
-  # HTTP/3 stream-management helpers
-  #
-  # These functions are NOT part of the Ankh.Transport protocol. They are
-  # public module-level functions that the Ankh.Protocol.HTTP3 implementation
-  # uses to manage the multiple concurrent QUIC streams that HTTP/3 requires,
-  # without reaching into the :quic module directly.
-  # ---------------------------------------------------------------------------
-
   @doc """
   Opens a new bidirectional QUIC stream on the connection and returns a
   transport struct with that stream handle set.

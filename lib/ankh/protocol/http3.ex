@@ -177,10 +177,6 @@ defmodule Ankh.Protocol.HTTP3 do
     """
     def error(%@for{transport: transport}), do: Transport.close(transport)
 
-    # -------------------------------------------------------------------------
-    # request/2
-    # -------------------------------------------------------------------------
-
     @doc """
     Sends an HTTP/3 request on a new bidirectional QUIC stream.
 
@@ -240,10 +236,6 @@ defmodule Ankh.Protocol.HTTP3 do
         {:ok, protocol, ref}
       end
     end
-
-    # -------------------------------------------------------------------------
-    # respond/3
-    # -------------------------------------------------------------------------
 
     @doc """
     Sends an HTTP/3 response on the stream identified by `request_reference`.
@@ -316,11 +308,7 @@ defmodule Ankh.Protocol.HTTP3 do
       * `{:data, ref, data, complete?}` — a DATA frame or end-of-stream signal
       * `{:error, ref, reason, true}` — a stream-level protocol error
     """
-    # -------------------------------------------------------------------------
-    # stream/2 — incoming erlang_quic message dispatcher
-    # -------------------------------------------------------------------------
 
-    # Data on a stream (no FIN).
     def stream(%@for{} = protocol, {:quic, _conn, {:stream_data, stream_id, data, false}})
         when is_binary(data) do
       handle_stream_data(protocol, stream_id, data)

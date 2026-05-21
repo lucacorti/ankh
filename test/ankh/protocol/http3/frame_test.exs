@@ -17,10 +17,6 @@ defmodule Ankh.Protocol.HTTP3.FrameTest do
     Settings
   }
 
-  # ---------------------------------------------------------------------------
-  # VLI encoding
-  # ---------------------------------------------------------------------------
-
   describe "encode_vli/1" do
     test "encodes zero as a single byte" do
       assert Frame.encode_vli(0) == <<0x00>>
@@ -79,10 +75,6 @@ defmodule Ankh.Protocol.HTTP3.FrameTest do
     end
   end
 
-  # ---------------------------------------------------------------------------
-  # VLI decoding
-  # ---------------------------------------------------------------------------
-
   describe "decode_vli/1" do
     test "decodes a 1-byte integer" do
       assert {:ok, 7, <<>>} = Frame.decode_vli(<<7>>)
@@ -135,10 +127,6 @@ defmodule Ankh.Protocol.HTTP3.FrameTest do
       end
     end
   end
-
-  # ---------------------------------------------------------------------------
-  # Frame encoding — struct-based API
-  # ---------------------------------------------------------------------------
 
   describe "encode/1" do
     test "encodes a DATA frame" do
@@ -233,17 +221,6 @@ defmodule Ankh.Protocol.HTTP3.FrameTest do
     end
   end
 
-  # ---------------------------------------------------------------------------
-  # Streaming — Frame.stream/1
-  #
-  # stream/1 uses Stream.unfold/2.  After emitting {data, nil} for a partial
-  # frame the next accumulator state is `data` (unchanged), which would loop
-  # forever if the caller kept consuming.  Therefore:
-  #   • tests involving partial frames use Enum.take/2 to stop early.
-  #   • tests where every byte belongs to a complete frame use Enum.to_list/1
-  #     (safe because the last next-state is <<>>, which terminates the stream).
-  # ---------------------------------------------------------------------------
-
   describe "stream/1" do
     test "yields a complete DATA frame token" do
       {:ok, _, iodata} = Frame.encode(%Data{payload: %Data.Payload{data: "hi"}})
@@ -308,10 +285,6 @@ defmodule Ankh.Protocol.HTTP3.FrameTest do
     end
   end
 
-  # ---------------------------------------------------------------------------
-  # Frame decoding — struct-based API
-  # ---------------------------------------------------------------------------
-
   describe "decode/2" do
     test "decodes a DATA payload" do
       {:ok, decoded} = Frame.decode(%Data{}, "hello")
@@ -374,10 +347,6 @@ defmodule Ankh.Protocol.HTTP3.FrameTest do
     end
   end
 
-  # ---------------------------------------------------------------------------
-  # Control-stream preface
-  # ---------------------------------------------------------------------------
-
   describe "control_stream_preface/0" do
     test "is exactly 7 bytes long" do
       assert byte_size(Frame.control_stream_preface()) == 7
@@ -413,10 +382,6 @@ defmodule Ankh.Protocol.HTTP3.FrameTest do
       assert frame.payload.settings == [{1, 0}, {7, 0}]
     end
   end
-
-  # ---------------------------------------------------------------------------
-  # Encode / decode round-trips (struct → wire → struct)
-  # ---------------------------------------------------------------------------
 
   describe "encode/decode round-trips" do
     test "round-trips a DATA frame" do
