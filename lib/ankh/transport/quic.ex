@@ -35,8 +35,6 @@ defmodule Ankh.Transport.QUIC do
   Requires the `quic` optional dependency (erlang_quic) to be present and started.
   """
 
-  require Logger
-
   alias Ankh.Transport
 
   @typedoc "QUIC connection handle (pid returned by erlang_quic)"
