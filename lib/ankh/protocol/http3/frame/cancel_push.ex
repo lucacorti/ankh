@@ -25,7 +25,6 @@ defmodule Ankh.Protocol.HTTP3.Frame.CancelPush do
       def decode(_payload, _binary), do: {:error, :decode_error}
 
       def encode(%@for{push_id: id}), do: {:ok, Frame.encode_vli(id)}
-      def encode(_payload), do: {:error, :encode_error}
     end
   end
 

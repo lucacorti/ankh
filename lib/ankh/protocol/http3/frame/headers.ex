@@ -14,7 +14,6 @@ defmodule Ankh.Protocol.HTTP3.Frame.Headers do
       def decode(_payload, _binary), do: {:error, :decode_error}
 
       def encode(%@for{hbf: hbf}), do: {:ok, hbf}
-      def encode(_payload), do: {:error, :encode_error}
     end
   end
 

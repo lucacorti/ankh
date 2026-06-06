@@ -26,8 +26,6 @@ defmodule Ankh.Protocol.HTTP3.Frame.PushPromise do
 
       def encode(%@for{push_id: id, hbf: hbf}),
         do: {:ok, [Frame.encode_vli(id), hbf]}
-
-      def encode(_payload), do: {:error, :encode_error}
     end
   end
 

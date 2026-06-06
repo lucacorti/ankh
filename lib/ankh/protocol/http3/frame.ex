@@ -188,7 +188,7 @@ defmodule Ankh.Protocol.HTTP3.Frame do
         with {:ok, type, rest1} <- decode_vli(data),
              {:ok, length, rest2} <- decode_vli(rest1),
              true <- byte_size(rest2) >= length do
-          <<payload::binary-size(length), rest3::binary>> = rest2
+          <<payload::binary-size(^length), rest3::binary>> = rest2
           {{rest3, {type, payload}}, rest3}
         else
           # Partial frame: emit one nil token then terminate the stream so

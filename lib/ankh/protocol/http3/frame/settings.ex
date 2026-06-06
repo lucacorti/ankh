@@ -56,8 +56,6 @@ defmodule Ankh.Protocol.HTTP3.Frame.Settings do
            [Frame.encode_vli(id), Frame.encode_vli(value)]
          end)}
       end
-
-      def encode(_payload), do: {:error, :encode_error}
     end
   end
 
