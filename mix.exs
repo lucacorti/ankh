@@ -38,7 +38,7 @@ defmodule Ankh.Mixfile do
       {:castore, "~> 1.0"},
       {:hpax, "~> 1.0"},
       {:plug, "~> 1.0"},
-      {:quic, "~> 1.0", optional: true},
+      {:quic, "~> 1.0"},
       {:credo, "~> 1.0", only: [:dev], runtime: false},
       {:ex_doc, "~> 0.40.0", only: [:dev], runtime: false},
       {:dialyxir, "~> 1.0", only: [:dev], runtime: false}
