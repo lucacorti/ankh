@@ -242,10 +242,7 @@ defmodule Ankh.Transport.QUIC do
     call; `:quic.close/1` tears down the whole connection.
     """
     def close(%@for{connection: conn} = transport) do
-      if not is_nil(conn) do
-        :quic.close(conn)
-      end
-
+      if not is_nil(conn), do: :quic.close(conn)
       {:ok, %{transport | connection: nil, stream: nil}}
     end
 
