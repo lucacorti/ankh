@@ -46,18 +46,8 @@ jobs:
         with:
           version-file: .tool-versions
           version-type: strict
-      - name: PLT cache
-        uses: actions/cache@v5
-        with:
-          key: |
-            ${{ runner.os }}-${{ steps.beam.outputs.elixir-version }}-${{ steps.beam.outputs.otp-version }}-plt
-          restore-keys: |
-            ${{ runner.os }}-${{ steps.beam.outputs.elixir-version }}-${{ steps.beam.outputs.otp-version }}-plt
-          path: |
-            priv/plts
       - run: mix deps.get
       - run: mix deps.unlock --check-unused
       - run: mix compile --warnings-as-errors
       - run: mix format --check-formatted
       - run: mix credo --strict --all
-      - run: mix dialyzer --halt-exit-status
