@@ -345,9 +345,7 @@ defmodule Ankh.Protocol.HTTP2 do
     end
 
     defp process_queued_frame(%@for{send_queue: send_queue} = protocol, %Data{} = frame, size)
-         when size <= 0 do
-      {:ok, %{protocol | send_queue: :queue.in_r(frame, send_queue)}}
-    end
+         when size <= 0, do: {:ok, %{protocol | send_queue: :queue.in_r(frame, send_queue)}}
 
     defp process_queued_frame(protocol, %{stream_id: stream_id} = frame, size) do
       frame
