@@ -3,12 +3,39 @@ defmodule Ankh.HTTP do
   HTTP public interface
 
   This module implements `Ankh` public APIs and provides protocol negotiation.
+
+  ## Protocol negotiation for `https://`
+
+  When connecting to an `https://` URI, the `:protocols` option controls which
+  HTTP version is attempted and in what order:
+
+    * `[:h2, :"http/1.1"]` — TLS/TCP only; ALPN negotiates between HTTP/2 and
+      HTTP/1.1 (this is the **default**).
+    * `[:h3]` — QUIC only; returns an error if the QUIC handshake fails.
+    * `[:h3, :h2, :"http/1.1"]` — QUIC/HTTP3 is tried first; if it fails
+      (e.g. UDP is blocked by a firewall), the connection falls back to TLS
+      and ALPN negotiates between HTTP/2 and HTTP/1.1.
+
+  HTTP/3 runs exclusively over QUIC. Use `https://` with `protocols: [:h3]`
+  (or `protocols: [:h3, :h2, :"http/1.1"]` for automatic fallback).
+
+  ## Examples
+
+      # HTTP/2 or HTTP/1.1 over TLS (default)
+      Ankh.HTTP.connect(URI.parse("https://example.com"), [])
+
+      # HTTP/3 over QUIC only
+      Ankh.HTTP.connect(URI.parse("https://example.com"), protocols: [:h3])
+
+      # HTTP/3 preferred, fall back to TLS automatically
+      Ankh.HTTP.connect(URI.parse("https://example.com"), protocols: [:h3, :h2, :"http/1.1"])
+
   """
 
   alias Ankh.{HTTP, Protocol, Transport}
   alias Ankh.HTTP.{Error, Request, Response}
-  alias Ankh.Protocol.{HTTP1, HTTP2}
-  alias Ankh.Transport.{TCP, TLS}
+  alias Ankh.Protocol.{HTTP1, HTTP2, HTTP3}
+  alias Ankh.Transport.{QUIC, TCP, TLS}
 
   @typedoc "HTTP body"
   @type body :: iodata()
@@ -45,10 +72,22 @@ defmodule Ankh.HTTP do
   def accept(%URI{scheme: "http"} = uri, socket, options),
     do: Protocol.accept(%HTTP1{}, uri, %TCP{}, socket, options)
 
-  def accept(%URI{scheme: "https"} = uri, socket, options) do
+  def accept(%URI{scheme: "https"} = uri, socket, options) when is_port(socket) do
     with {:ok, negotiated_protocol} <- Transport.negotiated_protocol(%TLS{socket: socket}),
          {:ok, protocol} <- protocol_for_id(negotiated_protocol) do
       Protocol.accept(protocol, uri, %TLS{}, socket, options)
+    end
+  end
+
+  def accept(%URI{scheme: "https"} = uri, socket, options) when is_pid(socket) do
+    # erlang_quic (pure Erlang) connection — pid carries the negotiated ALPN.
+    # The caller may pass alpn: binary() in options; default to "h3" for QUIC.
+    alpn = Keyword.get(options, :alpn, "h3")
+    transport = %QUIC{alpn: alpn}
+
+    with {:ok, negotiated_protocol} <- Transport.negotiated_protocol(transport),
+         {:ok, protocol} <- protocol_for_id(negotiated_protocol) do
+      Protocol.accept(protocol, uri, transport, socket, options)
     end
   end
 
@@ -73,12 +112,59 @@ defmodule Ankh.HTTP do
   end
 
   def connect(%URI{scheme: "https"} = uri, options) do
+    {protocols, options} = Keyword.pop(options, :protocols, [:h2, :"http/1.1"])
+
+    if :h3 in protocols do
+      tls_fallback = Enum.filter(protocols, &(&1 in [:h2, :"http/1.1"]))
+
+      case connect_quic(uri, options) do
+        {:ok, _} = ok ->
+          ok
+
+        {:error, _} when tls_fallback != [] ->
+          connect_tls(uri, options, tls_fallback)
+
+        {:error, _} = error ->
+          error
+      end
+    else
+      connect_tls(uri, options, protocols)
+    end
+  end
+
+  def connect(_uri, _options), do: {:error, :unsupported_uri_scheme}
+
+  # Establishes an HTTP/3 connection over QUIC using erlang_quic.
+  #
+  # erlang_quic takes ALPN as Elixir binaries (not charlists).
+  # max_streams_uni: 3 allows the server to open the three unidirectional
+  # streams required by HTTP/3 (control, QPACK encoder, QPACK decoder).
+  defp connect_quic(%URI{} = uri, options) do
+    {timeout, options} = Keyword.pop(options, :timeout, 5_000)
+
+    quic_options =
+      [alpn: ["h3"], verify: true, max_streams_uni: 3]
+      |> Keyword.merge(Keyword.take(options, [:verify, :max_streams_uni]))
+
+    case Transport.connect(%QUIC{}, uri, timeout, quic_options) do
+      {:ok, transport} -> Protocol.connect(%HTTP3{}, uri, transport, options)
+      {:error, _} = error -> error
+    end
+  end
+
+  # Establishes an HTTP/1.1 or HTTP/2 connection over TLS.
+  #
+  # `protocols` is a list of atoms from `[:h2, :"http/1.1"]` that are
+  # converted to their ALPN token strings and advertised to the server.
+  defp connect_tls(%URI{} = uri, options, protocols) do
+    alpn_tokens = Enum.map(protocols, &protocol_to_alpn_token/1)
+
     {:ok, tls_options} = Plug.SSL.configure(cipher_suite: :strong, key: nil, cert: nil)
 
     tls_options =
       tls_options
       |> Keyword.take([:versions, :ciphers, :eccs])
-      |> Keyword.merge(alpn_advertised_protocols: ["h2", "http/1.1"])
+      |> Keyword.merge(alpn_advertised_protocols: alpn_tokens)
 
     {timeout, options} =
       options
@@ -92,10 +178,12 @@ defmodule Ankh.HTTP do
     end
   end
 
-  def connect(_uri, _options), do: {:error, :unsupported_uri_scheme}
+  defp protocol_to_alpn_token(:h2), do: "h2"
+  defp protocol_to_alpn_token(:"http/1.1"), do: "http/1.1"
 
   defp protocol_for_id("http/1.1"), do: {:ok, %HTTP1{}}
   defp protocol_for_id("h2"), do: {:ok, %HTTP2{}}
+  defp protocol_for_id("h3"), do: {:ok, %HTTP3{}}
   defp protocol_for_id(_id), do: {:error, :unsupported_protocol_identifier}
 
   @doc """
